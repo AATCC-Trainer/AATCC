@@ -1,5 +1,5 @@
 // Stinger trainers service worker: network-first (a normal reload always gets new files), cache fallback when offline.
-const CACHE = 'stinger-v1';
+const CACHE = 'stinger-v2';
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(self.clients.claim()); });
 self.addEventListener('fetch', e => {
