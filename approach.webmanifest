@@ -1,0 +1,24 @@
+{
+  "id": "./approach-controller.html",
+  "name": "Stinger Approach Control",
+  "short_name": "Approach",
+  "start_url": "./approach-controller.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0d0b",
+  "theme_color": "#0b0d0b",
+  "icons": [
+    {
+      "src": "./approach-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./approach-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

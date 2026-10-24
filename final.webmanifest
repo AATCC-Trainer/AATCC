@@ -1,0 +1,24 @@
+{
+  "id": "./final-controller-par-restyled.html",
+  "name": "Stinger Final Control PAR",
+  "short_name": "Final PAR",
+  "start_url": "./final-controller-par-restyled.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0d0b",
+  "theme_color": "#0b0d0b",
+  "icons": [
+    {
+      "src": "./final-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./final-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

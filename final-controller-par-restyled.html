@@ -1,0 +1,2385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Final Controller PAR - Precision Approach Radar Talk-Down Sim</title>
+<style>
+:root{--g:#c8f5cd;--gd:#4f8a5a;--gdd:#1f3524;--bg:#0b0d0b;--amber:#ffbf3c;--red:#ff5a6e;--cyan:#8dff7a;--dim:#7d9a80;--panel2:#121a14;--hov:#1a281d}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#0b0d0b;color:var(--g);font-family:Consolas,Menlo,"DejaVu Sans Mono","Courier New",monospace;overflow:hidden;-webkit-tap-highlight-color:transparent}
+#app{display:flex;height:100%;width:100%}
+#scopeWrap{flex:1;position:relative;min-width:0;min-height:0}
+#scope{display:block;width:100%;height:100%;touch-action:none}
+#panel{width:430px;display:flex;flex-direction:column;border-left:1px solid #1a281d;background:var(--bg);padding:8px;gap:7px;overflow-y:auto;font-size:13px}
+.box{border:1px solid var(--gdd);border-radius:4px;padding:6px;background:#1a1531}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center}
+.stats b{display:block;font-size:17px;color:var(--cyan);font-weight:normal}
+.stats span{font-size:10px;color:var(--dim);text-transform:uppercase}
+.row{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+button,select,input{font-family:inherit;font-size:13px;background:var(--panel2);color:var(--g);border:1px solid var(--gdd);border-radius:3px;padding:6px 8px;min-height:32px}
+button{cursor:pointer}
+button:hover{background:var(--hov);border-color:var(--gd)}
+button.on{background:#123f4a;color:var(--cyan);border-color:var(--cyan)}
+button.wide{flex:1}
+#ptt{width:100%;min-height:74px;font-size:18px;font-weight:bold;letter-spacing:1px;border-width:2px;border-radius:10px;user-select:none;-webkit-user-select:none;touch-action:none;background:#1e1840;border-color:var(--cyan);color:#eaf9fb}
+#ptt.live{background:#5c1028;border-color:var(--red);color:#fff;box-shadow:0 0 10px rgba(255,90,110,.45)}
+#ptt.disabled{opacity:.45}
+#pttBig{display:none;position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:50;width:min(92vw,520px);min-height:96px;font:bold 22px/1.2 monospace;letter-spacing:2px;border:2px solid rgba(120,255,140,.85);border-radius:14px;background:#0b0d0b;color:rgb(120,255,140);text-shadow:0 0 8px rgba(120,255,140,.6);box-shadow:0 0 14px rgba(120,255,140,.25),inset 0 0 18px rgba(120,255,140,.08);user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;-webkit-tap-highlight-color:transparent}
+#pttBig.live{background:#0f2a12;border-color:rgb(120,255,140);box-shadow:0 0 22px rgba(120,255,140,.6),inset 0 0 22px rgba(120,255,140,.2)}
+body.touchdev #pttBig{display:block}
+body.touchdev{padding-bottom:124px}
+#vStatus{position:fixed;left:8px;right:8px;bottom:116px;z-index:51;display:none;font:12px monospace;color:rgb(120,255,140);background:rgba(11,13,11,.92);border:1px solid rgba(120,255,140,.4);border-radius:6px;padding:4px 8px;pointer-events:none}
+body:not(.touchdev) #vStatus{bottom:8px}
+#vStatus.err{color:#ff5a6e;border-color:rgba(255,90,110,.6)}
+#iosHint{display:none;font:12px monospace;color:rgb(120,255,140);opacity:.8;margin:6px 0}
+#iosHint.loud{display:block;opacity:1;font-size:15px;font-weight:bold;color:#ffbf3c;border:2px solid #ffbf3c;border-radius:8px;padding:8px;background:#0b0d0b}
+#micRow{display:flex;align-items:center;gap:8px;font-size:12px;margin-top:5px}
+#micDot{width:12px;height:12px;border-radius:50%;background:#355;flex:none;box-shadow:0 0 3px currentColor}
+#transcript{min-height:38px;margin-top:5px;padding:5px;border:1px dashed var(--gdd);color:#e2fbe5;font-size:14px;line-height:1.3}
+#transcript .interim{color:var(--dim)}
+#parsed{margin-top:4px;font-size:12px;color:var(--cyan);min-height:16px}
+#parsed.bad{color:var(--amber)}
+#cmdInput{width:100%;font-size:14px;padding:8px}
+#cmdInput::placeholder{color:var(--dim)}
+#hint{padding:6px;border-left:3px solid var(--amber);color:var(--amber);font-size:12.5px;display:none;line-height:1.35}
+#hint b{color:#ffe1a0}
+#readout{font-size:12px;line-height:1.45;white-space:pre-wrap}
+#inset{width:100%;height:170px;display:block;background:#031006;border:1px solid var(--gdd);border-radius:3px}
+#strips{display:flex;flex-direction:column;gap:2px}
+.strip{display:grid;grid-template-columns:22px 1fr 1fr 70px;gap:4px;padding:3px 5px;border:1px solid var(--gdd);cursor:pointer;font-size:12px}
+.strip.sel{border-color:var(--cyan);color:var(--cyan)}
+.strip.conf{border-color:var(--red);color:var(--red)}
+.strip.done{opacity:.45}
+#log{flex:1;min-height:130px;max-height:260px;overflow-y:auto;font-size:12px;line-height:1.35}
+#log div{padding:1px 0}
+#log .t{color:var(--dim)}
+#log .ctl{color:var(--cyan)}
+#log .plt{color:#c8f5cd}
+#log .sys{color:var(--dim)}
+#log .warn{color:var(--amber)}
+#log .bad{color:var(--red)}
+#log .good{color:#8fe3b0}
+.banner{display:none;padding:8px;border:1px solid var(--amber);color:var(--amber);border-radius:4px;font-size:12px;line-height:1.4;background:#1a1200}
+.banner.err{border-color:var(--red);color:#ffb3b3;background:#1a0505}
+.banner code{color:#fff;background:#222;padding:1px 4px;border-radius:3px;word-break:break-all}
+.overlay{position:fixed;inset:0;background:rgba(14,10,30,.94);display:flex;align-items:center;justify-content:center;z-index:10;padding:14px}
+.overlay.hidden{display:none}
+.card{max-width:760px;width:100%;max-height:100%;overflow-y:auto;border:1px solid var(--gd);border-radius:8px;padding:20px 24px;background:#031006;box-shadow:0 0 0 2px rgba(140,255,120,.35),0 0 30px rgba(0,0,0,.5)}
+.card h1{margin:0 0 4px;font-size:32px;letter-spacing:4px;color:#e2fbe5;font-weight:normal}
+.card h2{margin:0 0 10px;color:var(--cyan);font-size:20px}
+.card p,.card li{line-height:1.5;color:#c8f5cd}
+.card code{color:#fff;background:#1a281d;padding:1px 5px;border-radius:3px}
+.diffs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
+.diff{border:1px solid var(--gd);border-radius:6px;padding:10px;cursor:pointer;min-height:100px}
+.diff b{display:block;font-size:16px;margin-bottom:4px;color:var(--cyan)}
+.diff span{font-size:12px;color:#a8d8ae}
+.diff.on{background:#122016;box-shadow:0 0 0 2px var(--cyan)}
+.note{font-size:11px;color:var(--amber);margin-top:8px}
+.kbd{display:inline-block;border:1px solid var(--gd);border-radius:3px;padding:0 4px;font-size:12px}
+.say{color:#fff;background:#122016;border-left:3px solid var(--cyan);padding:6px 8px;margin:6px 0;font-size:13px;line-height:1.5}
+table.st{border-collapse:collapse;width:100%;margin:10px 0;font-size:13px}
+table.st td{padding:4px 6px;border-bottom:1px solid var(--gdd)}
+table.st td:last-child{text-align:right;color:var(--cyan)}
+.tutnav{display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:8px}
+.set{display:grid;grid-template-columns:170px 1fr;gap:10px;align-items:center;margin:8px 0}
+@keyframes blinkA{to{opacity:.55}}
+@media (max-width:950px){
+  #app{flex-direction:column}
+  #scopeWrap{flex:none;height:52vh}
+  #panel{width:100%;flex:1;border-left:none;border-top:1px solid var(--gdd)}
+  .diffs{grid-template-columns:1fr}
+  .diff{min-height:0}
+}
+</style>
+<link rel="manifest" href="final.webmanifest">
+<link rel="apple-touch-icon" href="final-192.png">
+<meta name="theme-color" content="#0b0d0b">
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
+<style>@media (pointer:coarse),(display-mode:standalone){#ptt{display:none!important}}</style>
+</head>
+<body>
+<div id="app">
+  <div id="scopeWrap"><canvas id="scope"></canvas></div>
+  <div id="panel">
+    <div class="box stats">
+      <div><b id="stScore">0</b><span>Score</span></div>
+      <div><b id="stLanded">0</b><span>Landed</span></div>
+      <div><b id="stMissed">0</b><span>Missed/Fail</span></div>
+      <div><b id="stAcc">--</b><span>Call accuracy</span></div>
+    </div>
+    <div class="row">
+      <button id="bPause" title="Pause (P)">❚❚ Pause</button>
+      <button id="bS1" class="on" title="1x (key 1)">1x</button>
+      <button id="bS2" title="2x (key 2)">2x</button>
+      <button id="bSet" title="Voice settings">⚙ Voice</button>
+      <button id="bHelp" title="Help (?)">? Help</button>
+      <button id="bEnd" title="End session">End</button>
+    </div>
+    <div id="scopeStatus" style="font-size:11px;color:var(--dim);line-height:1.3">PAR · scope idle</div>
+    <div id="shipInfo" style="font-size:11px;color:var(--dim);display:none"></div>
+    <div id="shipBanner" style="display:none;padding:5px 8px;border:1px solid var(--amber);color:var(--amber);background:#1a1200;border-radius:4px;font-size:12px;font-weight:bold;letter-spacing:1px"></div>
+    <div id="linkRow" style="font-size:11px;color:var(--dim);display:none">Approach Control link <span id="linkSt"></span></div>
+    <div class="banner" id="voiceBanner"></div>
+    <div class="box">
+      <button id="ptt">🎙 HOLD TO TALK <span style="font-size:12px;font-weight:normal">(Space)</span></button>
+      <div id="micRow"><span id="micDot"></span><span id="micText">Mic: starting…</span></div>
+      <div id="transcript"><span style="color:var(--dim)">Live transcript appears here while you talk.</span></div>
+      <div id="parsed"></div>
+    </div>
+    <form id="cmdForm" autocomplete="off"><input id="cmdInput" placeholder="Type instead (Enter): lightning 21 turn left heading 268" spellcheck="false"></form>
+    <div id="hint"></div>
+    <div class="box" id="readout">Waiting for traffic…</div>
+    <div class="box">
+      <div style="font-size:11px;color:var(--dim);margin-bottom:4px">SURVEILLANCE / FEEDER VIEW · PAR SEQUENCE</div>
+      <canvas id="inset"></canvas>
+      <div id="strips" style="margin-top:5px"></div>
+    </div>
+    <div class="box" id="log"></div>
+  </div>
+</div>
+
+<div class="overlay" id="startOv">
+  <div class="card">
+    <h1>FINAL CONTROLLER · PAR</h1>
+    <div style="color:var(--dim)" id="subTitle">Precision Approach Radar talk-down simulator · Runway 18</div>
+    <p id="introP">You're the <b>final controller</b>. Each aircraft appears on your scope 7 to 9 miles out. Using your <b>voice</b>, talk it down: heading corrections, course and glidepath calls, range calls, the gear check and the landing clearance, all the way to <b id="introDH">decision height</b>. Pilots answer each call with their callsign until you say "do not acknowledge further transmissions"; after that they stay quiet, so keep talking!</p>
+    <div class="diffs">
+      <div class="diff on" data-d="training"><b>Training</b><span>3 arrivals, and a hint that shows your suggested next call.</span></div>
+      <div class="diff" data-d="normal"><b>Normal</b><span>5 arrivals, firmer pilots. No hints.</span></div>
+      <div class="diff" data-d="gusty"><b>Rush</b><span>7 arrivals, livelier pilots. No hints.</span></div>
+    </div>
+    <label class="row" style="margin:4px 0 2px;gap:8px;cursor:pointer;color:var(--dim)"><input type="checkbox" id="linkChk"> Link to Approach Control (aircraft come from the Approach Controller sim)</label>
+    <div class="row" style="margin:4px 0 2px;gap:8px"><label for="sPhr2" style="color:var(--dim)">Phraseology</label><select id="sPhr2"><option value="ship">Ship: amphibious assault ship (LHA/LHD)</option><option value="tower">Tower: shore runway PAR</option></select></div>
+    <div class="banner" id="startBanner"></div>
+    <div id="iosHint">📱 Voice works best in a Safari tab, not the home-screen app.</div>
+    <div class="row" style="margin-top:8px">
+      <button id="bStart" class="wide on" style="font-size:16px;min-height:46px">▶ START</button>
+      <button id="bTut" class="wide" style="min-height:46px">How PAR works (tutorial)</button>
+      <button id="bSet2" style="min-height:46px">⚙ Voice</button>
+    </div>
+    <div class="note">For practice and fun only, not real ATC training.</div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="helpOv">
+  <div class="card">
+    <h2 id="tutTitle"></h2>
+    <div id="tutBody"></div>
+    <div class="tutnav">
+      <button id="tutPrev">◀ Back</button>
+      <span id="tutPage" style="color:var(--dim)"></span>
+      <button id="tutNext">Next ▶</button>
+      <button id="tutClose" class="on">Close</button>
+    </div>
+    <div class="note">For practice and fun only, not real ATC training.</div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="setOv">
+  <div class="card">
+    <h2>Voice settings</h2>
+    <div class="set"><label for="sPhr">Phraseology</label><select id="sPhr"><option value="ship">Ship: amphibious assault ship (LHA/LHD)</option><option value="tower">Tower: shore runway PAR</option></select></div>
+    <div class="set"><label for="sIn">Voice input (push-to-talk)</label><input type="checkbox" id="sIn" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sOut">Pilot voices (spoken readbacks)</label><input type="checkbox" id="sOut" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sVoice">Pilot voice</label><select id="sVoice"></select></div>
+    <div class="set"><label for="sVol">Readback volume</label><input type="range" id="sVol" min="0" max="1" step="0.05"></div>
+    <div class="set"><label for="sRate">Pilot speaking rate</label><input type="range" id="sRate" min="0.8" max="1.5" step="0.05"></div>
+    <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
+    <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
+    <div id="setInfo" class="note" style="color:var(--dim)"></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="endOv">
+  <div class="card">
+    <h2 id="endTitle">Session complete</h2>
+    <div id="endGrade" style="font-size:22px;margin-bottom:6px"></div>
+    <table class="st" id="endTable"></table>
+    <div id="endList"></div>
+    <div class="row" style="margin-top:8px">
+      <button id="bAgain" class="wide on" style="min-height:42px">Play again (same level)</button>
+      <button id="bMenu" class="wide" style="min-height:42px">Restart / change level</button>
+    </div>
+    <div class="note">For practice and fun only, not real ATC training.</div>
+  </div>
+</div>
+<button id="pttBig" type="button">🎙 HOLD TO TALK</button>
+<div id="vStatus"></div>
+<script>
+(() => {
+'use strict';
+/* ===================== helpers ===================== */
+const DEG = Math.PI / 180;
+const norm = h => ((h % 360) + 360) % 360;
+const angDiff = (a, b) => { let d = norm(a - b); return d > 180 ? d - 360 : d; };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+let rng = Math.random;
+const rand = (a, b) => a + rng() * (b - a);
+const randi = (a, b) => Math.floor(rand(a, b + 1));
+const pick = arr => arr[Math.floor(rng() * arr.length)];
+const hdg3 = h => { let v = Math.round(norm(h)); if (v === 0) v = 360; return String(v).padStart(3, '0'); };
+const fmtAlt = ft => Math.round(ft).toLocaleString('en-US');
+const mmss = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/* phraseology: 'ship' (US Navy amphibious assault ship PAR, default) or 'tower' (shore runway PAR) */
+const SHIP_NAME = 'Stinger';   // ship callsign ("Stinger Final", "Stinger final controller")
+function isShip() { return S.phr !== 'tower'; }
+const ph = (ship, tower) => isShip() ? ship : tower;
+const spotOf = a => 6 + (a.uid % 4);     // landing spot 6..9 (display/phrase only)
+
+/* ===================== spoken numbers ===================== */
+const DIGW = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'niner'];
+const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENW = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const sayDigits = s => String(s).split('').map(c => /\d/.test(c) ? DIGW[+c] : c).join(' ');
+function sayTwo(n) { n = +n; if (n < 20) return ONES[n]; return TENW[Math.floor(n / 10)] + (n % 10 ? '-' + ONES[n % 10] : ''); }
+function sayFlight(numStr) {
+  const s = String(numStr);
+  if (s.length <= 2) return sayTwo(+s);
+  if (s.length === 3) return s[1] === '0' ? sayDigits(s) : DIGW[+s[0]] + ' ' + sayTwo(s.slice(1));
+  if (s.length === 4) return (s[0] === '0' ? sayDigits(s) : sayTwo(s.slice(0, 2)) + ' ' + (s[2] === '0' ? 'zero ' + DIGW[+s[3]] : sayTwo(s.slice(2))));
+  return sayDigits(s);
+}
+function sayAlt(ft) {
+  const th = Math.floor(ft / 1000), hu = Math.round((ft % 1000) / 100);
+  let out = th ? ONES[th] + ' thousand' : '';
+  if (hu) out += (out ? ' ' : '') + ONES[hu] + ' hundred';
+  return out || 'zero';
+}
+function sayMiles(r) {
+  const whole = Math.floor(r + 1e-6), half = Math.abs(r - whole - 0.5) < 0.01;
+  if (whole === 0 && half) return 'one half mile';
+  return (whole < 20 ? ONES[whole] : String(whole)) + (half ? ' and a half' : '') + (whole === 1 && !half ? ' mile' : ' miles');
+}
+
+/* ===================== callsigns ===================== */
+// military tactical callsigns (code = short scope tag prefix); numbers are spoken digit by digit
+const AIRLINES = [
+  { icao: 'LTNG', tel: 'Lightning', words: ['lightning', 'lightening'], types: ['F35B'] },
+  { icao: 'NHWK', tel: 'Nighthawk', words: ['nighthawk', 'night hawk', 'nite hawk', 'night hawks'], types: ['MV22B'] },
+  { icao: 'VIPR', tel: 'Viper', words: ['viper', 'vipers', 'piper'], types: ['AH1Z'] },
+  { icao: 'VENM', tel: 'Venom', words: ['venom'], types: ['UH1Y'] },
+  { icao: 'KNGT', tel: 'Knight', words: ['knight', 'night', 'nite'], types: ['MV22B'] },
+  { icao: 'RDGE', tel: 'Ridge', words: ['ridge'], types: ['CH53E'] },
+  { icao: 'GUNF', tel: 'Gunfighter', words: ['gunfighter', 'gun fighter', 'gunfighters'], types: ['AV8B'] },
+  { icao: 'CHGR', tel: 'Charger', words: ['charger', 'chargers'], types: ['MH60S'] },
+];
+const PHON = { alpha: 'A', alfa: 'A', bravo: 'B', charlie: 'C', delta: 'D', echo: 'E', foxtrot: 'F', fox: 'F', golf: 'G', hotel: 'H', india: 'I', juliet: 'J', juliett: 'J', kilo: 'K', lima: 'L', mike: 'M', november: 'N', oscar: 'O', papa: 'P', quebec: 'Q', romeo: 'R', sierra: 'S', tango: 'T', uniform: 'U', victor: 'V', whiskey: 'W', whisky: 'W', xray: 'X', yankee: 'Y', zulu: 'Z' };
+const PHON_NAME = { A: 'alpha', B: 'bravo', C: 'charlie', D: 'delta', E: 'echo', F: 'foxtrot', G: 'golf', H: 'hotel', I: 'india', J: 'juliet', K: 'kilo', L: 'lima', M: 'mike', N: 'november', O: 'oscar', P: 'papa', Q: 'quebec', R: 'romeo', S: 'sierra', T: 'tango', U: 'uniform', V: 'victor', W: 'whiskey', X: 'xray', Y: 'yankee', Z: 'zulu' };
+function telephony(cs) {
+  const al = AIRLINES.find(a => cs.startsWith(a.icao) && /^\d+$/.test(cs.slice(a.icao.length)));
+  if (al) { const n = cs.slice(al.icao.length); return { text: al.tel + ' ' + n, say: al.tel + ' ' + sayDigits(n) }; }
+  if (/^N\d/.test(cs)) {
+    const m = cs.match(/^N(\d+)([A-Z]*)$/);
+    return { text: 'November ' + cs.slice(1), say: 'November ' + sayDigits(m[1]) + (m[2] ? ' ' + m[2].split('').map(c => PHON_NAME[c]).join(' ') : '') };
+  }
+  return { text: cs, say: cs };
+}
+
+/* ===================== speech parser ===================== */
+const DIG = { zero: 0, oh: 0, o: 0, one: 1, two: 2, three: 3, tree: 3, four: 4, fower: 4, five: 5, fife: 5, six: 6, seven: 7, eight: 8, ait: 8, nine: 9, niner: 9 };
+const TEEN = { ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
+const TENS = { twenty: 20, thirty: 30, forty: 40, fourty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+const isWordNum = t => (t in DIG && t !== 'oh' && t !== 'o') || t in TEEN || t in TENS;
+const tokVal = t => /^\d+(\.\d+)?$/.test(t) ? parseFloat(t) : (t in DIG ? DIG[t] : t in TEEN ? TEEN[t] : t in TENS ? TENS[t] : 0);
+
+function runToStr(run) {
+  if (run.includes('hundred') || run.includes('thousand')) {
+    let total = 0, cur = 0;
+    for (const t of run) {
+      if (t === 'thousand') { total += (cur || 1) * 1000; cur = 0; }
+      else if (t === 'hundred') cur = (cur || 1) * 100;
+      else if (t !== 'point') cur += tokVal(t);
+    }
+    return String(total + cur);
+  }
+  let s = '';
+  for (let i = 0; i < run.length; i++) {
+    const t = run[i];
+    if (/^\d+(\.\d+)?$/.test(t)) s += t;
+    else if (t === 'point') s += '.';
+    else if (t in DIG) s += String(DIG[t]);
+    else if (t in TEEN) s += String(TEEN[t]);
+    else if (t in TENS) { const n = run[i + 1]; if (n && n in DIG && DIG[n] > 0 && n !== 'oh' && n !== 'o') { s += String(TENS[t] + DIG[n]); i++; } else s += String(TENS[t]); }
+  }
+  return s.replace(/\.$/, '');
+}
+
+function normalizeSpeech(raw) {
+  let s = ' ' + String(raw).toLowerCase() + ' ';
+  s = s.replace(/(\d),(\d{3})/g, '$1$2');
+  s = s.replace(/[’`]/g, "'").replace(/\bdon'?t\b/g, 'do not').replace(/\bdo n't\b/g, 'do not').replace(/\backnowledg(?:e)?ment\b/g, 'acknowledgement');
+  s = s.replace(/½|\b1\/2\b/g, ' half ').replace(/¾|\b3\/4\b/g, ' three quarter ');
+  s = s.replace(/\bwave-?off\b|\bwaive\s+off\b|\bwave\s+of\b/g, ' wave off ');
+  s = s.replace(/(\d)\.(\d)/g, '$1DOT$2');
+  s = s.replace(/,/g, ' , ');
+  s = s.replace(/[^a-z0-9\s,]/g, ' ');
+  s = s.replace(/dot/g, '.');
+  s = s.replace(/\b(\d+)(miles?|knots|kts|feet|ft)\b/g, '$1 $2');
+  s = s.replace(/\bglide\s*(?:path|slope|pass|bath|past)\b|\bglideslope\b|\bglide\b(?=\s+(?:and|,|$))/g, ' glidepath ');
+  s = s.replace(/\bcall\s+sign\b/g, 'callsign').replace(/\btouch\s+down\b/g, 'touchdown').replace(/\bx\s+ray\b/g, 'xray');
+  s = s.replace(/\b(dissent|decent|descents)\b/g, 'descent');
+  s = s.replace(/\bnight\s*hawks?\b/g, 'nighthawk').replace(/\bgun\s*fighter\b/g, 'gunfighter').replace(/\bnight\b(?=\s+(?:\d|zero|one|two|three|four|five|six|seven|eight|nine|niner))/g, 'knight');
+  s = s.replace(/\bjet\s+blue\b/g, 'jetblue').replace(/\bsky\s+west\b/g, 'skywest').replace(/\bsouth\s+west\b/g, 'southwest');
+  s = s.replace(/\bgo\s+round\b|\bgoaround\b/g, 'go around');
+  s = s.replace(/\bb\s+r\s+c\b/g, 'brc').replace(/\bpri\s+fly\b/g, 'prifly').replace(/\bfoul(?:ed)?\s+deck\b/g, 'fouled deck');
+  s = s.replace(/\bwrite\b|\bwright\b/g, 'right').replace(/\bleft\s+of\s+cores\b/g, 'left of course');
+  s = s.replace(/\bcent(?:er|re)\s*line\b/g, 'centerline').replace(/\bthresh\s+hold\b/g, 'threshold');
+  s = s.replace(/\bheading\s+(?:to|too)\s+(?=\w)/g, 'heading two ');
+  s = s.replace(/\bno\s*(?:gyro|gyros|jyro|jiro|giro|gyra|jairo|guyro|gyrus)\b/g, ' no gyro ').replace(/\bp\s+a\s+r\b/g, 'par');
+  s = s.replace(/\bsur?v[ae]?[iy]?l+[ae]?n[cs]e\b|\bsurvey\s*(?:lance|ance|lence)\b|\bserv[ae]?l+[ae]n[cs]e\b|\bsurveill?ence\b/g, ' surveillance ').replace(/\ba\s+s\s+r\b/g, 'asr').replace(/\bm\s+d\s+a\b/g, 'mda');   // ASR
+  s = s.replace(/\bhalf\s*standard\s*rate\b/g, ' half standard rate ').replace(/\bstandard\s*rate\b/g, 'standard rate');
+  s = s.replace(/\b(?:uh+|um+|umm+|er|erm|ah+|hmm+|please|okay|ok)\b/g, ' ');
+  s = s.replace(/\bknots?\b|\bkts\b/g, 'knots');
+  // tokens + number runs
+  const toks = s.split(/\s+/).filter(Boolean);
+  const out = [];
+  let run = [], locked = false;
+  const flush = () => { if (run.length) out.push(runToStr(run)); run = []; locked = false; };
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    if (t === ',') { flush(); continue; }
+    const multi = /^\d{2,}(\.\d+)?$/.test(t) || /^\d+\.\d+$/.test(t);
+    const single = /^\d$/.test(t);
+    if (multi) { flush(); run = [t]; locked = true; continue; }
+    if (single || isWordNum(t)) {
+      if (locked) flush();
+      run.push(t); continue;
+    }
+    if ((t === 'oh' || t === 'o') && run.length) { if (locked) flush(); run.push('zero'); continue; }
+    if ((t === 'hundred' || t === 'thousand') && run.length) { run.push(t); continue; }
+    if (t === 'point' && run.length && toks[i + 1] && (isWordNum(toks[i + 1]) || /^\d$/.test(toks[i + 1]))) { run.push('point'); locked = false; continue; }
+    if (t === 'and' && run.some(x => x === 'hundred' || x === 'thousand') && toks[i + 1] && isWordNum(toks[i + 1])) continue;
+    flush(); out.push(t);
+  }
+  flush();
+  return ' ' + out.join(' ') + ' ';
+}
+
+const PHON_RE = Object.keys(PHON).join('|');
+
+function extractCallsign(s, known) {
+  // returns {cs, unknown, s}
+  const matchDigits = (prefix, digits) => {
+    for (let len = digits.length; len >= 1; len--) {
+      const cs = prefix + digits.slice(0, len);
+      if (known.includes(cs)) return { cs, rest: digits.slice(len) };
+    }
+    return null;
+  };
+  // typed ICAO style "aal123" / "aal 123"
+  let re = new RegExp('\\b(' + AIRLINES.map(a => a.icao.toLowerCase()).join('|') + ')\\s?(\\d{1,4})\\b');
+  let m = s.match(re);
+  if (m) {
+    const pre = m[1].toUpperCase(); const hit = matchDigits(pre, m[2]);
+    return { cs: hit ? hit.cs : pre + m[2], unknown: !hit, s: s.replace(m[0], ' ' + (hit ? hit.rest : '') + ' ') };
+  }
+  // airline telephony
+  for (const al of AIRLINES) for (const w of al.words) {
+    re = new RegExp('\\b' + w + '\\s+(\\d{1,6})\\b');
+    m = s.match(re);
+    if (m) {
+      const hit = matchDigits(al.icao, m[1]);
+      return { cs: hit ? hit.cs : al.icao + m[1], unknown: !hit, s: s.replace(m[0], ' ' + (hit ? hit.rest : '') + ' ') };
+    }
+  }
+  // november + digits + phonetic letters
+  re = new RegExp('\\bnovember\\s+(\\d{1,5})((?:\\s+(?:' + PHON_RE + '))*)(?:\\s+([a-z]{1,2})\\b)?');
+  m = s.match(re);
+  if (m) {
+    let letters = (m[2] || '').trim().split(/\s+/).filter(Boolean).map(w => PHON[w]).join('');
+    const STOP = ['at', 'to', 'on', 'of', 'in', 'is', 'it', 'be', 'do', 'go', 'so', 'up', 'as', 'an', 'or', 'by', 'me', 'my', 'we', 'us', 'a'];
+    let used = m[0];
+    if (!letters && m[3] && !STOP.includes(m[3])) letters = m[3].toUpperCase();
+    else if (m[3]) used = used.slice(0, used.length - m[3].length);
+    letters = letters.slice(0, 2);
+    let cs = 'N' + m[1] + letters;
+    let hit = known.includes(cs) ? cs : known.find(k => k.startsWith('N' + m[1]) && (!letters || k.endsWith(letters)));
+    return { cs: hit || cs, unknown: !hit, s: s.replace(used, ' ') };
+  }
+  // "cessna 3 alpha bravo"
+  re = new RegExp('\\bcessna\\s*(\\d{0,5})((?:\\s+(?:' + PHON_RE + '))*)');
+  m = s.match(re);
+  if (m) {
+    const letters = (m[2] || '').trim().split(/\s+/).filter(Boolean).map(w => PHON[w]).join('');
+    const suffix = (m[1] || '') + letters;
+    const hit = known.find(k => k.startsWith('N') && suffix && k.endsWith(suffix.toUpperCase()));
+    return { cs: hit || ('N' + suffix.toUpperCase()), unknown: !hit, s: s.replace(m[0], ' ') };
+  }
+  // typed N-number
+  m = s.match(/\bn(\d{1,5}[a-z]{0,2})\b/);
+  if (m) {
+    const cs = 'N' + m[1].toUpperCase();
+    return { cs, unknown: !known.includes(cs), s: s.replace(m[0], ' ') };
+  }
+  return { cs: null, unknown: false, s };
+}
+
+const Q = w => (w === 'well' || w === 'way' || w === 'too' || w === 'very') ? 'well' : (w ? 'slightly' : null);
+const SIDE = w => (w === 'left' ? 'L' : w === 'right' ? 'R' : (w === 'above' || w === 'high') ? 'above' : 'below');
+const PATTERNS = [
+  [/\b(?:this\s+(?:will\s+be|is)\s+(?:an?\s+)?)?no\s+gyro(?:\s+(?:par|precision))?(?:\s+approach)?\b/g, () => ({ k: 'ngStart' })],
+  // ASR (surveillance approach)
+  [/\bsurveillance\s+minim(?:ums?|a|s)\b|\bsurveillance\s+mins\b|\basr\s+minim(?:ums?|a)\b/g, () => ({ k: 'asrMins' })],
+  [/\bif\s+(?:(?:the|your)\s+)?(?:mother|brother|other|ship|deck|runway|field|airport)\s+(?:is\s+)?not\s+in\s+sight(?:\s+execute\s+(?:a\s+|the\s+)?missed\s+approach)?\b/g, () => ({ k: 'asrIfNot' })],
+  [/\b(?:this\s+(?:will\s+be|is)\s+(?:an?\s+)?)?(?:surveillance|asr)(?:\s+(?:approach|final|radar\s+approach))?\b/g, () => ({ k: 'asrStart' })],
+  [/\bprepare\s+(?:to\s+)?descen[dt]\s+(?:in\s+)?(?:1|a)\s+miles?\b/g, () => ({ k: 'asrPrep' })],
+  [/\bdescend(?:ing)?\s+(?:to\s+)?(?:your\s+|the\s+)?(?:minimum\s+descent\s+altitude|mda)(?:\s+(\d{3,4}))?\b|\b(?:minimum\s+descent\s+altitude|mda)(?:\s+(?:is\s+)?(\d{3,4}))?\b/g, m => ({ k: 'asrMda', v: m[1] || m[2] ? +(m[1] || m[2]) : null })],
+  [/\b(?:make\s+)?half\s+standard\s+rate(?:\s+turns?)?\b/g, () => ({ k: 'ngHalf' })],
+  [/\b(?:make\s+)?standard\s+rate(?:\s+turns?)?\b/g, () => ({ k: 'ngStd' })],
+  [/\blow\s+altitude\s+alerts?\b|\bcheck\s+(?:your\s+)?altitude\s+immediately\b/g, () => ({ k: 'laa' })],
+  [/\bhow do you (?:hear|read)(?: me)?\b|\bradio check\b/g, () => ({ k: 'hear' })],
+  [/\b(?:execute\s+)?climb\s*outs?\b(?:\s*,?\s*go\s+blue\b)?|\bgo\s+blue\b/g, () => ({ k: 'climbOut' })],
+  [/\b(?:enter(?:ing)?\s+(?:the\s+)?)?(?:starboard|stbd)\s+delta\b/g, () => ({ k: 'starDelta' })],
+  [/\b(?:do\s+not|don\s*t|dont|do\s+no|no\s+need\s+to|need\s+not|not\s+to)\s+(?:to\s+)?(?:acknowledge?(?:s|d|ment)?|acknowledging|ack|reply|respond|answer)(?:\s+(?:any|all|the|my|our))?(?:\s+(?:further|farther|father|additional|more|subsequent|following|future|other|for\s+the|for\s+their))?(?:\s+(?:radio\s+)?(?:transmissions?|transmission\s+is|transmit(?:ions?)?|calls?|messages?))?\b|\b(?:no|negative)\s+(?:further\s+)?acknowledge?(?:ment)?s?\s+(?:required|necessary|needed)\b/g, () => ({ k: 'dna' })],
+  [/\bwinds?\s+(?:are\s+|is\s+)?calm\b/g, () => ({ k: 'wind', dir: 0, spd: 0, calm: true })],
+  [/\bwinds?\s+(\d{2,3})(?:\s+degrees)?\s*(?:at\s+)?(\d{1,2})(?:\s+knots)?(?:\s+gusts?(?:ing)?\s+(\d{1,2})(?:\s+knots)?)?/g, m => ({ k: 'wind', dir: +m[1], spd: +m[2] })],
+  [/\b(?:(?:the\s+)?deck\s+is\s+clear\s+)?(?:runway\s+\d{1,2}\s+)?cleared\s+(?:to\s+)?land(?:ing)?\b(?:\s+(?:runway|on\s+spot|spot)\s+\d{1,2})?|\b(?:the\s+)?deck\s+is\s+clear\b/g, () => ({ k: 'clearLand' })],
+  [/\b(?:check|confirm|verify)\s+(?:your\s+)?(?:wheels|gear|landing gear)(?:\s+(?:down|is down))?(?:\s+(?:and\s+)?locked)?\b|\bwheels?\s+should\s+be\s+down\b|\bgear check\b/g, () => ({ k: 'gear' })],
+  [/\b(?:at\s+)?decision height\b|\bat minimums\b|\bat minima\b|\bat d h\b/g, () => ({ k: 'dh' })],
+  [/\bover\s+(?:the\s+)?(?:landing\s+)?threshold\b|\bover\s+(?:the\s+)?(?:flight\s+)?deck\b/g, () => ({ k: 'thr' })],
+  [/\bwave off(?:\s+wave off)*\b|\bgo around\b|\bexecute\s+(?:a\s+)?missed approach\b|\bmissed approach\b|\bbreak off\b/g, () => ({ k: 'ga' })],
+  [/\b(?:climb|descend)(?:\s+and\s+maintain|\s+to|\s+maintain)?\s+(\d{2,5})(?:\s+feet)?\b|\bmaintain\s+(\d{4,5})(?:\s+feet)?\b/g, m => { let v = +(m[1] || m[2]); if (v < 100) v *= 100; return { k: 'alt', v }; }],
+  [/\b(?:fly\s+)?(?:base\s+recovery\s+course|brc|ship\s+s\s+heading)\s+(\d{1,3})\b/g, m => ({ k: 'hdg', dir: null, v: +m[1] })],
+  [/\b(?:turn\s+|come\s+)?(left|right)\s+(?:turn\s+)?(?:to\s+)?heading\s+(\d{1,3})\b|\b(?:fly\s+|turn\s+to\s+)?heading\s+(\d{1,3})\b|\b(?:turn|come)\s+(left|right)\s+(?:to\s+)?(\d{3})\b/g,
+    m => { const dir = m[1] || m[4] || null; const v = +(m[2] || m[3] || m[5]); return { k: 'hdg', dir: dir ? SIDE(dir) : null, v }; }],
+  [/\bstop\s+(?:your\s+|the\s+)?turn(?:s|ing)?\b/g, () => ({ k: 'ngStop' })],
+  [/\b(?:turn|come)\s+(left|right)(?:\s+now)?\b(?!\s+(?:heading|to\b|\d))/g, m => ({ k: 'ngTurn', dir: SIDE(m[1]) })],
+  [/\b(?:going|drifting|moving)\s+(left|right)\s+(?:of\s+)?(?:course|centerline)\b/g, m => ({ k: 'trendCourse', side: SIDE(m[1]) })],
+  [/\b(?:(slightly|well|way|little|a little|very)\s+)?(left|right)\s+of\s+(?:the\s+)?(?:course|centerline)\b/g, m => ({ k: 'course', q: Q(m[1] === 'little' || m[1] === 'a little' ? 'slightly' : m[1]), side: SIDE(m[2]) })],
+  [/\bon\s+(?:course|centerline|the centerline)\b/g, () => ({ k: 'onCourse' })],
+  [/\bapproaching\s+(?:the\s+)?glidepath\b/g, () => ({ k: 'approachingGp' })],
+  [/\b(?:going|drifting|moving)\s+(above|below|high|low)(?:\s+(?:the\s+)?glidepath)?\b/g, m => ({ k: 'trendGp', side: SIDE(m[1]) })],
+  [/\b(?:(slightly|well|way|little|a little|too|very)\s+)?(above|below|high|low)(?:\s+of)?(?:\s+the)?\s+glidepath\b|\b(slightly|well|too|way)\s+(high|low)\b/g,
+    m => ({ k: 'gp', q: Q(m[1] === 'little' || m[1] === 'a little' ? 'slightly' : (m[1] || m[3])), side: SIDE(m[2] || m[4]) })],
+  [/\bon\s+(?:the\s+)?(?:glidepath|path)\b/g, () => ({ k: 'onGp' })],
+  [/\b(?:begin|start|commence)(?:\s+your)?\s+descen[td]\b|\bdescend now\b/g, () => ({ k: 'beginDescent' })],
+  [/\b(increase|reduce|decrease|slow|adjust|correct|check)(?:\s+your)?(?:\s+rate\s+of)?\s+descent(?:\s+rate)?\b/g, m => ({ k: 'adjDescent', v: m[1] === 'increase' ? 'increase' : (m[1] === 'adjust' || m[1] === 'correct' || m[1] === 'check') ? 'adjust' : 'reduce' })],
+  [/\b(?:3|three)\s+quarters?\s+(?:of\s+a\s+)?miles?\b(?:\s+from\s+(?:touchdown|the runway|runway|the ship|the deck))?/g, () => ({ k: 'range', v: 0.75 })],
+  [/\b(\d+(?:\.\d+)?)\s+and\s+(?:a|1|one)\s+half\s+miles?\b(?:\s+from\s+(?:touchdown|the runway|runway|the ship|the deck))?/g, m => ({ k: 'range', v: parseFloat(m[1]) + 0.5 })],
+  [/\b(?:1\s+|a\s+)?half\s+(?:a\s+)?miles?\b(?:\s+from\s+(?:touchdown|the runway|runway|the ship|the deck))?/g, () => ({ k: 'range', v: 0.5 })],
+  [/\b(\d+(?:\.\d+)?)\s+miles?\b(?:\s+from\s+(?:touchdown|the runway|runway|the ship|the deck))?/g, m => ({ k: 'range', v: parseFloat(m[1]) })],
+  [/\bcontact\s+(?:the\s+)?(?:tower|prifly|primary(?:\s+flight)?|air\s+boss|the\s+boss)\b|\bswitch\s+(?:to\s+)?tower\b|\bmonitor\s+tower\b|\btower\s+has\s+you\b/g, () => ({ k: 'tower' })],
+  [/\bgo(?:ing)?\s+green\b|\bgreen\s+deck\b/g, () => ({ k: 'goGreen' })],
+  [/\bcall\s+(?:the\s+|your\s+)?ball\b/g, () => ({ k: 'callBall' })],
+  [/\broger\s+ball\b/g, () => ({ k: 'rogerBall' })],
+  [/\breport\s+(?:you\s+)?see(?:ing)?\s+(?:me|us|the ship)\b/g, () => ({ k: 'reportSee' })],
+  [/\broger\b/g, () => ({ k: 'roger' })],
+  [/\bsay\s+(?:your\s+|again\s+)?callsign\b|\bverify\s+(?:your\s+)?callsign\b/g, () => ({ k: 'sayCs' })],
+  [/\b(?:reduce|increase|maintain|slow)(?:\s+(?:your\s+)?speed)?(?:\s+to)?\s+(\d{2,3})(?:\s+knots)?\b|\bspeed\s+(\d{2,3})(?:\s+knots)?\b|\b(\d{2,3})\s+knots\b/g, m => ({ k: 'spd', v: +(m[1] || m[2] || m[3]) })],
+];
+
+function parseSpeech(raw, known = []) {
+  const norm0 = normalizeSpeech(raw);
+  let s = norm0.replace(/\bheading\s+(\d{3})(\d+)\b/g, 'heading $1 $2');
+  const csr = extractCallsign(s, known);
+  s = csr.s;
+  const used = new Array(s.length).fill(false);
+  const found = [];
+  for (const [re, fn] of PATTERNS) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(s))) {
+      if (!m[0].trim()) { re.lastIndex++; continue; }
+      const a = m.index, b = m.index + m[0].length;
+      let overlap = false; for (let i = a; i < b; i++) if (used[i]) { overlap = true; break; }
+      if (overlap) continue;
+      const c = fn(m);
+      if (c.k === 'hdg' && (!(c.v >= 1 && c.v <= 360))) continue;
+      for (let i = a; i < b; i++) used[i] = true;
+      found.push({ i: a, c });
+    }
+  }
+  found.sort((p, q) => p.i - q.i);
+  const cmds = found.map(f => f.c);
+  // fold wind into clearance
+  const wi = cmds.findIndex(c => c.k === 'wind');
+  if (wi >= 0) { const cl = cmds.find(c => c.k === 'clearLand'); if (cl) { cl.wind = cmds[wi]; cmds.splice(wi, 1); } }
+  // ASR: "descend to your MDA, minimum descent altitude four seven zero" is one call
+  { const ix = cmds.map((c, i) => c.k === 'asrMda' ? i : -1).filter(i => i >= 0);
+    if (ix.length > 1) { const v = ix.map(i => cmds[i].v).find(v => v != null); cmds[ix[0]].v = v != null ? v : null; for (const i of ix.slice(1).reverse()) cmds.splice(i, 1); } }
+  // practice calls: "enter starboard delta, go green" is one call; drop duplicates
+  if (cmds.some(c => c.k === 'starDelta')) for (let i = cmds.length - 1; i >= 0; i--) if (cmds[i].k === 'goGreen') cmds.splice(i, 1);
+  for (const k of ['climbOut', 'starDelta']) { const ix = cmds.map((c, i) => c.k === k ? i : -1).filter(i => i >= 0); for (const i of ix.slice(1).reverse()) cmds.splice(i, 1); }
+  // leftover words (for UI)
+  let left = ''; for (let i = 0; i < s.length; i++) left += used[i] ? ' ' : s[i];
+  left = left.replace(/\b(runway|27|two seven|18|one eight|and|the|is|this|your|final|controller|approach|at|of|a|to|now|then|you|are|come|ship|deck|fouled|spot|for|landing|stinger|99|\d)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  return { raw, norm: norm0.trim(), cs: csr.cs, csUnknown: csr.unknown, cmds, leftover: left };
+}
+
+function cmdStr(c) {
+  switch (c.k) {
+    case 'hdg': return `hdg ${c.dir || '-'} ${c.v}`;
+    case 'course': return `course ${c.q || 'any'} ${c.side}`;
+    case 'onCourse': return 'on course';
+    case 'trendCourse': return `going ${c.side}`;
+    case 'gp': return `gp ${c.q || 'any'} ${c.side}`;
+    case 'onGp': return 'on glidepath';
+    case 'trendGp': return `going ${c.side}`;
+    case 'approachingGp': return 'approaching glidepath';
+    case 'beginDescent': return 'begin descent';
+    case 'adjDescent': return `descent ${c.v}`;
+    case 'range': return `range ${c.v}`;
+    case 'dna': return 'do not acknowledge';
+    case 'laa': return 'low altitude alert';
+    case 'gear': return 'gear check';
+    case 'clearLand': return ph('cleared to land (spot)', 'cleared to land') + (c.wind ? (c.wind.calm ? ' wind calm' : ` wind ${c.wind.dir}/${c.wind.spd}`) : '');
+    case 'wind': return c.calm ? 'wind calm' : `wind ${c.dir}/${c.spd}`;
+    case 'dh': return ph('at minimums (not used on the ship)', 'decision height');
+    case 'thr': return ph('over the deck', 'over threshold');
+    case 'ga': return ph('wave off', 'go around');
+    case 'alt': return `alt ${c.v}`;
+    case 'tower': return ph('contact Tower (PriFly)', 'contact tower');
+    case 'sayCs': return 'say callsign';
+    case 'spd': return `speed ${c.v}`;
+    case 'hear': return 'radio check';
+    case 'goGreen': return 'go green';
+    case 'climbOut': return 'climb outs, go blue';
+    case 'starDelta': return 'starboard delta';
+    case 'callBall': return 'call the ball';
+    case 'rogerBall': return 'roger ball';
+    case 'reportSee': return 'report see me';
+    case 'roger': return 'roger';
+    case 'ngStart': return 'no gyro approach';
+    case 'asrStart': return 'surveillance (ASR) approach';
+    case 'asrPrep': return 'prepare to descend in one mile';
+    case 'asrMda': return `descend to MDA${c.v != null ? ' ' + c.v : ''}`;
+    case 'asrMins': return 'surveillance minimums';
+    case 'asrIfNot': return 'if not in sight, execute missed approach';
+    case 'ngTurn': return `no-gyro turn ${c.dir === 'L' ? 'left' : 'right'}`;
+    case 'ngStop': return 'stop turn';
+    case 'ngHalf': return 'half standard rate turns';
+    case 'ngStd': return 'standard rate turns';
+  }
+  return c.k;
+}
+function parsedStr(p) { return (p.cs ? p.cs + (p.csUnknown ? '?' : '') + ': ' : '') + (p.cmds.length ? p.cmds.map(cmdStr).join('; ') : 'NOT UNDERSTOOD'); }
+
+/* ===================== PAR geometry ===================== */
+const NM_FT = 6076.12;
+const GP_DEG = 3.0, GP_TAN = Math.tan(GP_DEG * DEG);
+const gpAlt = r => Math.max(0, r * NM_FT * GP_TAN);         // ~318 ft per NM from touchdown
+const THR_R = 0.165;                                          // threshold is 1,000 ft before touchdown
+const DH_FT = 200, DH_R = DH_FT / (NM_FT * GP_TAN);           // ~0.63 NM (Tower mode decision height)
+const SHIP_GATE_R = 0.5;                                        // Ship mode: no DH; deck/clearance/stability checks happen at half a mile
+const gateR = () => isShip() ? SHIP_GATE_R : DH_R;
+const LIM = { gpOn: 0.15, gpSl: 0.5, gpSafe: 0.7, upperDeg: 3.7, lowerSafeDeg: 2.3, lowerLimitDeg: 1.6, azOn: 0.2, azSl: 0.6, azSafe: 1.2 };
+let BRC = 180;                              // ship's base recovery course / final course (Tower mode: runway heading). Everything derives from this.
+let RWY = BRC;
+let BRC_OFF = BRC - 270;                    // physics runs in a course-aligned frame (inbound = frame west); headings/winds are rotated by this
+let BRC3 = hdg3(BRC), BRC_SAY = sayDigits(hdg3(BRC));
+let RWY_NUM = String(Math.round(BRC / 10) || 36).padStart(2, '0'), RWY_SAY = sayDigits(RWY_NUM);
+const isHelo = a => !!(a.T && a.T.helo);                       // MV-22B counts as helo for deck calls
+const GREEN_R = 1.0, BALL_R = 0.75;                            // ship calls: 'one mile, go green' (helo) / 'three-quarter mile, call the ball' (fixed wing)
+// ASR (surveillance) approach: no glidepath; descend to the MDA at the FAF, level off, visual or missed approach at the MAP
+const ASR_MDA = 470, ASR_MAP_R = 0.75, ASR_GATE_R = 0.45, ASR_TOL = 0.3;
+const asrR = a => isHelo(a) ? { start: 4, prep: 4, mda: 3 } : { start: 5, prep: 6, mda: 5 };   // MV-22B counts as rotary
+const asrStable = a => a.phase === 'descent' && Math.abs(a.z - ASR_MDA) <= 100 && ['on', 'slightly'].includes(courseCat(a));
+const SEE_YOU_R = 2.0;                                         // pilot transmits "see you" at 2 NM (ship)
+// seconds until a level (or slowly descending) aircraft below the glidepath meets it
+const ttiGp = a => { const gap = gpAlt(a.r) - a.z, rate = Math.max(30, a.gs) / 3600 * NM_FT * GP_TAN - a.vs / 60; return rate > 0.1 ? gap / rate : Infinity; };
+const APPR_WIN = [10, 30];                                      // bonus window for "approaching glidepath" (s before intercept)
+const fuelOf = a => (3.2 + ((a.uid * 37) % 30) / 10).toFixed(1); // ball-call fuel state (thousands of lb), display only
+const HOLD_FIX = { x: 10.9, y: 4.6 };        // feeder hold/entry fix, ~12 NM from touchdown (was 14, 5.5 = ~15 NM)
+const REVEAL_R = [7, 9];                     // NM: aircraft appear on the PAR scope at a random range in this band (per aircraft)
+const INTERCEPT_START_X = 10.3;              // feeder turns the aircraft onto the 20 deg intercept at ~10.5 NM
+const GP_INTERCEPT_R = [4, 5];               // entry altitude chosen so the glidepath is intercepted at 4-5 NM (~1,300-1,550 ft)
+const NEXT_GAP = [10, 15];                   // s: one aircraft on final at a time; the next one appears this long after the last one leaves
+const FIRST_GAP = [3, 5];                    // s: first aircraft of the session
+const PRAC_RANGE = [1, 3];                   // practice-approach aircraft fly 1-3 practice PARs, then a full stop
+const CLIMB_JET = { alt: 1200, hdg: norm(BRC - 90), dir: 'L' };   // "execute climb outs, go blue": angels 1.2, left to BRC-90
+const CLIMB_HELO = { alt: 1000, hdg: norm(BRC + 90), dir: 'R' };  // "enter starboard delta": angels 1, right to BRC+90
+const CLIMB_WIN = [0.6, 1.4];                 // NM window for the one-mile practice call
+const isPrac = a => a.intent === 'prac';
+const climbCallOf = a => isHelo(a) ? 'one mile, enter starboard delta, go green' : 'one mile, execute climb outs, go blue';
+const INTERCEPT_OFFSET = 20;                 // deg: aircraft join PAR final on BRC -/+ 20 (BRC-20 from the right, BRC+20 from the left)
+const ENTRY_LAT_FT = [1300, 1900];           // lateral offset at PAR handoff, on the arrival side (ft)
+const interceptHdg = side => (norm(RWY - Math.sign(side || 1) * INTERCEPT_OFFSET) || 360);  // side +1 = right of course -> BRC-20
+const elevAngle = a => Math.atan2(a.z, Math.max(0.25, a.r) * NM_FT) / DEG;
+const elevDev = a => elevAngle(a) - GP_DEG;
+const azDeg = a => Math.atan2(a.yft, (Math.max(0, a.r) + 0.5) * NM_FT) / DEG;
+const classify = (v, on, sl) => Math.abs(v) <= on ? 'on' : Math.abs(v) <= sl ? 'slightly' : 'well';
+
+const TYPES = {
+  F35B:  { ball: 'Lightning', vapp: 130, vmin: 120, vmax: 190, feed: 180 },   // F-35B Lightning II
+  AV8B:  { ball: 'Harrier', vapp: 120, vmin: 115, vmax: 180, feed: 170 },   // AV-8B Harrier II
+  MV22B: { helo: true, vapp: 90, vmin: 80, vmax: 160, feed: 150 },    // MV-22B Osprey (airplane/conversion mode)
+  CH53E: { helo: true, vapp: 80, vmin: 70, vmax: 120, feed: 110 },     // CH-53E Super Stallion
+  AH1Z:  { helo: true, vapp: 80, vmin: 70, vmax: 120, feed: 110 },     // AH-1Z Viper
+  UH1Y:  { helo: true, vapp: 80, vmin: 70, vmax: 120, feed: 110 },     // UH-1Y Venom
+  MH60S: { helo: true, vapp: 70, vmin: 65, vmax: 115, feed: 105 },     // MH-60S Knighthawk
+};
+const DIFFS = {
+  training: { name: 'Training', n: 3, spacing: null, wind: [0, 3], gust: 0, bias: 0.12, gap: 25, hints: true, spawnEvery: 70, noise: 30 },
+  normal:   { name: 'Normal', n: 5, spacing: 6.5, wind: [6, 13], gust: 0, bias: 0.22, gap: 15, hints: false, spawnEvery: 80, noise: 70 },
+  gusty:    { name: 'Rush', n: 7, spacing: 4.8, wind: [12, 18], gust: 10, bias: 0.3, gap: 15, hints: false, spawnEvery: 55, noise: 140 },
+};
+
+/* ===================== Approach Control link (BroadcastChannel 'stinger-link') ===================== */
+const LINK = { on: false, ch: null, peer: false, pending: [] };
+function linkPost(m) { try { if (LINK.ch) LINK.ch.postMessage(m); } catch (e) {} }
+function linkStatus() { const row = document.getElementById('linkRow'); if (row) row.style.display = LINK.on ? '' : 'none'; const el = document.getElementById('linkSt'); if (el) { el.textContent = LINK.on ? (LINK.peer ? '· connected' : '· waiting') : ''; el.style.color = LINK.peer ? 'var(--cyan)' : 'var(--amber)'; } }
+function linkSet(on) {
+  LINK.on = !!on; try { localStorage.setItem('stingerLink', on ? '1' : '0'); } catch (e) {}
+  if (LINK.ch) { LINK.ch.close(); LINK.ch = null; } LINK.peer = false;
+  if (on && typeof BroadcastChannel !== 'undefined') {
+    LINK.ch = new BroadcastChannel('stinger-link');
+    LINK.ch.onmessage = ev => linkRecv(ev.data || {});
+    linkPost({ type: 'hello', from: 'final' });
+  }
+  if (G) G.linked = LINK.on;
+  if (!LINK.on) { SHIP_MV = 0; SHIP_BRCT = null; setBRC(180); if (G && G.ship && G.ship.phase === 'turn' && G.ship.linkT) { G.ship.phase = null; G.ship.linkT = false; shipBannerSet(); } }
+  linkStatus();
+}
+function linkRecv(m) {
+  if (!LINK.on) return;
+  if (m.type === 'hello') { LINK.peer = true; linkPost({ type: 'hello-ack', from: 'final' }); }
+  else if (m.type === 'hello-ack') LINK.peer = true;
+  else if (m.type === 'brc') { LINK.peer = true; shipLinkBrc(m); }
+  else if (m.type === 'handoff') { LINK.peer = true; if (G && !G.over) linkHandoff(m); else LINK.pending.push(m); }
+  linkStatus();
+}
+function linkType(m) {
+  if (m.acType && TYPES[m.acType]) return m.acType;
+  const helo = m.acType === 'helo', al = AIRLINES.find(x => String(m.callsign || '').toUpperCase().startsWith(x.icao));
+  const t = al && al.types.find(k => !!TYPES[k].helo === helo);
+  return t || (helo ? 'MH60S' : 'F35B');
+}
+// Linked mode: re-base everything that derives from the BRC (final course, intercepts, climb-outs, wind). OFF keeps 180.
+function setBRC(b) {
+  b = Math.round(norm(+b)) || 360; if (b === BRC) return false;
+  const old = BRC;
+  BRC = b; RWY = BRC; BRC_OFF = BRC - 270; BRC3 = hdg3(BRC); BRC_SAY = sayDigits(BRC3);
+  RWY_NUM = String(Math.round(BRC / 10) || 36).padStart(2, '0'); RWY_SAY = sayDigits(RWY_NUM);
+  CLIMB_JET.hdg = norm(BRC - 90) || 360; CLIMB_HELO.hdg = norm(BRC + 90) || 360;
+  if (G && G.wind) G.wind.dir = Math.round(norm(G.wind.dir - old + BRC)) || 360;
+  return true;
+}
+// Final course = magnetic final bearing: fb, else brc - mv, else brc (Approach sends brc as TRUE course).
+function linkFinalCourse(m) {
+  let c = null;
+  if (m.fb != null && m.fb !== '' && isFinite(+m.fb)) c = +m.fb;
+  else if (m.brc != null && m.brc !== '' && isFinite(+m.brc)) c = +m.brc - (+m.mv || 0);
+  return c == null ? null : (Math.round(norm(c)) || 360);
+}
+function linkHandoff(m) {
+  const fc = linkFinalCourse(m);
+  if (fc != null && fc !== BRC) {
+    const src = m.brc != null ? ` (ship ${hdg3(+m.brc)}T, var ${(+m.mv || 0) > 0 ? '+' : ''}${+m.mv || 0})` : '';
+    if (G.ac.some(a => a.phase !== 'gone' && a.removeAt == null)) log('sys', `Approach Control final bearing ${hdg3(fc)}${src} ignored: aircraft still on final bearing ${BRC3}.`);
+    else if (setBRC(fc)) log('sys', `Approach Control: final bearing ${BRC3}${src} (wind ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}).`);
+  }
+  const cs = String(m.callsign || 'UNKN01').toUpperCase().replace(/\s+/g, '');
+  if (G.ac.some(a => a.cs === cs && a.phase !== 'gone')) return;
+  const n = +m.approachNum || 3, prac = n < 3;
+  const rel = angDiff(+m.bearingFromShip || 0, norm(BRC + 180));   // bearing relative to the reciprocal of the final course
+  const rng0 = Math.max(0, +m.rangeNm || 0);
+  const spec = { cs, type: linkType(m), intent: prac ? 'prac' : 'fs', pracLeft: prac ? 3 - n : 0, pracNo: prac ? n : 0, afterPrac: n > 1 && !prac };
+  const a = makeAc(spec);
+  // exact handoff state: range/bearing -> course frame (r along final from touchdown, yft right of course +), altitude, heading, speed
+  a.r = rng0 * Math.cos(rel * DEG);
+  a.yft = -rng0 * Math.sin(rel * DEG) * NM_FT;
+  a.side = a.yft >= 0 ? 1 : -1;
+  a.z = a.levelAlt = Math.max(0, +m.altitudeFt || 0);
+  a.hdg = a.tgtHdg = (m.headingDeg != null ? Math.round(norm(+m.headingDeg)) : interceptHdg(a.side)) || 360;
+  a.ias = m.speedKt != null ? Math.max(40, +m.speedKt) : a.T.feed; a.tgtSpd = a.T.vapp;
+  a.linkCut = clamp(Math.abs(angDiff(a.hdg, RWY)), 10, 45);   // cut angle the pilot uses to join final while outside PAR coverage
+  a.phase = 'linkin'; a.turnDir = null; a.lastTx = a.lastRealTx = G.t;
+  a.link = { freq: m.freq, approachNum: n, climbout: m.climbout || null, simTime: m.simTime };
+  if (String(m.approachType || '').toLowerCase() === 'asr') { a.asr = true; a.mda = ASR_MDA; a.asrStarted = true; }
+  G.ac.push(a);
+  log('sys', `Approach Control handoff: ${cs} (${a.type})${m.freq ? ' on ' + m.freq : ''}, ${rng0.toFixed(1)} NM, ${fmtAlt(a.z)} ft, heading ${hdg3(a.hdg)}, approach ${n}${prac ? ' (practice)' : ' (full stop)'}.`);
+  linkCover(a);
+}
+// linked aircraft is shown and checks in as soon as it is inside the PAR display coverage
+function linkCover(a) {
+  if (a.phase !== 'linkin' || a.r > RMAX - 0.05 || a.r < 0.5 || Math.abs(a.yft) > YMAX || a.z > ZMAX) return false;
+  a.phase = 'final'; a.levelAlt = a.z; a.turnDir = null; a.tgtHdg = a.hdg;
+  G.busy = true; onParEntry(a); return true;
+}
+function linkComplete(a) {
+  if (!G || !G.linked || !a || a.linkSent) return;
+  a.linkSent = true;
+  const outcome = a.result && a.result.landed ? 'landed' : a.result && a.result.practice ? 'lowapproach' : 'waveoff';
+  linkPost({ type: 'complete', callsign: a.cs, outcome });
+}
+
+/* ===================== ship turns (ship mode only) ===================== */
+// BRC is TRUE; the final course (BRC variable) = FB = BRC - MV. Solo has no magvar, so FB = BRC.
+let SHIP_MV = 0, SHIP_BRCT = null;   // last magvar / true BRC from Approach (null = same as course)
+const SHIP_RATE = 1, SHIP_WARN = 5, SHIP_STEADY = 8, SHIP_GRACE = 10, SHIP_FIRST = [240, 480], SHIP_EVERY = [240, 480];
+const shipBrcT = () => SHIP_BRCT != null ? SHIP_BRCT : (Math.round(norm(BRC + SHIP_MV)) || 360);
+function shipNewState(opts) {
+  const r = opts.seed != null ? mulberry32((opts.seed ^ 0x5A17E) >>> 0) : Math.random;   // own stream: the sim rng is untouched
+  return { rng: r, on: opts.shipTurns !== false, next: SHIP_FIRST[0] + r() * (SHIP_FIRST[1] - SHIP_FIRST[0]), phase: null, dir: null, amt: 0,
+    cur: BRC, target: BRC, until: 0, endT: null, n: 0, pts: 0, turnOk: 0, steadyOk: 0, gotTurn: false, gotSteady: false, linkT: false, dirKnown: true };
+}
+// Move the final course with the ship. Aircraft keep their range/offset on the scope and their (absolute) heading,
+// so after a turn they drift off the new course line at a rate set by the heading error: correct them with heading calls.
+function shipCourse(c) { setBRC(Math.round(norm(c)) || 360); }
+function shipBannerSet() {
+  const el = typeof document !== 'undefined' && document.getElementById('shipBanner'), info = document.getElementById('shipInfo');
+  const S2 = G && G.ship; let txt = '', col = 'var(--amber)';
+  if (S2 && isShip()) {
+    const D = S2.dir === 'L' ? 'PORT' : S2.dir === 'R' ? 'STARBOARD' : '';
+    if (S2.phase === 'warn') txt = `SHIP TURN IN ${Math.max(1, Math.ceil(S2.until - G.t))} · ${D}`;
+    else if (S2.phase === 'turn') txt = `MOTHER IN ${D ? D + ' ' : ''}TURN`;
+    else if (S2.phase === 'steady') { txt = `MOTHER STEADY — NEW BRC ${hdg3(shipBrcT())}`; col = 'var(--cyan)'; }
+  }
+  if (el && el.dataset.t !== txt) { el.dataset.t = txt; el.textContent = txt; el.style.display = txt ? 'block' : 'none'; el.style.color = col; el.style.borderColor = col; el.style.background = col === 'var(--amber)' ? '#1a1200' : '#0f2412'; }
+  if (info) { const b = shipBrcT(), t = isShip() && G ? `BRC ${hdg3(b)}T · FB ${BRC3} · DWH ${hdg3(norm(b + 180) || 360)}T${SHIP_MV ? ' · VAR ' + SHIP_MV : ''}` : ''; if (info.textContent !== t) { info.textContent = t; info.style.display = t ? '' : 'none'; } }
+}
+function shipStep(dt) {
+  const S2 = G.ship; if (!S2) return;
+  if (S2.phase === 'turn') {
+    const rem = angDiff(S2.target, S2.cur), st = SHIP_RATE * dt;
+    S2.cur = Math.abs(rem) <= st ? S2.target : norm(S2.cur + Math.sign(rem) * st);
+    if (!S2.linkT) SHIP_BRCT = null;
+    shipCourse(S2.cur);
+    if (S2.cur === S2.target && !S2.linkT) shipSteady();
+  } else if (S2.phase === 'warn' && G.t >= S2.until) {
+    S2.phase = 'turn'; S2.cur = BRC; S2.target = norm(BRC + (S2.dir === 'L' ? -S2.amt : S2.amt)) || 360;
+    log('warn', `Mother in ${S2.dir === 'L' ? 'port' : 'starboard'} turn (${S2.amt}°). Call "ninety-nine, mother is in ${S2.dir === 'L' ? 'port' : 'starboard'} turn, standby for new BRC".`);
+  } else if (S2.phase === 'steady' && G.t >= S2.until) S2.phase = null;
+  if (S2.on && !G.linked && isShip() && !S2.phase && G.t >= S2.next) {
+    S2.phase = 'warn'; S2.until = G.t + SHIP_WARN; S2.dir = S2.rng() < 0.5 ? 'L' : 'R'; S2.amt = 1 + Math.floor(S2.rng() * 15);
+    S2.n++; S2.gotTurn = S2.gotSteady = false; S2.dirKnown = true; S2.endT = null;
+    log('warn', `SHIP TURN IN 5 · ${S2.dir === 'L' ? 'PORT' : 'STARBOARD'}.`);
+  }
+  shipBannerSet();
+}
+function shipSteady() {
+  const S2 = G.ship; S2.phase = 'steady'; S2.until = G.t + SHIP_STEADY; S2.endT = G.t; S2.linkT = false;
+  S2.next = G.t + SHIP_EVERY[0] + S2.rng() * (SHIP_EVERY[1] - SHIP_EVERY[0]);
+  log('good', `Mother steady, new BRC ${hdg3(shipBrcT())}. Call "ninety-nine, mother is steady, new BRC is ${sayDigits(hdg3(shipBrcT()))}".`);
+  shipBannerSet();
+}
+// Approach link: {type:'brc', brc, fb, dwh, mv, turning}
+function shipLinkBrc(m) {
+  if (!isShip()) return;
+  const fc = linkFinalCourse(m); if (fc == null) return;
+  const oldT = shipBrcT();
+  if (m.mv != null && isFinite(+m.mv)) SHIP_MV = +m.mv;
+  if (m.brc != null && isFinite(+m.brc)) SHIP_BRCT = Math.round(norm(+m.brc)) || 360;
+  if (!G || G.over) { setBRC(fc); return; }
+  const S2 = G.ship;
+  if (m.turning) {
+    let d = angDiff(SHIP_BRCT != null ? SHIP_BRCT : fc, oldT); if (Math.abs(d) < 0.5) d = angDiff(fc, BRC);
+    const md = String(m.dir || '').toLowerCase();
+    if (/^(p|l)/.test(md)) d = -1; else if (/^(s|r)/.test(md)) d = 1;
+    if (S2.phase !== 'turn') { S2.n++; S2.gotTurn = S2.gotSteady = false; S2.endT = null; S2.cur = BRC; }
+    S2.phase = 'turn'; S2.linkT = true; S2.target = fc; S2.dirKnown = Math.abs(d) >= 0.5; S2.dir = d < 0 ? 'L' : d > 0 ? 'R' : null;
+    log('warn', `Approach Control: mother in ${S2.dir ? (S2.dir === 'L' ? 'port ' : 'starboard ') : ''}turn${m.brc != null ? ' to BRC ' + hdg3(+m.brc) : ''}.`);
+  } else {
+    const was = S2.phase === 'turn';
+    if (!was && fc === BRC) { shipBannerSet(); return; }
+    if (!was) { const d = angDiff(fc, BRC); S2.n++; S2.gotTurn = S2.gotSteady = false; S2.dir = d < 0 ? 'L' : 'R'; S2.dirKnown = true; }
+    S2.cur = S2.target = fc; shipCourse(fc); shipSteady();
+  }
+  shipBannerSet();
+}
+// "ninety-nine, mother is in port turn, standby for new BRC" / "ninety-nine, mother is steady, new BRC is one seven three"
+function shipCall(raw) {
+  const DW = { zero: 0, oh: 0, one: 1, won: 1, two: 2, three: 3, tree: 3, four: 4, fower: 4, five: 5, fife: 5, six: 6, seven: 7, eight: 8, ait: 8, nine: 9, niner: 9, nina: 9 };
+  let t = ' ' + String(raw).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ') + ' ';
+  const m99 = /\b(?:99|9 9|ninety ?nine|niner niner|nine nine|nine niner|niner nine|ninety niner)\b/.exec(t);
+  if (!m99 || !/\bmother\b/.test(t)) return null;
+  t = t.slice(m99.index + m99[0].length);
+  const steady = /\bsteady\b/.test(t), turn = /\bturn(?:ing)?\b/.test(t);
+  if (!steady && !turn) return null;
+  const dir = /\b(port|left)\b/.test(t) ? 'L' : /\b(starboard|stbd|right)\b/.test(t) ? 'R' : null;
+  let brc = null;
+  const after = t.split(/\b(?:brc|b r c|bearing|recovery course|course)\b/).slice(1).join(' ');
+  if (after) {
+    const ds = after.replace(/\b[a-z]+\b/g, w => w in DW ? String(DW[w]) : ' ').replace(/[^0-9]/g, '');
+    if (ds.length >= 3) brc = +ds.slice(0, 3); else if (ds.length) brc = +ds;
+  }
+  return { kind: steady ? 'steady' : 'turn', dir, brc };
+}
+function shipCallExec(c) {
+  const S2 = G.ship, say = c.kind === 'steady' ? `99, mother is steady, new BRC ${c.brc != null ? hdg3(c.brc) : '???'}` : `99, mother is in ${c.dir === 'L' ? 'port' : c.dir === 'R' ? 'starboard' : '?'} turn, standby for new BRC`;
+  log('ctl', `(broadcast) ${say}`);
+  if (!S2 || !S2.n || !isShip()) { log('sys', 'No ship turn in progress: 99 call not scored.'); return; }
+  if (c.kind === 'turn') {
+    const inWin = S2.phase === 'turn' || (S2.endT != null && G.t - S2.endT <= SHIP_GRACE);
+    if (S2.gotTurn) return log('sys', '99 turn call already given for this turn.');
+    if (!inWin) return log('sys', S2.phase === 'warn' ? 'Mother is not turning yet: 99 call not scored.' : 'No ship turn in progress: 99 call not scored.');
+    if (S2.dirKnown && c.dir !== S2.dir) return log('warn', `99 call: mother is in ${S2.dir === 'L' ? 'PORT' : 'STARBOARD'} turn (no points).`);
+    S2.gotTurn = true; S2.pts += 10; S2.turnOk++; G.score += 10; log('good', '99 call: mother in turn (+10)');
+  } else {
+    if (S2.phase === 'turn' || S2.phase === 'warn' || S2.endT == null) return log('sys', 'Mother is not steady yet: 99 steady call not scored.');
+    if (S2.gotSteady) return log('sys', '99 steady call already given for this turn.');
+    const want = shipBrcT();
+    if (c.brc !== want) return log('warn', `99 call: new BRC is ${hdg3(want)}, not ${c.brc != null ? hdg3(c.brc) : 'given'} (no points).`);
+    S2.gotSteady = true; S2.pts += 10; S2.steadyOk++; G.score += 10; log('good', `99 call: mother steady, new BRC ${hdg3(want)} (+10)`);
+  }
+}
+
+/* ===================== game state ===================== */
+let G = null, lastDiff = 'training', uidC = 0;
+const PAR_PHASES = ['final', 'descent', 'visual'];
+const OUT_PHASES = ['missed', 'climbout'];   // leaving the approach (not landing)
+const alive = a => !['landed', 'crashed', 'gone'].includes(a.phase);
+
+function newGame(diffKey, opts = {}) {
+  rng = opts.seed != null ? mulberry32(opts.seed) : Math.random;
+  const d = DIFFS[diffKey]; lastDiff = diffKey;
+  const wind = { dir: norm(Math.round((BRC + rand(-30, 30)) / 10) * 10) || 360, spd: randi(2, 5), gust: 0 };   // light wind: 2-5 kt within BRC +/-30, no gusts
+  if (wind.gust == null) wind.gust = 0;
+  G = {
+    diffKey, d, t: 0, ac: [], score: 0, landed: 0, practice: 0, rejoin: [], busy: false, gateAt: 0, missed: 0, crashes: 0, sepLoss: 0, callsGood: 0, callsBad: 0,
+    results: [], wind, gustNow: { x: 0, y: 0 }, paused: false, scale: 1, selected: null, over: false, conflicts: new Set(),
+    spawned: 0, nextSpawn: 0, toSpawn: opts.arrivals != null ? opts.arrivals : d.n, seq: 0, failMsg: null, endAt: null,
+    pilotBias: opts.pilotBias, sideToggle: rng() < 0.5 ? 1 : -1,
+  };
+  G.ship = shipNewState(opts);
+  G.linked = LINK.on; if (G.linked) { const p = LINK.pending.splice(0); setTimeout(() => p.forEach(m => G && linkHandoff(m)), 0); }
+  G.gateAt = rand(FIRST_GAP[0], FIRST_GAP[1]);
+  logEl.innerHTML = '';
+  setScale(1); setPaused(false);
+  log('sys', `${d.name}: ${ph('PAR to ' + SHIP_NAME + ', BRC ' + BRC3, 'PAR runway ' + RWY_NUM)}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${G.toSpawn} arrivals.`);
+  if (d.hints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
+  selectAc(null);
+  refreshPanel(true);
+}
+
+function makeAc(spec) {
+  let cs = spec.cs, type = spec.type;
+  if (!cs) {
+    for (let i = 0; i < 40; i++) {
+      const al = pick(AIRLINES); cs = al.icao + (rng() < 0.5 ? randi(11, 69) : randi(100, 499)); type = pick(al.types);
+      if (!G.ac.some(a => a.cs === cs) && !G.rejoin.some(j => j.cs === cs)) break;
+    }
+  }
+  if (!type) { const al = AIRLINES.find(a => cs.startsWith(a.icao)); type = al ? al.types[0] : 'MV22B'; }
+  const tel = telephony(cs), T = TYPES[type];
+  const bias = G.pilotBias != null ? G.pilotBias : rand(-1, 1) * G.d.bias;
+  const uid = ++uidC;
+  return {
+    uid, cs, tel: tel.text, telSay: tel.say, type, T, seq: ++G.seq, phase: 'queue', side: 1,
+    px: 0, py: 0, alt: 5000, feedAlt: 5000, path: [], holding: false, holdAng: 0, released: false, atB: false,
+    r: 10, yft: 0, z: 2000, hdg: RWY, tgtHdg: RWY, turnDir: null, ias: T.feed, tgtSpd: T.vapp, vs: 0, corr: 0, bias, gustV: 0, levelAlt: 2000,
+    silent: false, hist: [], histT: 0, gs: T.vapp, latRate: 0, devRate: 0, prevDev: null, prevAz: null,
+    lastTx: 0, lastRealTx: 0, lastRangeR: null, gear: false, cleared: false, windGiven: false, dna: false, dhCalled: false, thrCalled: false, greenCalled: false, ballAsked: false, ballCalled: false, rogerBall: false, contactBonus: false, apprBonus: false, reportSee: false, seeYou: false, apprCalled: false,
+    tolT: 0, descT: 0, accCalls: 0, badCalls: 0, rangeCalls: 0, missedRange: 0, gaps: 0, pts: 0, limit: null, limitT: 0, lowLimitT: 0,
+    steepT: 0, shallowT: 0, steepFlag: false, shallowFlag: false, stableDH: null, gaAlt: 2000, removeAt: null, result: null, contacted: false,
+    voiceSeed: uid * 7919,
+    intent: spec.intent || 'fs', pracLeft: spec.pracLeft || 0, pracNo: spec.pracNo || 0, afterPrac: !!spec.afterPrac, climbCalled: false, climbT: 0,
+  };
+}
+
+function spawnQueue(spec = {}) {
+  if (isShip() && !spec.intent) {   // ship: ~50/50 full stop or multiple practice PARs (1-3, then a full stop)
+    if (rng() < 0.5) { spec.intent = 'prac'; spec.pracLeft = randi(PRAC_RANGE[0], PRAC_RANGE[1]); spec.pracNo = 1; } else spec.intent = 'fs';
+  }
+  const a = makeAc(spec);
+  const side = spec.side || (rng() < 0.5 ? 1 : -1);   // random arrival side
+  a.side = side;
+  const B = { x: HOLD_FIX.x, y: side * HOLD_FIX.y };
+  a.B = B;
+  // hidden until it reaches its reveal range (7-9 NM); it flies the 20 deg intercept leg from ~10.5 NM
+  // under feeder control, so at the reveal point it is ENTRY_LAT_FT off course on its own side and converging.
+  a.revealR = spec.revealR != null ? spec.revealR : rand(REVEAL_R[0], REVEAL_R[1]);
+  a.J = { x: a.revealR - THR_R, y: side * rand(ENTRY_LAT_FT[0], ENTRY_LAT_FT[1]) / NM_FT };
+  const legX = Math.max(0, INTERCEPT_START_X - a.J.x);
+  a.P = { x: a.J.x + legX, y: a.J.y + side * legX * Math.tan(INTERCEPT_OFFSET * DEG) };
+  // level altitude (nearest 50 ft, kept inside the band) so a level aircraft meets the 3 deg path at 4-5 NM
+  a.entryAlt = clamp(Math.round(gpAlt(rand(GP_INTERCEPT_R[0], GP_INTERCEPT_R[1])) / 50) * 50,
+    Math.ceil(gpAlt(GP_INTERCEPT_R[0]) / 50) * 50, Math.floor(gpAlt(GP_INTERCEPT_R[1]) / 50) * 50);
+  a.feedAlt = 3000 + 1000 * G.ac.filter(o => o.phase === 'queue' && o.side === side && !o.released).length;
+  // every arrival appears at the ~12 NM hold fix, stacked by altitude on its side
+  a.px = B.x; a.py = B.y; a.alt = a.feedAlt; a.atB = true; a.holding = true; a.path = [];
+  G.ac.push(a);
+  const it = isShip() ? (isPrac(a) ? `, practice approach ${a.pracNo} of ${a.pracLeft + a.pracNo - 1}, then a full stop` : a.afterPrac ? ', back for a full stop' : ', full stop') : '';
+  log('sys', spec.rejoin ? `${a.cs} (${a.type}) is back with the feeder for another PAR${it}, number ${a.seq}.` : `${a.cs} (${a.type}) is inbound with the feeder controller, number ${a.seq} for PAR${it}.`);
+  return a;
+}
+
+function spawnFinal(spec = {}) {
+  const a = makeAc(spec);
+  a.phase = 'final';
+  a.r = spec.r != null ? spec.r : 9.8;
+  a.side = spec.side || (spec.yft != null ? (spec.yft >= 0 ? 1 : -1) : (rng() < 0.5 ? 1 : -1));
+  a.yft = spec.yft != null ? spec.yft : a.side * rand(ENTRY_LAT_FT[0], ENTRY_LAT_FT[1]);
+  a.z = a.levelAlt = spec.alt != null ? spec.alt : 2000;
+  a.hdg = a.tgtHdg = spec.hdg != null ? spec.hdg : interceptHdg(a.side);
+  a.ias = spec.spd || a.T.vapp; a.tgtSpd = a.T.vapp;
+  a.lastTx = a.lastRealTx = G.t;
+  G.ac.push(a);
+  onParEntry(a);
+  return a;
+}
+
+function onParEntry(a) {
+  a.lastTx = a.lastRealTx = G.t;
+  const it = isPrac(a) ? (a.pracNo > 1 ? 'practice approach' : 'request multiple practice PARs') : a.afterPrac ? 'this will be a full stop' : 'full stop';
+  const itSay = it.replace('PARs', 'P A Rs');
+  if (isShip()) pilotSay(a, `${SHIP_NAME} Final, ${a.tel}, ${a.r.toFixed(0)} miles, level ${fmtAlt(a.z)}, heading ${hdg3(a.hdg)}, for the PAR to the ship, ${it}.`,
+    `${SHIP_NAME} Final, ${a.telSay}, ${sayMiles(Math.round(a.r))}, level ${sayAlt(a.z)}, heading ${sayDigits(hdg3(a.hdg))}, for the P A R to the ship, ${itSay}.`);
+  else pilotSay(a, `Final, ${a.tel}, ${a.r.toFixed(0)} miles, level ${fmtAlt(a.z)}, PAR runway ${RWY_NUM}.`,
+    `Final, ${a.telSay}, ${sayMiles(Math.round(a.r))}, level ${sayAlt(a.z)}, P A R runway ${RWY_SAY}.`);
+  if (!G.selected || !PAR_PHASES.includes(G.selected.phase)) selectAc(a);
+  Sound.chirp();
+}
+
+/* ===================== physics ===================== */
+function windVec() {
+  const r = (G.wind.dir - BRC_OFF + 180) * DEG;   // wind in the course-aligned frame
+  return { x: G.wind.spd * Math.sin(r) + G.gustNow.x, y: G.wind.spd * Math.cos(r) + G.gustNow.y };
+}
+function headingForTrack(tas, trk) {
+  const w = windVec(), rr = (trk - BRC_OFF + 90) * DEG;
+  const wc = w.x * Math.sin(rr) + w.y * Math.cos(rr);
+  return norm(trk + Math.asin(clamp(-wc / tas, -0.9, 0.9)) / DEG);
+}
+const tasOf = a => a.ias;   // low-level final: TAS = IAS, so calm-air groundspeed equals the type's approach speed
+const vsNominal = a => a.gs * 101.27 * GP_TAN;   // fpm for a 3 degree path at this groundspeed
+
+function step(dt) {
+  if (!G || G.over) return;
+  G.t += dt;
+  shipStep(dt);
+  // gusts
+  if (G.wind.gust) {
+    const k = Math.exp(-dt / 6);
+    G.gustNow.x = G.gustNow.x * k + (rng() - 0.5) * G.wind.gust * 0.9 * Math.sqrt(dt);
+    G.gustNow.y = G.gustNow.y * k + (rng() - 0.5) * G.wind.gust * 0.9 * Math.sqrt(dt);
+  }
+  // spawns
+  if (!G.linked && G.spawned < G.toSpawn && G.t >= G.nextSpawn) {
+    spawnQueue({ atB: G.spawned === 0 });
+    G.spawned++; G.nextSpawn = G.t + G.d.spawnEvery * rand(0.85, 1.15);
+  }
+  gate();
+  for (const a of G.ac) {
+    if (a.phase === 'queue') updateQueue(a, dt);
+    else if (alive(a)) updatePar(a, dt);
+  }
+  // one aircraft on final at a time: when it leaves the controller (on deck, climb-out, wave-off, lost comms...), start the gap
+  const onFinal = G.ac.some(a => PAR_PHASES.includes(a.phase));
+  if (G.busy && !onFinal) { G.gateAt = G.t + rand(NEXT_GAP[0], NEXT_GAP[1]); log('sys', `Final scope clear. Next aircraft in ${Math.round(G.gateAt - G.t)} s.`); }
+  G.busy = onFinal;
+  G.conflicts = new Set(); G.ac.forEach(a => a.conflict = false);   // single aircraft on final: no separation conflicts
+  G.ac = G.ac.filter(a => !(a.removeAt != null && G.t >= a.removeAt));
+  if (G.selected && !G.ac.includes(G.selected)) selectAc(null);
+  if (!G.linked && !G.endAt && G.spawned >= G.toSpawn && !G.rejoin.length && !G.ac.some(a => alive(a) && !OUT_PHASES.includes(a.phase))) G.endAt = G.t + 4;
+  if (G.endAt && G.t >= G.endAt) endGame();
+}
+
+// The next aircraft (a returning practice aircraft first, else the longest-waiting arrival) is handed to PAR
+// once the final scope has been clear for the gap. It appears at its reveal point (7-9 NM) on the 20 deg intercept.
+function gate() {
+  if (G.busy || G.ac.some(a => PAR_PHASES.includes(a.phase)) || G.t < G.gateAt) return;
+  let a;
+  if (G.rejoin.length) {
+    const j = G.rejoin.shift();
+    G.ac.filter(o => o.cs === j.cs).forEach(o => { o.phase = 'gone'; o.removeAt = G.t; });   // old climb-out track
+    G.ac = G.ac.filter(o => o.phase !== 'gone' || o.cs !== j.cs);
+    a = spawnQueue(j.spec);
+  } else a = G.ac.filter(o => o.phase === 'queue').sort((p, q) => p.seq - q.seq)[0];
+  if (!a) return;
+  a.released = true; a.holding = false; a.path = [];
+  a.px = a.J.x; a.py = a.J.y; a.alt = a.entryAlt;
+  a.phase = 'final'; a.r = a.px + THR_R; a.yft = a.py * NM_FT; a.z = a.levelAlt = a.alt;
+  a.hdg = a.tgtHdg = interceptHdg(a.side); a.turnDir = null; a.ias = a.linkSpd != null ? a.linkSpd : a.T.vapp; a.tgtSpd = a.T.vapp;
+  log('sys', `Feeder: ${a.cs} handed to PAR at ${a.r.toFixed(1)} NM.`);
+  G.busy = true;
+  onParEntry(a);
+}
+function sequence() {   // (unused: replaced by gate(); kept for reference)
+  const q = G.ac.filter(a => a.phase === 'queue' && !a.released).sort((p, r) => p.seq - r.seq);
+  const next = q[0];
+  if (!next || !next.atB) return;
+  const inbound = G.ac.filter(a => (a.phase === 'queue' && a.released) || PAR_PHASES.includes(a.phase));
+  let ok;
+  if (G.d.spacing == null) ok = inbound.length === 0;
+  else {
+    const leader = inbound.sort((p, r) => r.seq - p.seq)[0];
+    if (!leader) ok = true;
+    else if (leader.phase === 'queue') ok = false;
+    else {
+      const dist = Math.hypot(next.J.x - next.px, next.J.y - next.py);
+      const transit = dist / (next.T.feed / 3600);
+      const leaderR = leader.r - (Math.max(60, leader.gs) / 3600) * transit;
+      const fasterBy = Math.max(0, next.T.vapp - leader.T.vapp);
+      const need = G.d.spacing + fasterBy * (leaderR / Math.max(60, leader.gs));
+      ok = (next.J.x + THR_R) - leaderR >= need;
+    }
+  }
+  if (ok) {
+    next.released = true; next.holding = false; next.path = next.P ? [next.P, next.J] : [next.J];
+    log('sys', `Feeder: ${next.cs} cleared for PAR final; on the scope at ~${next.revealR.toFixed(1)} NM.`);
+  }
+}
+
+function updateQueue(a, dt) {
+  const spd = a.T.feed / 3600 * dt;
+  // altitude
+  const tgtAlt = a.released ? a.entryAlt : a.feedAlt;
+  if (a.alt !== tgtAlt) { const r = 1500 / 60 * dt; a.alt = Math.abs(tgtAlt - a.alt) <= r ? tgtAlt : a.alt + Math.sign(tgtAlt - a.alt) * r; }
+  if (a.holding) {
+    const R = 1.3; a.holdAng += spd / R;
+    const tx = a.B.x + R * Math.cos(a.holdAng), ty = a.B.y + R * Math.sin(a.holdAng);
+    const dx = tx - a.px, dy = ty - a.py, d = Math.hypot(dx, dy);
+    if (d > spd) { a.px += dx / d * spd; a.py += dy / d * spd; } else { a.px = tx; a.py = ty; }
+  } else if (a.path.length) {
+    const w = a.path[0], dx = w.x - a.px, dy = w.y - a.py, d = Math.hypot(dx, dy);
+    if (d <= spd) {
+      a.px = w.x; a.py = w.y; a.path.shift();
+      if (!a.released && w === a.B) { a.atB = true; a.holding = true; a.holdAng = Math.atan2(a.py - a.B.y, a.px - a.B.x); }
+      if (a.released && !a.path.length) {
+        a.phase = 'final'; a.r = a.px + THR_R; a.yft = a.py * NM_FT; a.z = a.levelAlt = a.alt;
+        a.hdg = a.tgtHdg = interceptHdg(a.side); a.turnDir = null; a.ias = a.T.vapp; a.tgtSpd = a.T.vapp;
+        onParEntry(a);
+      }
+    } else { a.px += dx / d * spd; a.py += dy / d * spd; }
+  }
+  a.histT += dt;
+  if (a.histT >= 4) { a.histT = 0; a.hist.push({ x: a.px, y: a.py }); if (a.hist.length > 6) a.hist.shift(); }
+}
+
+function updatePar(a, dt) {
+  const T = a.T, prevR = a.r;
+  if (a.phase === 'linkin') {   // outside PAR coverage: keep the handoff heading, or join final with the same cut
+    const yNm = a.yft / NM_FT, off = Math.min(a.linkCut, Math.abs(yNm) * 40);
+    a.tgtHdg = (norm(RWY - Math.sign(yNm || 1) * off) || 360); a.turnDir = null;
+  }
+  // ---- lateral steering
+  if (a.phase === 'visual' && !a.ng) {   // no-gyro: no auto-steer; only controller turns move the heading
+    const vDes = clamp(-a.yft / 12, -30, 30), gsFt = Math.max(60, a.gs) * 1.68781;
+    a.tgtHdg = headingForTrack(tasOf(a), RWY + Math.asin(clamp(vDes / gsFt, -0.5, 0.5)) / DEG); a.turnDir = null;
+  }
+  const diff = angDiff(a.tgtHdg, a.hdg);
+  if (a.ng) {   // no-gyro: turn only while told to ("turn left/right" ... "stop turn"), standard (3°/s) or half standard (1.5°/s)
+    if (a.ngTurn) a.hdg = norm(a.hdg + (a.ngTurn === 'L' ? -1 : 1) * (a.ngHalf ? 1.5 : 3) * dt) || 360;
+    a.tgtHdg = a.hdg; a.turnDir = null;
+  } else if (Math.abs(diff) < 0.05) { a.hdg = a.tgtHdg; a.turnDir = null; }
+  else {
+    const dir = a.turnDir || (diff < 0 ? 'L' : 'R');
+    const remaining = dir === 'L' ? norm(a.hdg - a.tgtHdg) : norm(a.tgtHdg - a.hdg);
+    const rate = (OUT_PHASES.includes(a.phase) ? 3 : 1.5) * dt;
+    if (remaining <= rate) { a.hdg = a.tgtHdg; a.turnDir = null; } else a.hdg = norm(a.hdg + (dir === 'L' ? -rate : rate));
+  }
+  // ---- speed
+  let ts = a.tgtSpd;
+  if (a.phase === 'visual' || (a.phase === 'descent' && a.r < 2)) ts = T.vapp;
+  if (OUT_PHASES.includes(a.phase)) ts = Math.max(T.vapp + 20, 160 * (T.vapp > 100 ? 1 : 0.6));
+  if (a.ias !== ts) { const r = 1.5 * dt; a.ias = Math.abs(ts - a.ias) <= r ? ts : a.ias + Math.sign(ts - a.ias) * r; }
+  // ---- move
+  const w = windVec(), tas = tasOf(a), h = (a.hdg - BRC_OFF) * DEG;
+  const vx = tas * Math.sin(h) + w.x, vy = tas * Math.cos(h) + w.y;
+  a.gs = Math.hypot(vx, vy);
+  a.r += vx / 3600 * dt;
+  a.yft += vy * 1.68781 * dt;
+  a.latRate = vy * 1.68781;
+  // ---- vertical
+  const nom = vsNominal(a);
+  if (a.phase === 'descent' && a.asr) {   // ASR: steady descent to the MDA, reaching it by the MAP, then level
+    const above = a.z - a.mda, tMap = Math.max(5, (a.r - ASR_MAP_R) / Math.max(30, a.gs) * 3600);
+    const req = clamp(above / tMap * 60 * 1.25, 400, 1000);
+    const target = clamp(above * 4, -400, req);
+    a.vs += (target - a.vs) * Math.min(1, dt / 2);
+  } else if (a.phase === 'descent') {
+    const noise = G.d.noise;
+    a.gustV = a.gustV * Math.exp(-dt / 5) + (rng() - 0.5) * noise * Math.sqrt(dt) * 1.2;
+    if (a.sinkR && !a.sinkOn && !a.sinkDone && a.r <= a.sinkR) { a.sinkOn = true; a.sinkT = 0; }
+    let target = Math.max(-200, nom * (1 + a.bias) + a.corr + a.gustV);
+    if (a.sinkOn) { a.sinkT += dt; target = nom + Math.min(1400, 35 * a.sinkT) + a.gustV; }        // sinker: glidepath calls don't fix it
+    else if (a.recover) {                                                                        // after the low altitude alert: climb back to the glidepath
+      const below = gpAlt(a.r) - a.z;
+      target = nom - clamp(below * 10, -300, 1200);
+      if (below < 15) { a.recover = false; a.corr = 0; a.bias = 0; }
+    }
+    a.vs += (target - a.vs) * Math.min(1, dt / 2.5);
+    a.corr *= Math.exp(-dt / 45);
+  } else if (a.phase === 'final' || a.phase === 'linkin') {
+    const target = clamp((a.levelAlt - a.z) * 3, -1500, 1500) * -1;
+    a.vs += (target - a.vs) * Math.min(1, dt / 2);
+  } else if (a.phase === 'visual') {
+    const target = nom + (a.z - gpAlt(a.r)) * 3;
+    a.vs += (target - a.vs) * Math.min(1, dt / 1.5);
+  } else if (OUT_PHASES.includes(a.phase)) {
+    const target = clamp((a.z - a.gaAlt) * 3, -1500, 1800) * -1;
+    a.vs += (-Math.min(1800, Math.max(-1500, (a.gaAlt - a.z) * 3)) - a.vs) * Math.min(1, dt / 2);
+    void target;
+  }
+  a.z -= a.vs / 60 * dt;
+  if (a.z < 0) a.z = 0;
+  a.histT += dt;
+  if (a.histT >= 2) { a.histT = 0; a.hist.push({ r: a.r, yft: a.yft, z: a.z }); if (a.hist.length > 12) a.hist.shift(); }
+
+  if (a.phase === 'linkin') { if (!linkCover(a) && (a.r < -1 || a.r > 40)) { a.phase = 'missed'; a.removeAt = G.t; finalize(a, false, 'not acquired by PAR'); } return; }
+  if (a.phase === 'climbout') { if (Math.abs(a.yft) / NM_FT > 2.5 || a.r < -2 || G.t - a.climbT > 100) completePractice(a); return; }
+  if (a.phase === 'missed') { if (a.r < -2 || a.r > 14 || (a.removeAt == null && a.z >= a.gaAlt - 20)) a.removeAt = a.removeAt ?? G.t + 25; return; }
+
+  const dev = elevDev(a), az = azDeg(a);
+  if (a.prevDev != null) { a.devRate = (dev - a.prevDev) / dt; }
+  a.prevDev = dev; a.prevAz = az;
+
+  // ---- range call bookkeeping (every mile)
+  if (a.phase === 'final' || a.phase === 'descent') {
+    for (let m = 7; m >= 1; m--) {
+      if (prevR > m && a.r <= m) {
+        if (a.lastRangeR == null || a.lastRangeR - a.r > 1.15) {
+          a.missedRange++; addPts(a, -5, `No range call in the last mile for ${a.cs} (now ${m} NM).`, 'warn');
+        }
+      }
+    }
+    if (a.asr) {   // ASR: required scripted calls (prepare to descend / MDA) missed by more than 0.3 NM
+      const R = asrR(a);
+      if (!a.asrPrep && !a.asrPrepMiss && prevR > R.prep - ASR_TOL && a.r <= R.prep - ASR_TOL) { a.asrPrepMiss = true; addPts(a, -5, `No "${sayMiles(R.prep)}, prepare to descend in one mile" call for ${a.cs}.`, 'warn'); }
+      if (!a.asrMdaCalled && !a.asrMdaMiss && prevR > R.mda - ASR_TOL && a.r <= R.mda - ASR_TOL) { a.asrMdaMiss = true; addPts(a, -5, `No "descend to your minimum descent altitude" call for ${a.cs} at ${sayMiles(R.mda)}; it stays level.`, 'warn'); }
+    }
+    // ---- transmission gap
+    const gapLim = a.phase === 'descent' ? G.d.gap : G.d.gap * 2;
+    if (G.t - a.lastTx > gapLim) {
+      a.gaps++; a.lastTx = G.t;
+      addPts(a, -5, `Transmission gap: ${Math.round(gapLim)} s without a call to ${a.cs}. On PAR final, keep talking!`, 'warn');
+      Sound.buzz();
+    }
+    if (G.t - a.lastRealTx > gapLim * 2.6) {
+      { const t = ph('lost communications, waving off', 'lost communications, executing missed approach'); pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true); }
+      doMissed(a, 'lost communications (no transmissions)', -30);
+      return;
+    }
+  }
+  // ---- descent monitoring
+  if (a.phase === 'descent') {
+    a.descT += dt;
+    if (a.asr) {   // ASR: course tolerance only; no glidepath limits, sinker or steep/shallow checks
+      if (Math.abs(az) <= LIM.azSl) a.tolT += dt;
+      if (a.z <= 5 && a.r > 0.35) { doCrash(a); return; }
+    } else {
+    if (Math.abs(dev) <= LIM.gpSl && Math.abs(az) <= LIM.azSl) a.tolT += dt;
+    const ratio = a.vs / Math.max(1, nom);
+    a.steepT = ratio > 1.6 && !a.sinkOn && !a.recover ? a.steepT + dt : 0;
+    a.shallowT = ratio < 0.4 ? a.shallowT + dt : 0;
+    if (a.steepT > 8 && !a.steepFlag) { a.steepFlag = true; addPts(a, -10, `${a.cs} is descending too steeply (${Math.round(a.vs)} fpm vs about ${Math.round(nom)} fpm for 3°).`, 'bad'); }
+    if (a.shallowT > 10 && !a.shallowFlag) { a.shallowFlag = true; addPts(a, -10, `${a.cs}'s approach is too shallow (${Math.round(a.vs)} fpm vs about ${Math.round(nom)} fpm).`, 'bad'); }
+    let lim = null;
+    if (elevAngle(a) < LIM.lowerSafeDeg && a.r > 0.4) lim = 'LOW';
+    else if (elevAngle(a) > LIM.upperDeg && a.r < 4) lim = 'HIGH';
+    else if (Math.abs(az) > LIM.azSafe && a.r < 6) lim = 'AZ';
+    if (lim && a.limit !== lim) { a.limit = lim; a.limitT = 0; }   // tracked silently (no banner, alarm, log or hint)
+    else if (!lim) a.limit = null;
+    if (a.limit) a.limitT += dt;
+    if (elevAngle(a) < LIM.lowerLimitDeg && a.r > 0.4) a.lowLimitT += dt; else a.lowLimitT = 0;
+    if ((a.lowLimitT > 3 || (a.z <= 5 && a.r > 0.35)) ) { doCrash(a); return; }
+    }
+  }
+  // ---- ship: pilot calls "see you" passing 2 NM
+  if (isShip() && !a.seeYou && (a.phase === 'descent' || a.phase === 'final') && prevR > SEE_YOU_R && a.r <= SEE_YOU_R) {
+    a.seeYou = true; pilotSay(a, `${a.tel}, see you.`, `${a.telSay}, see you.`, true, false, true);   // priority: never dropped
+  }
+  // ---- decision height (Tower) / half-mile gate (Ship: no DH)
+  if (a.asr) {   // ---- ASR: missed approach point (no DH / glidepath stability gate)
+    if ((a.phase === 'descent' || a.phase === 'final') && prevR > ASR_GATE_R && a.r <= ASR_GATE_R) {
+      if (!a.gear) addPts(a, -10, ph(`${a.cs} reached the missed approach point without a wheels check.`, `${a.cs} reached the MAP without a gear check.`), 'warn');
+      if (a.phase === 'final') { pilotSay(a, `${a.tel}, missed approach point, never got the descent, executing missed approach.`, `${a.telSay}, missed approach point, executing missed approach.`, true); doMissed(a, 'ASR: never descended to the MDA', 0); return; }
+      if (isShip() && isPrac(a) && !a.climbCalled) {
+        addPts(a, -5, `${a.cs} reached the missed approach point without "${climbCallOf(a)}" or "surveillance minimums"; the pilot climbs out on its own.`, 'warn');
+        const t = isHelo(a) ? 'entering starboard delta' : 'executing climb out, going blue';
+        pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true);
+        startClimbout(a, true); return;
+      }
+      if (!a.asrMinsCalled && !a.ballAsked) addPts(a, -5, `No "surveillance minimums" call for ${a.cs} by the missed approach point.`, 'warn');
+      { const t = `${ph('mother', 'runway')} not in sight, executing missed approach`; pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true); }
+      doMissed(a, 'ASR: not visual at the missed approach point', 0); return;
+    }
+  } else if ((a.phase === 'descent' || a.phase === 'final') && prevR > gateR() && a.r <= gateR()) {
+    if (a.phase === 'final') { pilotSay(a, `${a.tel}, ${ph('waving off', 'going around')}, we never got the descent.`, `${a.telSay}, ${ph('waving off', 'going around')}.`, true); doMissed(a, ph('never began descent (too high on short final)', 'never began descent (too high at DH)'), -40); return; }
+    const stable = Math.abs(dev) <= LIM.gpSl && Math.abs(az) <= LIM.azSl;
+    a.stableDH = stable;
+    if (!a.gear) addPts(a, -10, ph(`${a.cs} reached half a mile without a wheels check.`, `${a.cs} reached DH without a gear check.`), 'warn');
+    if (isShip() && isPrac(a)) {   // practice approach: no climb-out call by half a mile -> pilot climbs out on its own
+      addPts(a, -5, `${a.cs} reached half a mile without "${climbCallOf(a)}"; the pilot climbs out on its own.`, 'warn');
+      const t = isHelo(a) ? 'entering starboard delta' : 'executing climb out, going blue';
+      pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true);
+      startClimbout(a, true); return;
+    }
+    if (isShip() && !(isHelo(a) ? a.greenCalled : a.ballAsked)) addPts(a, -5, `${a.cs} reached half a mile without ${isHelo(a) ? '"one mile, go green"' : '"three-quarter mile, call the ball"'}.`, 'warn');
+    if (!stable) { pilotSay(a, `${a.tel}, ${ph('waving off', 'going around')}, unstable.`, `${a.telSay}, ${ph('waving off', 'going around')}, unstable.`, true); doMissed(a, `unstable ${ph('on short final', 'at DH')} (${dev >= 0 ? '+' : ''}${Math.round(a.z - gpAlt(a.r))} ft, ${Math.round(Math.abs(a.yft))} ft ${a.yft > 0 ? 'right' : 'left'})`, isShip() ? 0 : -40); return; }
+    if (!a.cleared) { pilotSay(a, `${a.tel}, ${ph('waving off, no landing clearance, fouled deck', 'going around, no landing clearance')}.`, `${a.telSay}, ${ph('waving off, no landing clearance, fouled deck', 'going around, no landing clearance')}.`, true); doMissed(a, ph('no landing clearance by half a mile (fouled deck)', 'no landing clearance by DH'), -30); return; }
+    addPts(a, 10, ph(`${a.cs} stable on short final. ${isHelo(a) ? 'Deck in sight' : 'Ship in sight'}, continuing to spot ${spotOf(a)}.`, `${a.cs} stable at decision height. Runway in sight.`), 'good');
+    a.phase = 'visual';
+  }
+  if (a.phase === 'visual' && a.r <= 0.02) {
+    a.phase = 'landed'; a.z = 0; a.removeAt = G.t + 4;
+    finalize(a, true, 'landed');
+    Sound.good();
+  }
+}
+
+/* ===================== scoring / outcomes ===================== */
+// ship: the pilot's "going green" / "ball" reply is the landing clearance (same +5 as the spot clearance if none was given)
+function deckClear(a) {
+  if (a.cleared) return;
+  a.cleared = true;
+  if (a.r > gateR()) { a.pts += 5; log('good', `${a.cs} ${isHelo(a) ? 'going green' : 'called the ball'}: cleared to land on ${SHIP_NAME} (+5)`); }
+}
+// ASR: pilot is visual at/near the MAP (helo "mother in sight" / jet ball): land, or practice climb-out
+function asrVisual(a) {
+  if (!a.gear) addPts(a, -10, ph(`${a.cs} went visual without a wheels check.`, `${a.cs} went visual without a gear check.`), 'warn');
+  if (isShip() && isPrac(a)) { addPts(a, 10, `${a.cs} stable at MDA on the practice ASR.`, 'good'); startClimbout(a, true); return; }
+  if (!a.cleared) {
+    if (!isShip()) { pilotSay(a, `${a.tel}, going around, no landing clearance.`, `${a.telSay}, going around, no landing clearance.`, true); doMissed(a, 'no landing clearance (ASR)', 0); return; }
+    a.cleared = true; a.pts += 5; log('good', `${a.cs} ${isHelo(a) ? 'mother in sight' : 'called the ball'}: cleared to land on ${SHIP_NAME} (+5)`);
+  }
+  addPts(a, 10, ph(`${a.cs} stable at MDA, ${isHelo(a) ? 'mother' : 'ship'} in sight, continuing to spot ${spotOf(a)}.`, `${a.cs} stable at MDA, runway in sight.`), 'good');
+  a.phase = 'visual';
+}
+// practice approach: climb out (jets: angels 1.2, left to BRC-90) or starboard delta (helos: angels 1, right to BRC+90)
+function startClimbout(a, own) {
+  const P = isHelo(a) ? CLIMB_HELO : CLIMB_JET;
+  if (!own && a.phase === 'descent' && Math.abs(elevDev(a)) <= LIM.gpSl && Math.abs(azDeg(a)) <= LIM.azSl) addPts(a, 10, `${a.cs} stable on the practice approach.`, 'good');
+  a.phase = 'climbout'; a.climbT = G.t; a.limit = null; a.climbCalled = true;
+  a.gaAlt = P.alt; a.tgtHdg = P.hdg; a.turnDir = P.dir; a.tgtSpd = a.T.vapp + 20;
+  log('sys', `${a.cs} ${isHelo(a) ? `entering starboard delta: climbing to 1,000, right turn to ${hdg3(CLIMB_HELO.hdg)}` : `climbing out, going blue: climbing to 1,200, left turn to ${hdg3(CLIMB_JET.hdg)}`}.`);
+  practiceDone(a);
+}
+function completePractice(a) { a.phase = 'gone'; a.removeAt = G.t; }   // climb-out traffic has left the area
+function practiceDone(a) {
+  finalize(a, false, 'practice approach', true);
+  if (G.linked) { a.removeAt = G.t + 3; return; }   // Approach Control flies the climb-out
+  const left = a.pracLeft - 1;
+  G.rejoin.push({ cs: a.cs, spec: { cs: a.cs, type: a.type, side: a.side, rejoin: true,
+    intent: left > 0 ? 'prac' : 'fs', pracLeft: left, pracNo: left > 0 ? a.pracNo + 1 : 0, afterPrac: left <= 0 } });
+  log('sys', `${a.cs} is coming back around for ${left > 0 ? 'another practice PAR' : 'a full stop'}.`);
+}
+function addPts(a, n, msg, cls) { a.pts += n; if (msg) log(cls || (n >= 0 ? 'good' : 'bad'), `${msg} (${n >= 0 ? '+' : ''}${n})`); if (n < 0 && cls === 'bad') Sound.buzz(); }
+function gradeOf(s) { return s >= 85 ? 'A' : s >= 70 ? 'B' : s >= 55 ? 'C' : s >= 40 ? 'D' : 'F'; }
+function finalize(a, landed, reason, practice) {
+  if (a.result) return;
+  const tolFrac = a.descT > 5 ? a.tolT / a.descT : 0;
+  const tolPts = Math.round(30 * tolFrac);
+  const done = landed || !!practice;
+  const s = (done ? 40 : 0) + tolPts + a.pts;
+  a.result = { cs: a.cs, landed, practice: !!practice, reason, score: s, grade: done ? gradeOf(s) : 'F', tol: Math.round(tolFrac * 100), good: a.accCalls, bad: a.badCalls, gaps: a.gaps, missedRange: a.missedRange };
+  G.results.push(a.result); G.score += s;
+  if (G.linked && reason !== 'session ended') linkComplete(a);
+  if (landed) { G.landed++; log('good', `${a.cs} ${ph('ON DECK (spot ' + spotOf(a) + ')', 'LANDED')}. Approach grade ${a.result.grade}: ${s} pts (in tolerance ${a.result.tol}%, ${a.accCalls} good calls, ${a.badCalls} inaccurate, ${a.gaps} gaps).`); }
+  else if (practice) { G.practice++; log('good', `${a.cs} practice approach complete. Grade ${a.result.grade}: ${s} pts (in tolerance ${a.result.tol}%, ${a.accCalls} good calls, ${a.badCalls} inaccurate, ${a.gaps} gaps).`); }
+  else G.missed++;
+}
+function doMissed(a, why, pts) {   // wave-offs cost nothing: the approach just ends (no landing bonus); pts is ignored
+  log('bad', `${a.cs} ${ph('wave-off', 'missed approach')}: ${why}.`);
+  a.phase = 'missed'; a.limit = null;
+  if (a.gaHdgSet == null) { a.tgtHdg = RWY; a.turnDir = null; }
+  a.gaAlt = a.gaAltSet || 2000; a.tgtSpd = a.T.vapp + 20;
+  a.removeAt = G.linked ? G.t + 3 : G.t + 30;
+  finalize(a, false, why);
+}
+function doCrash(a) {
+  a.phase = 'crashed'; a.removeAt = G.t + 6;
+  G.crashes++; G.score -= 200;
+  log('bad', `CRASH (simulated): ${a.cs} descended below the lower limit and hit ${ph('the water', 'terrain')} at ${a.r.toFixed(1)} NM. Nobody called the ${ph('wave-off', 'go-around')}. (-200)`);
+  finalize(a, false, ph('crashed (below lower limit, no wave-off)', 'crashed (below lower limit, no go-around)'));
+  G.failMsg = `${a.cs} flew below the lower limit line and crashed at ${a.r.toFixed(1)} NM.`;
+  Sound.crash();
+  G.endAt = G.t + 3;
+}
+
+function planPos(a) {
+  if (a.phase === 'queue') return { x: a.px, y: a.py, z: a.alt };
+  return { x: a.r - THR_R, y: a.yft / NM_FT, z: a.z };
+}
+function checkSeparation() {
+  const list = G.ac.filter(a => alive(a) && !OUT_PHASES.includes(a.phase) && !(a.phase === 'queue' && a.holding));
+  const now = new Set();
+  list.forEach(a => a.conflict = false);
+  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+    const a = list[i], b = list[j], p = planPos(a), q = planPos(b);
+    const key = Math.min(a.uid, b.uid) + '-' + Math.max(a.uid, b.uid);
+    const lat = Math.hypot(p.x - q.x, p.y - q.y), vert = Math.abs(p.z - q.z), had = G.conflicts.has(key);
+    if (had ? (lat < 3.2 && vert < 1050) : (lat < 3 && vert < 990)) {
+      now.add(key); a.conflict = b.conflict = true;
+      if (!had) { G.sepLoss++; G.score -= 50; log('bad', `SEPARATION LOST: ${a.cs} and ${b.cs} are ${lat.toFixed(1)} NM / ${fmtAlt(vert)} ft apart. Slow the follower ("reduce speed to ...") or ${ph('wave it off', 'send it around')}. (-50)`); Sound.alarm(); }
+    }
+  }
+  G.conflicts = now;
+}
+
+/* ===================== executing transmissions ===================== */
+function defaultTarget() {
+  if (G.selected && PAR_PHASES.includes(G.selected.phase)) return G.selected;
+  const par = G.ac.filter(a => PAR_PHASES.includes(a.phase)).sort((p, q) => p.r - q.r);
+  return par[0] || G.selected || null;
+}
+function judge(a, ok, said, actual) {
+  if (ok) { a.accCalls++; G.callsGood++; if (a.accCalls <= 15) a.pts += 1; }
+  else { a.badCalls++; G.callsBad++; addPts(a, -3, `Inaccurate call to ${a.cs}: you said "${said}", but it's actually ${actual}.`, 'warn'); }
+}
+function actualCourse(a) { const c = courseCat(a), g = courseGeom(a); return `${courseWords(c, a.yft)} (${Math.abs(Math.round(a.yft))} ft: course line ${g.d.toFixed(1)} px from the tick centre, tick half-length ${g.h.toFixed(1)} px)`; }
+function actualGp(a) { const c = gpCat(a), g = gpGeom(a), ft = Math.round(a.z - gpAlt(a.r)); return `${gpWords(c, a)} (${ft >= 0 ? '+' : ''}${ft} ft: glidepath line ${g.d.toFixed(1)} px from the tick centre, tick half-length ${g.h.toFixed(1)} px)`; }
+
+// Low altitude alert: "low altitude alert" + "check your altitude immediately" + "altimeter two niner niner two"
+const SINK_P = 0.35;   // chance of a sinker event per approach
+const LAA_SAY = 'check your altitude immediately, altimeter two niner niner two';
+function laaParts(raw) {
+  const DW = { zero: 0, oh: 0, one: 1, two: 2, to: 2, too: 2, three: 3, tree: 3, four: 4, for: 4, five: 5, fife: 5, six: 6, seven: 7, eight: 8, nine: 9, niner: 9, nina: 9 };
+  let t = ' ' + String(raw).toLowerCase().replace(/[^a-z0-9.\s]/g, ' ') + ' ';
+  t = t.replace(/\b(29)\.(92)\b/g, '$1$2');
+  t = t.replace(/\b[a-z]+\b/g, w => (w in DW && w !== 'to' && w !== 'too' && w !== 'for') ? String(DW[w]) : w);
+  t = t.replace(/\b(\d)\s+(?=\d\b)/g, '$1').replace(/\s+/g, ' ');
+  return {
+    alert: /\blow altitude alerts?\b/.test(t),
+    check: /\bcheck (?:your )?altitude immediately\b/.test(t),
+    alt: /\baltimeter (?:setting )?(?:is )?2992\b/.test(t)
+  };
+}
+function execute(p, src) {
+  if (!G || G.over) return;
+  let a = null;
+  const onPar = G.ac.filter(x => PAR_PHASES.includes(x.phase));
+  if (p.cs) {
+    a = G.ac.find(x => x.cs === p.cs && alive(x));
+    // misheard digits ("lightning 2 1 5"): same tactical callsign word as the one aircraft on final -> that's who was meant
+    if (!a && p.csUnknown && onPar.length === 1 && p.cs.slice(0, 4) === onPar[0].cs.slice(0, 4)) { a = onPar[0]; p.cs = a.cs; }
+    if (!a) { log('sys', `No aircraft "${p.cs}" on frequency. Heard: "${p.raw}"`); Sound.buzz(); return; }
+  } else a = onPar.length ? defaultTarget() : null;
+  if (!a) { log('sys', `No aircraft on PAR final right now${G.gateAt > G.t ? ` (next in ${Math.ceil(G.gateAt - G.t)} s)` : ''}; nobody answers. Heard: "${p.raw}"`); return; }
+  // very short noise with nothing recognized (and no callsign): ignore without a reply
+  if (!p.cmds.length && !p.cs && p.norm.split(/\s+/).filter(w => w.length > 1 && w !== ',').length < 2) { log('sys', `Ignored noise: "${p.raw}"`); return; }
+  if (!a.ng) { const ngK = ['ngTurn', 'ngStop', 'ngHalf', 'ngStd']; p.cmds = p.cmds.filter(c => !ngK.includes(c.k)); }   // gyro aircraft: as before
+  selectAc(a);
+  a.contacted = true;
+  const silentBefore = a.dna;          // pilots acknowledge every call until "do not acknowledge further transmissions"
+  a.lastTx = G.t; a.lastRealTx = G.t;
+  log('ctl', `${a.cs}${p.cs ? '' : ' (selected)'}: "${p.raw.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${p.cmds.length ? p.cmds.map(cmdStr).join('; ') : '??'}`);
+  if (!p.cmds.length) {
+    if (!silentBefore) pilotSay(a, `Say again, ${a.tel}.`, `Say again, ${a.telSay}.`);
+    else log('sys', `Not understood, and ${a.cs} won't reply (told not to acknowledge). Try again.`);
+    return;
+  }
+  if (a.phase === 'queue') {
+    const okK = ['spd', 'sayCs', 'hear'];
+    if (!p.cmds.every(c => okK.includes(c.k))) { log('sys', `${a.cs} is still with the feeder. Only speed, radio check or "say callsign" for now; talk to it once it's on PAR.`); return; }
+  }
+  if (a.phase === 'climbout') { log('sys', `${a.cs} is ${isHelo(a) ? 'in the starboard delta' : 'climbing out'} (practice approach complete); it will come back to the feeder.`); return; }
+  if (['landed', 'missed'].includes(a.phase) && !p.cmds.every(c => ['tower', 'sayCs', 'hear', 'alt', 'hdg', 'ga'].includes(c.k))) { log('sys', `${a.cs} is ${a.phase === 'landed' ? ph('on deck', 'on the ground') : ph('waving off', 'on the missed approach')}.`); }
+  const rb = [], rbSay = [];
+  let speakAnyway = false, goAround = false, special = false, ngUnable = false;
+  const ngRb = t => { special = true; if (!silentBefore) pilotSay(a, `${t.charAt(0).toUpperCase() + t.slice(1)}.`, `${t}.`, true, false, true); };   // short no-gyro readbacks (silent after DNA)
+  if (p.cmds.some(c => c.k === 'laa') && PAR_PHASES.includes(a.phase)) {
+    const q = laaParts(p.raw), full = q.alert && q.check && q.alt && p.cs === a.cs;
+    if (!full) log('warn', `Incomplete low altitude alert to ${a.cs} (needs ${[p.cs === a.cs ? '' : 'the callsign', q.alert ? '' : '"low altitude alert"', q.check ? '' : '"check your altitude immediately"', q.alt ? '' : '"altimeter two niner niner two"'].filter(Boolean).join(', ')}); not accepted.`);
+    else if (a.sinkOn) {
+      a.sinkOn = false; a.sinkDone = true; a.recover = true; a.corr = 0; a.bias = 0; special = true;
+      addPts(a, 5, `★ Low altitude alert for ${a.cs}: ${Math.round(gpAlt(a.r) - a.z)} ft below the glidepath, recovering`, 'good');
+      pilotSay(a, `${a.tel}, climbing.`, `${a.telSay}, climbing.`, true, false, true);   // safety reply, even after DNA
+    } else { judge(a, false, 'low altitude alert', `not sinking (${actualGp(a)})`); }
+  }
+  // ship initial-contact bonus: callsign + "Stinger final" + "how do you hear me" + "wheels should be down" + "report see me"
+  if (isShip() && !a.contactBonus && PAR_PHASES.includes(a.phase) && p.cs === a.cs) {
+    const n = ' ' + p.norm + ' ', nm = SHIP_NAME.toLowerCase();
+    if (n.includes(` ${nm} final `) && /\bhow do you (?:hear|read)\b/.test(n) && /\bwheels? should be down\b/.test(n) && /\breport (?:you )?see(?:ing)? (?:me|us|the ship)\b/.test(n)) {
+      a.contactBonus = true; addPts(a, 1, `★ Contact call bonus for ${a.cs}: full "${SHIP_NAME} final, how do you hear me, wheels should be down, report see me"`, 'good');
+    }
+  }
+  for (const c of p.cmds) {
+    const dev = elevDev(a), az = azDeg(a);
+    if (a.asr && ['gp', 'onGp', 'trendGp', 'approachingGp', 'beginDescent', 'adjDescent'].includes(c.k) && PAR_PHASES.includes(a.phase)) {   // ASR: no glidepath information
+      judge(a, false, cmdStr(c), 'a surveillance (ASR) approach: no glidepath information; use the MDA'); continue;
+    }
+    switch (c.k) {
+      case 'reportSee': a.reportSee = true; break;
+      case 'roger': break;
+      case 'hear': rb.push('loud and clear'); rbSay.push('loud and clear'); a.contacted = true; speakAnyway = !a.silent; break;
+      case 'ngStart':
+        if (!PAR_PHASES.includes(a.phase) && a.phase !== 'linkin') break;
+        a.ng = true; a.ngTurn = null; a.ngHalf = false; a.tgtHdg = a.hdg; a.turnDir = null; special = true;
+        if (!p.cmds.some(x => x.k === 'asrStart')) pilotSay(a, `${a.tel}, no gyro approach.`, `${a.telSay}, no gyro approach.`, true, false, true); break;
+      case 'asrStart': {
+        if (!PAR_PHASES.includes(a.phase) && a.phase !== 'linkin') break;
+        special = true;
+        if (!a.asr) {
+          if (a.phase !== 'final' && a.phase !== 'linkin') { judge(a, false, 'this will be a surveillance approach', 'already descending on the PAR glidepath'); pilotSay(a, `${a.tel}, unable, already on the glidepath.`, `${a.telSay}, unable, already on the glidepath.`, true, false, true); break; }
+          a.asr = true; a.mda = ASR_MDA;
+          const R = asrR(a), ok = a.r >= R.start - 0.05;
+          if (ok) a.pts += 3;
+          judge(a, ok, 'this will be a surveillance approach', `${a.r.toFixed(2)} NM (announce it at or outside ${R.start} miles for ${isHelo(a) ? 'rotary' : 'fixed'} wing)`);
+        }
+        pilotSay(a, `${a.tel}, ${a.ng ? 'no gyro ' : ''}surveillance approach.`, `${a.telSay}, ${a.ng ? 'no gyro ' : ''}surveillance approach.`, true, false, true); break; }
+      case 'asrPrep': {
+        if (!PAR_PHASES.includes(a.phase)) break;
+        if (!a.asr) { judge(a, false, 'prepare to descend in one mile', 'a PAR approach (no ASR descent calls)'); break; }
+        const R = asrR(a), ok = Math.abs(a.r - R.prep) <= ASR_TOL;
+        if (!a.asrPrep) { a.asrPrep = true; if (ok) a.pts += 3; }
+        judge(a, ok, 'prepare to descend in one mile', `${a.r.toFixed(2)} NM (call it at ${R.prep} miles)`); break; }
+      case 'asrMda': {
+        if (!PAR_PHASES.includes(a.phase)) break;
+        if (!a.asr) { judge(a, false, 'descend to your minimum descent altitude', 'a PAR approach: use the glidepath ("begin descent")'); break; }
+        const v = c.v != null && c.v >= 100 && c.v <= 3000 ? c.v : ASR_MDA;
+        const R = asrR(a), ok = Math.abs(a.r - R.mda) <= ASR_TOL;
+        if (!a.asrMdaCalled) { a.asrMdaCalled = true; if (ok) a.pts += 3; }
+        judge(a, ok, 'descend to your minimum descent altitude', `${a.r.toFixed(2)} NM (call it at ${R.mda} miles, the FAF)`);
+        judge(a, v === ASR_MDA, `minimum descent altitude ${v}`, `the MDA is ${ASR_MDA}`);
+        a.mda = v; special = true;
+        if (a.phase === 'final') { a.phase = 'descent'; a.vs = 0; a.sinkR = 0; }
+        pilotSay(a, `${a.tel}, descending to ${v}.`, `${a.telSay}, descending to ${sayDigits(v)}.`, true, false, true); break; }
+      case 'asrMins': case 'asrIfNot': {
+        if (c.k === 'asrIfNot' && p.cmds.some(x => x.k === 'asrMins')) break;
+        if (!PAR_PHASES.includes(a.phase) || a.asrMinsCalled) break;
+        if (!a.asr) { judge(a, false, 'surveillance minimums', 'a PAR approach (no surveillance minimums)'); break; }
+        a.asrMinsCalled = true; special = true;
+        const ok = Math.abs(a.r - ASR_MAP_R) <= ASR_TOL;
+        if (ok) a.pts += 3;
+        judge(a, ok, 'surveillance minimums', `${a.r.toFixed(2)} NM (call it at three-quarter mile)`);
+        if (a.phase === 'visual') break;   // jet already called the ball
+        if ((isHelo(a) || !isShip()) && asrStable(a)) {
+          const t = `${ph('mother', 'runway')} in sight${isShip() && isPrac(a) ? (isHelo(a) ? ', entering starboard delta' : ', going blue') : ''}`;
+          pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true, false, true);
+          asrVisual(a);
+        } else {
+          const t = `${ph('mother', 'runway')} not in sight, executing missed approach`;
+          pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true, false, true);
+          doMissed(a, 'ASR: not visual at surveillance minimums', 0);
+        }
+        break; }
+      case 'ngTurn': a.ngTurn = c.dir; ngRb(c.dir === 'L' ? 'turning left' : 'turning right'); break;
+      case 'ngStop': a.ngTurn = null; ngRb('stopping turn'); break;
+      case 'ngHalf': a.ngHalf = true; ngRb('half standard rate'); break;
+      case 'ngStd': a.ngHalf = false; ngRb('standard rate'); break;
+      case 'hdg':
+        if (a.ng) { if (!ngUnable) { ngUnable = true; special = true; pilotSay(a, `Unable heading, no gyro, ${a.tel}.`, `Unable heading, no gyro, ${a.telSay}.`, true, false, true); } break; }
+        if (a.phase === 'visual' || a.phase === 'landed') break;
+        a.tgtHdg = norm(c.v); a.turnDir = Math.abs(angDiff(a.tgtHdg, a.hdg)) < 0.5 ? null : c.dir; a.gaHdgSet = c.v;
+        rb.push(`${c.dir === 'L' ? 'left heading' : c.dir === 'R' ? 'right heading' : 'heading'} ${hdg3(c.v)}`);
+        rbSay.push(`${c.dir === 'L' ? 'left heading' : c.dir === 'R' ? 'right heading' : 'heading'} ${sayDigits(hdg3(c.v))}`);
+        break;
+      case 'alt':
+        if (c.v < 1500 || c.v > 10000) { rb.push(`unable ${fmtAlt(c.v)}`); rbSay.push(`unable ${sayAlt(c.v)}`); break; }
+        a.gaAltSet = c.v;
+        if (a.phase === 'final') a.levelAlt = c.v;
+        if (a.phase === 'missed') a.gaAlt = c.v;
+        if (a.phase === 'queue') a.feedAlt = c.v;
+        if (a.phase === 'descent' && !p.cmds.some(x => x.k === 'ga')) { log('sys', `${a.cs} is on the glidepath; to climb it, say "${ph('wave off, wave off, climb and maintain', 'go around, climb and maintain')} ...".`); break; }
+        rb.push(`${c.v > a.z ? 'climb' : 'descend'} and maintain ${fmtAlt(c.v)}`); rbSay.push(`${c.v > a.z ? 'climb' : 'descend'} and maintain ${sayAlt(c.v)}`);
+        break;
+      case 'spd':
+        if (c.v < a.T.vmin || c.v > a.T.vmax) { log('sys', `${a.cs} can't fly ${c.v} kt (${a.T.vmin}-${a.T.vmax}); speed unchanged.`); break; }
+        a.tgtSpd = c.v; rb.push(`speed ${c.v}`); rbSay.push(`speed ${sayDigits(c.v)}`); break;
+      case 'course': {
+        // pixel categories on the azimuth panel: slightly / plain ("right of course") / well; side must match
+        const side = a.yft > 0 ? 'R' : 'L', want = c.q || 'plain';
+        const ok = side === c.side && courseAccepts(a, want) && !(courseCat(a) === 'on' && !courseAccepts(a, want));
+        judge(a, ok, `${c.q ? c.q + ' ' : ''}${c.side === 'L' ? 'left' : 'right'} of course`, actualCourse(a)); break; }
+      case 'onCourse': judge(a, courseAccepts(a, 'on'), 'on course', actualCourse(a)); break;
+      case 'trendCourse': judge(a, (c.side === 'R' ? a.latRate : -a.latRate) > 3, `going ${c.side === 'L' ? 'left' : 'right'} of course`, `drifting ${a.latRate > 0 ? 'right' : 'left'} at ${Math.abs(a.latRate).toFixed(0)} ft/s`); break;
+      case 'gp': case 'onGp': case 'trendGp': {
+        if (c.k === 'gp') {
+          // pixel categories on the elevation panel: slightly / plain ("above glidepath") / well; side must match
+          const want = c.q || 'plain', ok = gpSide(a) === c.side && gpAccepts(a, want);
+          judge(a, ok, `${c.q || ''} ${c.side} glidepath`.trim(), actualGp(a));
+          if (a.phase === 'descent') a.corr = (c.side === 'above' ? 1 : -1) * (c.q === 'well' ? 350 : 160);
+        } else if (c.k === 'onGp') {
+          judge(a, gpAccepts(a, 'on'), 'on glidepath', actualGp(a));
+          if (a.phase === 'descent') { a.corr = 0; a.bias *= 0.5; }
+        } else {
+          judge(a, (c.side === 'above' ? a.devRate : -a.devRate) > 0.004, `going ${c.side} glidepath`, `moving ${a.devRate > 0 ? 'up' : 'down'} relative to the glidepath`);
+          if (a.phase === 'descent') a.corr += (c.side === 'above' ? 80 : -80);
+        }
+        break; }
+      case 'approachingGp': { const gap = gpAlt(a.r) - a.z; a.apprCalled = true;
+        if (isShip() && !a.apprBonus && a.phase === 'final') { const tt = ttiGp(a); if (tt >= APPR_WIN[0] && tt <= APPR_WIN[1]) { a.apprBonus = true; addPts(a, 1, `★ "Approaching glidepath" bonus for ${a.cs}: ${Math.round(tt)} s before intercept`, 'good'); } } judge(a, a.phase === 'final' && gap >= -60 && gap <= 450, 'approaching glidepath', a.phase !== 'final' ? 'already descending' : `${Math.round(gap)} ft below the glidepath`); break; }
+      case 'beginDescent': {
+        if (a.phase !== 'final') break;
+        const diff = a.z - gpAlt(a.r);
+        if (Math.abs(diff) <= 130) { a.pts += 3; log('good', `Good timing on "begin descent" for ${a.cs} (+3).`); }
+        else addPts(a, -5, `"Begin descent" was ${diff < 0 ? 'early' : 'late'} for ${a.cs}: it was ${Math.abs(Math.round(diff))} ft ${diff < 0 ? 'below' : 'above'} the glidepath.`, 'warn');
+        a.phase = 'descent'; a.vs = vsNominal(a) * 0.3;
+        if (a.sinkR == null) a.sinkR = (G.forceSink != null ? G.forceSink : rng() < SINK_P) ? Math.min(a.r - 0.3, 1.5 + rng() * 2.5) : 0;
+        break; }
+      case 'adjDescent':
+        if (a.phase !== 'descent') break;
+        if (c.v === 'adjust') a.corr += (dev > 0 ? 120 : -120);
+        else a.corr += c.v === 'increase' ? 120 : -120;
+        break;
+      case 'range': {
+        const tol = a.r < 1.5 ? 0.3 : 0.5, ok = Math.abs(c.v - a.r) <= tol;
+        a.lastRangeR = a.r; a.rangeCalls++;
+        if (ok) { if (a.rangeCalls <= 9) a.pts += 1; G.callsGood++; a.accCalls++; }
+        else { a.badCalls++; G.callsBad++; addPts(a, -2, `Range call to ${a.cs} was off: you said ${c.v} miles, it's at ${a.r.toFixed(1)}.`, 'warn'); }
+        break; }
+      case 'laa': break;
+      case 'dna': if (!a.dna) { a.dna = true; a.pts += 2; } a.silent = true; break;
+      case 'gear': if (!a.gear) { a.gear = true; if (a.r > gateR()) a.pts += 5; } rb.push('gear down'); rbSay.push('gear down'); break;
+      case 'clearLand':
+        if (!a.cleared && a.r > gateR()) { a.cleared = true; a.pts += 5; if (c.wind) { a.pts += 2; a.windGiven = true; } }
+        else if (!a.cleared) { a.cleared = true; log('warn', ph(`Landing clearance for ${a.cs} came too late (inside half a mile).`, `Landing clearance for ${a.cs} came after DH.`)); }
+        { const t = ph(`cleared to land spot ${spotOf(a)}`, 'cleared to land'), ts = ph(`cleared to land spot ${ONES[spotOf(a)]}`, 'cleared to land'); rb.push(t); rbSay.push(ts); } break;
+      case 'dh': { if (isShip()) break;   // ship: no DH call; accepted, no points
+        const ok = Math.abs(a.r - DH_R) <= 0.22; if (!a.dhCalled) { a.dhCalled = true; if (ok) a.pts += 3; } judge(a, ok, ph('at minimums', 'at decision height'), `${a.r.toFixed(2)} NM (${ph('minimums', 'DH')} is ${DH_R.toFixed(2)} NM)`); break; }
+      case 'thr': { const ok = a.r >= -0.05 && a.r <= 0.4; if (!a.thrCalled) { a.thrCalled = true; if (ok) a.pts += 3; } judge(a, ok, ph('over the deck', 'over landing threshold'), `${a.r.toFixed(2)} NM from ${ph('the landing spot', 'touchdown')}`); break; }
+      case 'tower':
+        if (a.phase === 'visual' || a.phase === 'landed' || a.phase === 'missed' || a.r < gateR()) {
+          a.pts += 2; { const t = ph('switching Tower', 'contact tower, good day'); rb.push(t); rbSay.push(t); } speakAnyway = true;
+          if (a.phase === 'missed') a.removeAt = G.t + 3;
+        } else log('sys', ph(`Stay with ${a.cs} until it's on short final; PAR talks it down. Hand off with "contact Tower" / "Tower has you" inside half a mile.`, `Stay with ${a.cs} down to decision height; PAR talks it down. Say "contact tower" after DH or after landing.`));
+        break;
+      case 'sayCs': rb.push(a.tel); rbSay.push(a.telSay); speakAnyway = true; break;
+      case 'goGreen': {
+        if (!isShip()) { log('sys', '"Go green" is ship phraseology (switch Phraseology to Ship).'); break; }
+        if (!PAR_PHASES.includes(a.phase)) break;
+        if (isPrac(a)) { judge(a, false, 'one mile, go green', `a practice approach: use "${climbCallOf(a)}"`); pilotSay(a, `${a.tel}, negative, practice approach.`, `${a.telSay}, negative, practice approach.`, true); special = true; break; }
+        const ok = isHelo(a) && a.r >= 0.6 && a.r <= 1.4;
+        if (!a.greenCalled) { a.greenCalled = true; if (ok) a.pts += 3; }
+        judge(a, ok, 'one mile, go green', isHelo(a) ? `${a.r.toFixed(2)} NM (call it at about one mile)` : `${a.type} is fixed-wing: use "three-quarter mile, call the ball"`);
+        if (isHelo(a)) { pilotSay(a, 'Going green.', 'Going green.', true); deckClear(a); }
+        break; }
+      case 'callBall': {
+        if (!isShip()) { log('sys', '"Call the ball" is ship phraseology (switch Phraseology to Ship).'); break; }
+        if (!PAR_PHASES.includes(a.phase)) break;
+        if (a.asr && !isHelo(a)) {   // ASR jet: "one mile, call the ball" when stable at/near the MDA
+          const ok = Math.abs(a.r - 1) <= ASR_TOL;
+          if (!a.ballAsked) { a.ballAsked = true; if (ok) a.pts += 3; }
+          judge(a, ok, 'one mile, call the ball', `${a.r.toFixed(2)} NM (call it at one mile)`);
+          special = true;
+          if (asrStable(a)) {
+            a.ballCalled = true; const t = `${a.T.ball} ball${isPrac(a) ? ', going blue' : ''}`;
+            pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true, false, true); asrVisual(a);
+          } else pilotSay(a, `${a.tel}, clara.`, `${a.telSay}, clara.`, true, false, true);
+          break;
+        }
+        if (isPrac(a)) { judge(a, false, 'three-quarter mile, call the ball', `a practice approach: use "${climbCallOf(a)}"`); pilotSay(a, `${a.tel}, negative, practice approach.`, `${a.telSay}, negative, practice approach.`, true); special = true; break; }
+        const ok = !isHelo(a) && a.r >= 0.45 && a.r <= 1.1;
+        if (!a.ballAsked) { a.ballAsked = true; if (ok) a.pts += 3; }
+        judge(a, ok, 'three-quarter mile, call the ball', !isHelo(a) ? `${a.r.toFixed(2)} NM (call it at about three-quarter mile)` : `${a.type} is a helicopter: use "one mile, go green"`);
+        if (!isHelo(a)) { a.ballCalled = true; const f = fuelOf(a); pilotSay(a, `Ball, state ${f}.`, `Ball, state ${f.replace('.', ' point ').replace(/\d/g, d => DIGW[+d])}.`, true); deckClear(a); }
+        break; }
+      case 'climbOut': case 'starDelta': {
+        if (!isShip()) { log('sys', 'Climb outs / starboard delta are ship phraseology (switch Phraseology to Ship).'); break; }
+        if (!PAR_PHASES.includes(a.phase) || a.climbCalled) break;
+        const want = isHelo(a) ? 'starDelta' : 'climbOut', said = c.k === 'climbOut' ? 'execute climb outs, go blue' : 'enter starboard delta, go green';
+        special = true;
+        if (!isPrac(a)) { judge(a, false, said, `a full stop: use "${isHelo(a) ? 'one mile, go green' : 'three-quarter mile, call the ball'}"`); pilotSay(a, `${a.tel}, unable, full stop.`, `${a.telSay}, unable, full stop.`, true); break; }
+        if (c.k !== want) { judge(a, false, said, `${a.type} is ${isHelo(a) ? 'a helicopter: use "one mile, enter starboard delta, go green"' : 'fixed-wing: use "one mile, execute climb outs, go blue"'}`); pilotSay(a, `${a.tel}, negative, ${isHelo(a) ? 'request starboard delta' : 'request climb out'}.`, `${a.telSay}, negative, ${isHelo(a) ? 'request starboard delta' : 'request climb out'}.`, true); break; }
+        const ok = a.r >= CLIMB_WIN[0] && a.r <= CLIMB_WIN[1];
+        if (ok) a.pts += 3;
+        judge(a, ok, said, `${a.r.toFixed(2)} NM (call it at about one mile)`);
+        { const t = isHelo(a) ? 'entering starboard delta' : 'going blue'; pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true); }
+        startClimbout(a, false);
+        break; }
+      case 'rogerBall': if (isShip() && a.ballCalled) a.rogerBall = true; break;
+      case 'ga': goAround = true; break;
+    }
+  }
+  if (goAround && PAR_PHASES.includes(a.phase)) {
+    const dev = elevDev(a), az = azDeg(a);
+    const warranted = !!a.limit || a.conflict || (a.phase !== 'final' && (Math.abs(dev) > LIM.gpSl || Math.abs(az) > LIM.azSl)) || a.r < 1.2 && !a.cleared;
+    if (warranted) log('good', `Good ${ph('wave-off', 'go-around')} call for ${a.cs}.`); else log('warn', `${ph('Wave-off', 'Go-around')} for ${a.cs} wasn't needed.`);
+    doMissed(a, ph('controller wave-off', 'controller go-around'), 0);
+    const hd = p.cmds.find(c => c.k === 'hdg'), al = p.cmds.find(c => c.k === 'alt');
+    if (hd && !a.ng) { a.tgtHdg = norm(hd.v); a.turnDir = hd.dir; }
+    if (al) a.gaAlt = al.v;
+    pilotSay(a, `${ph('Waving off', 'Going around')}, ${hd ? 'heading ' + hdg3(hd.v) : ph('base recovery course', 'runway heading')}, climbing ${fmtAlt(a.gaAlt)}, ${a.tel}.`, `${ph('Waving off', 'Going around')}, ${hd ? 'heading ' + sayDigits(hdg3(hd.v)) : ph('base recovery course', 'runway heading')}, climbing ${sayAlt(a.gaAlt)}, ${a.telSay}.`, true);
+    return;
+  }
+  // ---- pilot replies ----
+  // Before "do not acknowledge further transmissions": every call is acknowledged with the callsign only,
+  // except the specific replies (contact, landing clearance, deck calls, tower handoff, say callsign, unable).
+  // The call that contains "do not acknowledge" also gets one last callsign-only ack. After that: silent for routine calls.
+  const has = k => p.cmds.some(c => c.k === k);
+  const deckReply = (has('goGreen') && isShip() && isHelo(a)) || (has('callBall') && isShip() && !isHelo(a));  // already answered above
+  const routine = PAR_PHASES.includes(a.phase) || a.phase === 'queue';
+  const generic = () => {
+    let t = rb.join(', '); t = t.charAt(0).toUpperCase() + t.slice(1);
+    let s = rbSay.join(', '); s = s.charAt(0).toUpperCase() + s.slice(1);
+    const isCs = p.cmds.length === 1 && p.cmds[0].k === 'sayCs';
+    pilotSay(a, isCs ? t + '.' : `${t}, ${a.tel}.`, isCs ? s : `${s}, ${a.telSay}.`, true);
+  };
+  if (!silentBefore && routine) {
+    if (has('hear') && isShip()) {
+      // ship contact readback: "[callsign], loud and clear, wheels down, will report see you"
+      const hasGear = has('gear'), rep = has('reportSee');
+      pilotSay(a, `${a.tel}, loud and clear${hasGear ? ', wheels down' : ''}${rep ? ', will report see you' : ''}.`, `${a.telSay}, loud and clear${hasGear ? ', wheels down' : ''}${rep ? ', will report see you' : ''}.`, true);
+    } else if (has('hear')) pilotSay(a, `Loud and clear, ${a.tel}.`, `Loud and clear, ${a.telSay}.`, true);
+    else if (speakAnyway && rb.length) generic();
+    else if (!deckReply && !special) pilotSay(a, `${a.tel}.`, `${a.telSay}.`, true, true);      // routine ack: callsign only
+  } else if (!routine) {
+    if (rb.length && (!silentBefore || speakAnyway)) generic();
+  } else {
+    if (speakAnyway && rb.length && !has('hear')) generic();
+    else if ((rb.length || p.cmds.length) && !special && !deckReply) log('sys', `${a.cs} does not acknowledge (told "do not acknowledge further transmissions").`);
+  }
+  refreshPanel(true);
+}
+
+/* ===================== suggested call (Training hint + test autopilot) ===================== */
+function suggestCall(a) {
+  if (!a || !PAR_PHASES.includes(a.phase)) return null;
+  const parts = [], say = [];
+  const add = (t, s) => { parts.push(t); say.push(s || t); };
+  const dev = elevDev(a), az = azDeg(a);
+  if (G.d.hints && a.sinkOn && gpSide(a) === 'below' && gpCat(a) !== 'on')
+    return { text: `Low altitude alert, ${a.tel}, ${LAA_SAY}`, say: `Low altitude alert, ${a.telSay}, ${LAA_SAY}`, laa: true };
+  if (a.phase === 'visual') {   // (no safety-limit wave-off hint)
+    if (!a.thrCalled && a.r <= 0.4) add(ph('over the deck', 'over landing threshold'));
+    else if (a.r <= 0.1) add(ph('contact Tower', 'contact tower'));
+    else if (!parts.length) return isShip() ? { text: '(Ship in sight. Next: "over the deck" near 0.2 NM, then "contact Tower".)', say: '' } : { text: '(Runway in sight. Next: "over landing threshold" near 0.2 NM.)', say: '' };
+  } else {
+    if (!a.contacted && a.phase === 'final') add(ph(`${SHIP_NAME} final, how do you hear me, wheels should be down, report see me`, 'this is your final controller, how do you hear me'));
+    // "approaching glidepath", "begin descent" and "do not acknowledge further transmissions" are each their own transmission
+    if (a.contacted) {
+      const solo = t => { const m = G.ac.filter(x => PAR_PHASES.includes(x.phase)).length > 1; return { text: (m ? a.tel + ', ' : '') + t, say: (m ? a.telSay + ', ' : '') + t }; };
+      if (a.phase === 'final' && !a.asr) {
+        const gap = gpAlt(a.r) - a.z;
+        if (gap <= 110) return solo('begin descent');
+        if (!a.apprCalled && (isShip() ? (ttiGp(a) >= APPR_WIN[0] + 0.5 && ttiGp(a) <= APPR_WIN[1]) : gap <= 420)) return solo('approaching glidepath');
+      }
+      if (a.phase === 'descent' && !a.dna && !a.asr) return solo('do not acknowledge further transmissions');
+    }
+    // azimuth
+    const gsFt = Math.max(60, a.gs) * 1.68781;
+    const vDes = clamp(-a.yft / 30, -40, 40);
+    let hdg = Math.round(headingForTrack(tasOf(a), RWY + Math.asin(clamp(vDes / gsFt, -0.3, 0.3)) / DEG));   // includes the small wind correction
+    if (hdg === 0) hdg = 360;
+    const needTurn = Math.abs(angDiff(hdg, a.tgtHdg)) >= 1 && (Math.abs(a.yft) > 40 || Math.abs(a.latRate) > 6);
+    const cc = courseCat(a);   // as seen on the azimuth panel
+    const courseCall = () => add(courseWords(cc, a.yft));
+    if (isShip()) courseCall();   // ship style: position first, then "come left/right heading ___"
+    if (needTurn) {
+      const dir = angDiff(hdg, a.hdg) < 0 ? 'left' : 'right', verb = ph('come', 'turn');
+      add(`${verb} ${dir} heading ${hdg3(hdg)}`, `${verb} ${dir} heading ${sayDigits(hdg3(hdg))}`);
+    }
+    if (!isShip()) courseCall();
+    // elevation
+    if (a.phase !== 'final' && !a.asr) {
+      add(gpWords(gpCat(a), a));
+    }
+    // ship deck calls (replace the plain range call at that point)
+    let shipCall = null;
+    if (a.asr) {   // ASR script calls
+      const R = asrR(a);
+      if (!a.asrPrep && a.phase === 'final' && a.r <= R.prep + 0.15 && a.r >= R.prep - ASR_TOL) shipCall = `${sayMiles(R.prep)}, prepare to descend in one mile`;
+      else if (!a.asrMdaCalled && a.phase === 'final' && a.r <= R.mda + 0.15) shipCall = `${sayMiles(R.mda)}, descend to your minimum descent altitude, minimum descent altitude four seven zero`;
+      else if (isShip() && isPrac(a)) { if (!a.climbCalled && a.r <= GREEN_R + 0.08 && a.r >= 0.8) shipCall = climbCallOf(a); }
+      else if (isShip() && !isHelo(a) && !a.ballAsked && a.phase === 'descent' && a.r <= 1.08 && a.r >= 0.8 && asrStable(a)) shipCall = 'one mile, call the ball';
+      else if (!a.asrMinsCalled && a.phase === 'descent' && a.r <= ASR_MAP_R + 0.08 && a.r >= ASR_GATE_R) shipCall = `surveillance minimums, if ${ph('mother', 'runway')} not in sight, execute missed approach`;
+    } else if (isShip() && a.phase === 'descent') {
+      if (isPrac(a)) { if (!a.climbCalled && a.r <= GREEN_R + 0.08 && a.r >= 0.65) shipCall = climbCallOf(a); }
+      else if (isHelo(a) && !a.greenCalled && a.r <= GREEN_R + 0.08 && a.r >= 0.65) shipCall = 'one mile, go green';
+      else if (!isHelo(a) && !a.ballAsked && a.r <= BALL_R + 0.17 && a.r >= 0.5) shipCall = 'three-quarter mile, call the ball';
+    }
+    // range
+    if (a.lastRangeR == null || a.lastRangeR - a.r >= 0.85) {
+      const rr = Math.round(a.r * 2) / 2;
+      if (rr >= 1 && !shipCall) { if (isShip()) add(sayMiles(rr)); else add(`${rr} miles from touchdown`, `${sayMiles(rr)} from touchdown`); }
+    }
+    if (shipCall) add(shipCall);
+    if (!a.gear && a.r < 5 && a.phase === 'descent') add(ph('check wheels down', 'check gear down'));
+    if (a.gear && !a.cleared && a.r < 4 && !isShip()) { const w = G.wind; const wd = String(w.dir).padStart(3, '0'); if (isShip()) add(`deck is clear, cleared to land spot ${spotOf(a)}, winds ${wd} at ${w.spd}`, `deck is clear, cleared to land spot ${ONES[spotOf(a)]}, winds ${sayDigits(wd)} at ${sayTwo(w.spd)}`); else add(`runway ${RWY_NUM}, cleared to land, wind ${wd} at ${w.spd}`, `runway ${RWY_SAY}, cleared to land, wind ${sayDigits(wd)} at ${sayTwo(w.spd)}`); }
+    if (!isShip() && !a.asr && !a.dhCalled && a.r <= DH_R + 0.15 && a.phase === 'descent' && !(shipCall && shipCall.includes('ball') && a.r > DH_R + 0.05)) add(ph('at minimums', 'at decision height'));
+  }
+  const multi = G.ac.filter(x => PAR_PHASES.includes(x.phase)).length > 1 || !a.contacted;
+  return { text: (multi ? a.tel + ', ' : '') + parts.join(', '), say: (multi ? a.telSay + ', ' : '') + say.join(', ') };
+}
+
+/* ===================== settings & sound ===================== */
+const SETTINGS_KEY = 'fcpar_settings_v1';
+const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship' };
+try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) {}
+const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) {} };
+
+const Sound = {
+  ctx: null,
+  ensure() { try { if (!this.ctx) { const C = window.AudioContext || window.webkitAudioContext; if (C) this.ctx = new C(); } if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); } catch (e) {} },
+  beep(f, d, type = 'square', v = 0.04, when = 0) {
+    if (!S.sfx || !this.ctx) return;
+    try { const t = this.ctx.currentTime + when, o = this.ctx.createOscillator(), g = this.ctx.createGain(); o.type = type; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d); o.connect(g); g.connect(this.ctx.destination); o.start(t); o.stop(t + d + 0.03); } catch (e) {}
+  },
+  key() { this.beep(1400, 0.05, 'square', 0.025); },
+  unkey() { this.beep(900, 0.06, 'square', 0.02); },
+  chirp() { this.beep(700, 0.07, 'sine', 0.05); this.beep(1050, 0.08, 'sine', 0.05, 0.08); },
+  alarm() { this.beep(880, 0.16, 'square', 0.05); this.beep(660, 0.16, 'square', 0.05, 0.18); this.beep(880, 0.16, 'square', 0.05, 0.36); },
+  buzz() { this.beep(170, 0.22, 'sawtooth', 0.045); },
+  good() { [523, 659, 784, 1046].forEach((f, i) => this.beep(f, 0.12, 'triangle', 0.06, i * 0.09)); },
+  crash() { for (let i = 0; i < 6; i++) this.beep(300 - i * 35, 0.25, 'sawtooth', 0.06, i * 0.12); },
+};
+
+/* ===================== pilot voices (speechSynthesis) ===================== */
+const TTS = 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined';
+let voices = [];
+function loadVoices() {
+  if (!TTS) return;
+  try { voices = speechSynthesis.getVoices().filter(v => /^en(-|_|$)/i.test(v.lang)); } catch (e) { voices = []; }
+  const sel = document.getElementById('sVoice'); if (!sel) return;
+  const cur = S.voice; sel.innerHTML = '<option value="auto">Auto: a different voice per aircraft</option>' + voices.map(v => `<option value="${esc(v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join('');
+  sel.value = voices.some(v => v.name === cur) || cur === 'auto' ? cur : 'auto';
+}
+if (TTS) { loadVoices(); try { speechSynthesis.onvoiceschanged = loadVoices; } catch (e) {} }
+
+let ttsQueued = 0;   // kept for compatibility (pttStart resets it)
+// Pilot speech queue: one utterance at a time, in order. A routine callsign ack that is still waiting when a newer
+// reply arrives is dropped (so acks never trail behind and seem to answer the wrong call). A watchdog moves on if
+// Chrome never fires onend (known Windows bug); resume() works around Chrome's stuck "paused" synthesis state.
+const ttsQ = []; let ttsCur = null, ttsWatch = null;
+const sayLog = [];   // test hook: every pilot reply in order {t, text, routine}
+// Keying the mic silences the pilot. Routine replies are discarded, but priority calls ("see you") are kept
+// (an interrupted one is put back at the front) and spoken as soon as the mic is released.
+function ttsClear() {
+  const cur = ttsCur, keep = ttsQ.filter(x => x.prio);
+  ttsQ.length = 0; if (cur && cur.prio) ttsQ.push(cur); ttsQ.push(...keep);
+  ttsCur = null; clearTimeout(ttsWatch); try { speechSynthesis.cancel(); } catch (e) {}
+}
+let ttsHoldUntil = 0, ttsHoldT = null;   // pause pilot speech ~300 ms after recognition ends (iOS audio session switch)
+function ttsNext() {
+  clearTimeout(ttsWatch); ttsCur = null;
+  if (pttDown || !ttsQ.length) return;
+  const hw = ttsHoldUntil - performance.now();
+  if (hw > 0) { clearTimeout(ttsHoldT); ttsHoldT = setTimeout(() => { if (!ttsCur) ttsNext(); }, hw + 5); return; }
+  const it = ttsQ.shift(); ttsCur = it;
+  try { speechSynthesis.resume(); speechSynthesis.speak(it.u); } catch (e) { ttsCur = null; return; }
+  // watchdog: if Chrome finished speaking but never fired onend, move on; hard cap in case it hangs
+  const t0 = performance.now(), cap = 1500 + it.u.text.length * 110;
+  const poll = () => { if (ttsCur !== it) return;
+    const el = performance.now() - t0;
+    if ((el > 600 && !speechSynthesis.speaking) || el > cap) { try { if (el > cap) speechSynthesis.cancel(); } catch (e) {} ttsNext(); return; }
+    ttsWatch = setTimeout(poll, 300); };
+  ttsWatch = setTimeout(poll, 300);
+}
+function pilotSay(a, text, say, force, routine, prio) {
+  log('plt', text);
+  sayLog.push({ t: G ? G.t : 0, cs: a && a.cs, text, routine: !!routine, prio: !!prio });
+  if (!S.voiceOut || !TTS || (pttDown && !prio)) return;   // priority calls are queued even while the mic is keyed
+  try {
+    const u = new SpeechSynthesisUtterance(say || text);
+    const item = { u, routine: !!routine, prio: !!prio };
+    u.onend = () => { if (ttsCur === item) ttsNext(); };
+    u.onerror = ev => { const c = ev && ev.error; if (c && c !== 'interrupted' && c !== 'canceled') vStatus('Speech output error: ' + c, true); if (ttsCur === item) ttsNext(); };
+    if (routine) for (let i = ttsQ.length - 1; i >= 0; i--) if (ttsQ[i].routine) ttsQ.splice(i, 1);   // a newer ack replaces a stale waiting ack
+    let v = null;
+    if (S.voice !== 'auto') v = voices.find(x => x.name === S.voice) || null;
+    else if (voices.length) v = voices[a.uid % voices.length];
+    if (v) u.voice = v;
+    u.pitch = 0.75 + ((a.voiceSeed % 50) / 100);       // 0.75 .. 1.24
+    u.rate = S.rate * (0.95 + ((a.voiceSeed % 17) / 100));
+    u.volume = S.vol; u.lang = 'en-US';
+    if (prio) { let i = 0; while (i < ttsQ.length && ttsQ[i].prio) i++; ttsQ.splice(i, 0, item); }   // ahead of non-priority replies
+    else ttsQ.push(item);
+    if (!ttsCur) ttsNext();
+  } catch (e) { vStatus('Speech output error: ' + (e && e.message || e), true); }
+}
+
+/* ===================== DOM refs / log ===================== */
+const $ = id => document.getElementById(id);
+const canvas = $('scope'), ctx = canvas.getContext('2d');
+const inset = $('inset'), ictx = inset.getContext('2d');
+const logEl = $('log'), stripsEl = $('strips');
+const startOv = $('startOv'), helpOv = $('helpOv'), setOv = $('setOv'), endOv = $('endOv');
+let uiPaused = false;
+function log(cls, text) {
+  if (!G) return;
+  const d = document.createElement('div'); d.className = cls;
+  d.innerHTML = `<span class="t">${mmss(G.t)}</span> ${esc(text)}`;
+  logEl.appendChild(d);
+  while (logEl.children.length > 200) logEl.removeChild(logEl.firstChild);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* ===================== voice input (Web Speech API) ===================== */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+let rec = null, pttDown = false, utterId = 0, curUtter = null, micState = 'idle';
+function setMic(state, text) {
+  micState = state;
+  const col = { idle: '#2ee6e6', listening: '#ff4a4a', processing: '#ffbf3c', error: '#ff4a4a', off: '#557', unsupported: '#776' }[state] || '#557';
+  $('micDot').style.background = col; $('micDot').style.color = col;
+  $('micText').textContent = text;
+  $('ptt').classList.toggle('disabled', state === 'unsupported' || state === 'off');
+}
+function showBanner(html, err) {
+  for (const id of ['voiceBanner', 'startBanner']) { const b = $(id); b.innerHTML = html; b.style.display = html ? 'block' : 'none'; b.classList.toggle('err', !!err); }
+}
+const FILE_FIX = location.protocol === 'file:' ? ` Some browsers block the mic on <b>file://</b> pages. Fix: open a terminal in this folder and run <code>python -m http.server</code>, then open <code>http://localhost:8000/final-controller-par.html</code>.` : '';
+function initVoiceStatus() {
+  if (!S.voiceIn) { setMic('off', 'Voice input is off (⚙ Voice). Type commands below.'); showBanner(''); return; }
+  if (!SR) {
+    setMic('unsupported', 'Speech recognition is not available in this browser.'); vStatus('Speech recognition not supported in this browser.', true);
+    showBanner('🎙 Voice works best in <b>Chrome or Edge on a computer</b>; you can still type. (Firefox and some Safari/iOS versions don\'t support the Web Speech API.)');
+    return;
+  }
+  setMic('idle', 'Mic ready: hold SPACE or the button and talk.' + (location.protocol === 'file:' ? ' (file:// page: if the mic is blocked, see Help)' : ''));
+  showBanner('');
+}
+function recError(code) {
+  const map = {
+    'not-allowed': `🚫 Microphone permission was denied. Click the 🔒/camera icon in the address bar and set Microphone to <b>Allow</b>, then reload.${FILE_FIX}`,
+    'service-not-allowed': `🚫 The browser blocked the speech service for this page.${FILE_FIX}`,
+    'network': '🌐 Speech recognition needs an <b>internet connection</b> (Chrome sends audio to its speech service). Check your connection, or type commands below.',
+    'audio-capture': '🎙 No microphone was found. Plug one in or check your system sound settings.',
+    'language-not-supported': 'This browser does not support US English speech recognition.',
+  };
+  vStatus('Speech recognition error: ' + code, code !== 'no-speech' && code !== 'aborted');
+  if (code === 'no-speech') { setMic('idle', 'Heard nothing; hold the button a little longer and speak clearly.'); return; }
+  if (code === 'aborted') return;
+  setMic('error', 'Mic error: ' + code);
+  showBanner(map[code] || ('Speech recognition error: ' + esc(code) + '. You can still type commands.'), true);
+}
+function pttStart() {
+  if (pttDown) return;
+  Sound.ensure();
+  if (!S.voiceIn || !SR) { $('cmdInput').focus(); return; }
+  pttDown = true;
+  if (TTS) try { ttsClear(); ttsQueued = 0; speechSynthesis.cancel(); } catch (e) {}
+  Sound.key();
+  $('ptt').classList.add('live');
+  const id = ++utterId; curUtter = { id, final: '', interim: '', done: false };
+  renderTranscript('', '');
+  try {
+    rec = new SR();
+    rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
+    rec.onresult = e => {
+      if (!curUtter || curUtter.id !== id) return;
+      let fin = '', inter = '';
+      for (let i = 0; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) fin += r[0].transcript + ' '; else inter += r[0].transcript + ' '; }
+      curUtter.final = fin; curUtter.interim = inter;
+      renderTranscript(fin, inter);
+    };
+    rec.onerror = ev => recError(ev.error);
+    rec.onend = () => { ttsHoldUntil = performance.now() + 300; if (curUtter && curUtter.id === id && !pttDown) finishUtterance(id); };
+    rec.start();
+    setMic('listening', 'Listening… release to transmit.');
+  } catch (err) { pttDown = false; $('ptt').classList.remove('live'); recError(String(err && err.message || err)); }
+}
+function pttEnd() {
+  if (!pttDown) return;
+  pttDown = false; $('ptt').classList.remove('live'); Sound.unkey();
+  if (!ttsCur) setTimeout(() => { if (!pttDown && !ttsCur) ttsNext(); }, 250);   // speak any held priority call right after release
+  const id = utterId;
+  setMic('processing', 'Processing…');
+  try { rec && rec.stop(); } catch (e) {}
+  setTimeout(() => finishUtterance(id), 1600);
+}
+function finishUtterance(id) {
+  if (!curUtter || curUtter.id !== id || curUtter.done) return;
+  curUtter.done = true;
+  const text = (curUtter.final + ' ' + curUtter.interim).trim();
+  if (micState !== 'error') setMic('idle', 'Mic ready: hold SPACE or the button and talk.');
+  if (!text) { $('parsed').textContent = 'Heard nothing.'; return; }
+  handleTranscript(text, 'voice');
+}
+function renderTranscript(fin, inter) {
+  $('transcript').innerHTML = (fin || inter) ? `${esc(fin)}<span class="interim">${esc(inter)}</span>` : '<span style="color:var(--dim)">…listening…</span>';
+}
+function handleTranscript(text, src) {
+  const sc = G && !G.over ? shipCall(text) : null;
+  if (sc) {
+    if (src === 'voice') renderTranscript(text, '');
+    $('parsed').textContent = 'Understood → 99 ' + (sc.kind === 'steady' ? 'mother steady, BRC ' + (sc.brc != null ? hdg3(sc.brc) : '?') : 'mother in ' + (sc.dir === 'L' ? 'port' : sc.dir === 'R' ? 'starboard' : '?') + ' turn');
+    $('parsed').classList.remove('bad');
+    shipCallExec(sc);
+    return { cs: null, cmds: ['99 ' + sc.kind], str: '99 ' + sc.kind, norm: text };
+  }
+  const known = G ? G.ac.filter(alive).map(a => a.cs) : [];
+  const p = parseSpeech(text, known);
+  if (src === 'voice') renderTranscript(text, '');
+  const pe = $('parsed');
+  pe.textContent = 'Understood → ' + parsedStr(p);
+  pe.classList.toggle('bad', !p.cmds.length || p.csUnknown);
+  if (G && !G.over) execute(p, src);
+  return { cs: p.cs, cmds: p.cmds.map(cmdStr), str: parsedStr(p), norm: p.norm };
+}
+window.__injectTranscript = text => handleTranscript(String(text), 'voice');
+
+const pttBtn = $('ptt');
+pttBtn.addEventListener('pointerdown', e => { e.preventDefault(); try { pttBtn.setPointerCapture(e.pointerId); } catch (_) {} pttStart(); });
+pttBtn.addEventListener('pointerup', e => { e.preventDefault(); pttEnd(); });
+pttBtn.addEventListener('pointercancel', () => pttEnd());
+pttBtn.addEventListener('contextmenu', e => e.preventDefault());
+/* ---- iOS / touch support ---- */
+function vStatus(msg, err) { const el = $('vStatus'); if (!el) return; el.textContent = msg || ''; el.style.display = msg ? 'block' : 'none'; el.classList.toggle('err', !!err); clearTimeout(vStatus.t); if (msg && !err) vStatus.t = setTimeout(() => { el.style.display = 'none'; }, 4000); }
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_TOUCH = IS_IOS || (window.matchMedia && matchMedia('(pointer: coarse)').matches);
+if (IS_TOUCH) document.body.classList.add('touchdev');
+if (IS_IOS) { const h = $('iosHint'); h.style.display = 'block'; if (navigator.standalone === true) h.classList.add('loud'); }
+let ttsUnlocked = false;
+function unlockTTS() {   // must run synchronously inside a user gesture (iOS)
+  if (ttsUnlocked || !TTS) return; ttsUnlocked = true;
+  try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (e) { vStatus('Speech output error: ' + (e && e.message || e), true); }
+}
+['pointerdown', 'touchend', 'click', 'keydown'].forEach(t => document.addEventListener(t, unlockTTS, { capture: true, passive: true }));
+const pttBig = $('pttBig');
+const bigEnd = () => { pttBig.classList.remove('live'); pttEnd(); };
+pttBig.addEventListener('pointerdown', e => { e.preventDefault(); unlockTTS(); try { pttBig.setPointerCapture(e.pointerId); } catch (_) {} if (G && !G.over && startOv.classList.contains('hidden')) { pttBig.classList.add('live'); pttStart(); } else vStatus('Start a session first.'); });
+pttBig.addEventListener('pointerup', e => { e.preventDefault(); bigEnd(); });
+pttBig.addEventListener('pointercancel', bigEnd);
+pttBig.addEventListener('pointerleave', bigEnd);
+pttBig.addEventListener('contextmenu', e => e.preventDefault());
+$('cmdForm').addEventListener('submit', e => { e.preventDefault(); const v = $('cmdInput').value.trim(); if (!v) return; Sound.ensure(); handleTranscript(v, 'typed'); $('cmdInput').value = ''; });
+$('cmdInput').addEventListener('keydown', e => { if (e.key === 'Escape') $('cmdInput').blur(); });
+
+/* ===================== panel ===================== */
+function setScale(s) { if (!G) return; G.scale = s; $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 2); }
+function setPaused(p) { if (!G) return; G.paused = p; $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p); }
+function selectAc(a) { if (!G) return; G.selected = a; refreshPanel(true); }
+let lastPanel = 0;
+function readoutText(a) {
+  if (!a) return 'No aircraft selected. Tap a target or a strip.';
+  const itTxt = isShip() ? (isPrac(a) ? `  PRAC ${a.pracNo}/${a.pracNo + a.pracLeft - 1}` : '  FULL STOP') : '';
+  if (a.phase === 'queue') return `${a.cs} ${a.type} "${a.tel}"${itTxt}\nWith feeder: ${a.holding ? 'HOLDING' : a.released ? 'INBOUND TO PAR FINAL' : 'EN ROUTE'}  ALT ${fmtAlt(a.alt)}`;
+  const dev = elevDev(a), az = azDeg(a), ft = Math.round(a.z - gpAlt(a.r));
+  const cg = gpCat(a), cc = courseCat(a);
+  const tol = a.descT > 5 ? Math.round(100 * a.tolT / a.descT) + '%' : '--';
+  return `${a.cs} ${a.type} "${a.tel}"${itTxt}  [${a.phase.toUpperCase()}${a.silent ? ', SILENT' : ''}${a.ng ? `, NO GYRO ${a.ngHalf ? '1.5' : '3'}°/S${a.ngTurn ? ' TURNING ' + (a.ngTurn === 'L' ? 'L' : 'R') : ''}` : ''}${a.asr ? `, ASR · MDA ${a.mda}` : ''}]
+RANGE ${a.r.toFixed(2)} NM   GS ${Math.round(a.gs)} KT   HDG ${hdg3(a.hdg)}${Math.abs(angDiff(a.tgtHdg, a.hdg)) > 0.5 ? '→' + hdg3(a.tgtHdg) : ''}
+ELEV ${ft >= 0 ? '+' : ''}${ft} FT (${dev >= 0 ? '+' : ''}${dev.toFixed(2)}°) ${a.phase === 'final' && ft < 0 ? 'BELOW GP, LEVEL' : gpWords(cg, a).toUpperCase()}
+AZ   ${Math.abs(Math.round(a.yft))} FT ${a.yft >= 0 ? 'R' : 'L'} (${Math.abs(az).toFixed(2)}°) ${courseWords(cc, a.yft).toUpperCase()}
+ALT ${fmtAlt(a.z)}  VS ${a.vs > 0 ? '-' : '+'}${Math.abs(Math.round(a.vs))} FPM (3° ≈ ${Math.round(vsNominal(a))})
+GEAR ${a.gear ? '✓' : '–'}  CLRD ${a.cleared ? '✓' : '–'}  TOL ${tol}  CALLS ${a.accCalls}✓/${a.badCalls}✗  PTS ${a.pts >= 0 ? '+' : ''}${a.pts}`;
+}
+function refreshPanel(force) {
+  if (!G) return;
+  const now = performance.now();
+  if (!force && now - lastPanel < 200) return;
+  lastPanel = now;
+  $('stScore').textContent = G.score + G.ac.filter(a => !a.result).reduce((s, a) => s + 0, 0);
+  $('stLanded').textContent = G.landed + (G.practice ? ` +${G.practice}P` : '');
+  $('stMissed').textContent = G.missed;
+  const tot = G.callsGood + G.callsBad;
+  $('stAcc').textContent = tot ? Math.round(100 * G.callsGood / tot) + '%' : '--';
+  const a = G.selected;
+  $('readout').textContent = readoutText(a);
+  const hint = $('hint');
+  if (G.d.hints) {
+    const tgt = a && PAR_PHASES.includes(a.phase) ? a : defaultTarget();
+    const sc = tgt && suggestCall(tgt);
+    if (sc && sc.text) { hint.style.display = 'block'; hint.innerHTML = `💡 Suggested call:<br><b>"${esc(sc.text)}"</b>`; }
+    else { hint.style.display = 'block'; hint.textContent = G.gateAt > G.t ? `💡 Next aircraft in ${Math.ceil(G.gateAt - G.t)} s (one at a time; it shows on the scope at 7 to 9 NM).` : '💡 Waiting for the next aircraft.'; }
+  } else hint.style.display = 'none';
+  const list = G.ac.slice().sort((p, q) => p.seq - q.seq);
+  const status = x => x.phase === 'queue' ? (x.released ? 'INBOUND' : x.holding ? 'HOLD' : 'FEEDER') : x.phase.toUpperCase();
+  const info = x => x.phase === 'queue' ? `${fmtAlt(x.alt)} ft` : `${x.r.toFixed(1)}NM ${fmtAlt(x.z)}`;
+  const html = list.map(x => `<div class="strip${x === G.selected ? ' sel' : ''}${x.conflict ? ' conf' : ''}${!alive(x) || OUT_PHASES.includes(x.phase) ? ' done' : ''}" data-uid="${x.uid}"><span>#${x.seq}</span><span>${x.cs} ${x.type}${isShip() ? (isPrac(x) ? ' PRAC' : ' FS') : ''}</span><span>${info(x)}</span><span>${status(x)}</span></div>`).join('')
+    + (G.spawned < G.toSpawn ? `<div style="color:var(--dim);font-size:11px">${G.toSpawn - G.spawned} more arrival(s) to come…</div>` : '');
+  if (stripsEl.innerHTML !== html) stripsEl.innerHTML = html;
+}
+stripsEl.addEventListener('click', e => { const s = e.target.closest('.strip'); if (!s || !G) return; const a = G.ac.find(x => x.uid === +s.dataset.uid); if (a) selectAc(a); });
+
+$('bPause').onclick = () => { setPaused(!G.paused); $('bPause').blur(); };
+$('bS1').onclick = () => { setScale(1); $('bS1').blur(); };
+$('bS2').onclick = () => { setScale(2); $('bS2').blur(); };
+$('bHelp').onclick = () => openTutorial(0);
+$('bSet').onclick = $('bSet2').onclick = () => openSettings();
+$('bEnd').onclick = () => { if (G && !G.over && confirm('End this session now?')) endGame(); };
+
+document.addEventListener('keydown', e => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+  if (!helpOv.classList.contains('hidden')) { if (e.key === 'Escape') closeTutorial(); else if (e.key === 'ArrowRight') tutGo(1); else if (e.key === 'ArrowLeft') tutGo(-1); return; }
+  if (!setOv.classList.contains('hidden')) { if (e.key === 'Escape') closeSettings(); return; }
+  if (e.code === 'Space' || e.key === ' ') { e.preventDefault(); if (!e.repeat && G && !G.over && startOv.classList.contains('hidden')) pttStart(); return; }
+  if (!G || G.over || !startOv.classList.contains('hidden')) return;
+  let used = true;
+  switch (e.key) {
+    case 'p': case 'P': setPaused(!G.paused); break;
+    case '1': setScale(1); break; case '2': setScale(2); break;
+    case 'Tab': { const l = G.ac.filter(alive); if (l.length) { const i = l.indexOf(G.selected); selectAc(l[(i + 1) % l.length]); } break; }
+    case 'Enter': case '/': $('cmdInput').focus(); break;
+    case '?': case 'F1': openTutorial(0); break;
+    case 'Escape': selectAc(null); break;
+    default: used = false;
+  }
+  if (used) e.preventDefault();
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space' || e.key === ' ') { const tag = (e.target.tagName || '').toLowerCase(); if (tag !== 'input') { e.preventDefault(); pttEnd(); } }
+});
+window.addEventListener('blur', () => pttEnd());
+
+/* ===================== settings overlay ===================== */
+function openSettings() {
+  uiPaused = true; setOv.classList.remove('hidden'); loadVoices();
+  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
+  $('setInfo').innerHTML = `Speech recognition: ${SR ? 'available' : '<b>not available</b> in this browser'} · Speech output: ${TTS ? voices.length + ' English voice(s)' : 'not available'} · Page: ${esc(location.protocol)}`;
+}
+function closeSettings() { setOv.classList.add('hidden'); uiPaused = !helpOv.classList.contains('hidden'); initVoiceStatus(); }
+['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice'].forEach(id => $(id).addEventListener('change', () => {
+  S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.voice = $('sVoice').value; saveSettings();
+}));
+function setPhr(v) { S.phr = v === 'tower' ? 'tower' : 'ship'; saveSettings(); $('sPhr').value = $('sPhr2').value = S.phr; applyPhrUI(); if (G) refreshPanel(true); }
+function applyPhrUI() {
+  const sh = isShip();
+  $('subTitle').textContent = sh ? `Precision Approach Radar talk-down simulator · ${SHIP_NAME} (LHA/LHD) · BRC ${BRC3}` : `Precision Approach Radar talk-down simulator · Runway ${RWY_NUM}`;
+  if (!applyPhrUI.towerIntro) applyPhrUI.towerIntro = $('introP').innerHTML;
+  $('introP').innerHTML = sh ? `You're the <b>final controller</b> aboard <b>${SHIP_NAME}</b>, an amphibious assault ship. Each aircraft is handed to you <b>7 to 9 miles</b> astern on the <b>base recovery course (BRC) ${BRC3}</b>. Using your <b>voice</b>, talk it down to the deck: course and glidepath calls with "come left/right heading" corrections, range calls every mile, the wheels check and the landing clearance to its <b>spot</b>, all the way to <b>short final</b>, then hand it to <b>Tower</b>. Some pilots ask for <b>multiple practice PARs</b>: at one mile send them back around ("execute climb outs, go blue" / "enter starboard delta, go green") until their last approach is a <b>full stop</b>. Pilots answer each call with their callsign until you say "do not acknowledge further transmissions"; after that they stay quiet, so keep talking!` : applyPhrUI.towerIntro;
+  $('cmdInput').placeholder = sh ? 'Type instead (Enter): lightning 21 come left heading 268' : 'Type instead (Enter): lightning 21 turn left heading 268';
+  if (!helpOv.classList.contains('hidden')) renderTut();
+}
+$('sPhr').addEventListener('change', () => setPhr($('sPhr').value));
+$('sPhr2').addEventListener('change', () => setPhr($('sPhr2').value));
+$('sClose').onclick = closeSettings;
+$('sTest').onclick = () => { Sound.ensure(); const fake = { uid: 1 + Math.floor(Math.random() * 9), voiceSeed: Math.floor(Math.random() * 9999), tel: 'Lightning 21' }; if (!G) { newGame('training'); G.over = true; startOv.classList.remove('hidden'); } pilotSay(fake, 'Left heading 240, Lightning 21.', 'Left heading two four zero, Lightning two one.', true); if (!TTS) $('setInfo').textContent = 'Speech output is not available in this browser.'; };
+$('sMic').onclick = () => {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $('setInfo').innerHTML = 'This page cannot access the microphone API.' + FILE_FIX; return; }
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(st => { st.getTracks().forEach(t => t.stop()); $('setInfo').textContent = '✅ Microphone permission OK.' + (SR ? ' Hold SPACE to talk in the game.' : ' (But speech recognition is not available in this browser.)'); })
+    .catch(err => { $('setInfo').innerHTML = '🚫 Microphone blocked: ' + esc(err.name || err) + '. Allow it via the address-bar icon.' + FILE_FIX; });
+};
+
+/* ===================== start / end ===================== */
+let chosenDiff = 'training';
+document.querySelectorAll('.diff').forEach(el => { el.onclick = () => { chosenDiff = el.dataset.d; document.querySelectorAll('.diff').forEach(x => x.classList.toggle('on', x === el)); }; });
+function startGame(diff, opts) {
+  Sound.ensure(); startOv.classList.add('hidden'); endOv.classList.add('hidden'); helpOv.classList.add('hidden');
+  { const ck = document.getElementById('linkChk'); if (ck && ck.checked !== LINK.on) linkSet(ck.checked); }   // link choice from the start screen applies at run start
+  uiPaused = false; newGame(diff, opts || {}); initVoiceStatus();
+  let seen = false; try { seen = localStorage.getItem('fcpar_tut_seen') === '1'; } catch (e) {}
+  if (!opts && diff === 'training' && !seen) openTutorial(0);
+}
+$('bStart').onclick = () => startGame(chosenDiff);
+$('bTut').onclick = () => openTutorial(0);
+$('bAgain').onclick = () => startGame(lastDiff);
+$('bMenu').onclick = () => { endOv.classList.add('hidden'); startOv.classList.remove('hidden'); };
+function endGame() {
+  if (!G || G.over) return;
+  for (const a of G.ac) if (!a.result && a.phase !== 'queue' && a.phase !== 'landed') finalize(a, false, 'session ended');
+  G.over = true;
+  const tot = G.callsGood + G.callsBad;
+  const landedRes = G.results.filter(r => r.landed || r.practice);
+  const avg = landedRes.length ? Math.round(landedRes.reduce((s, r) => s + r.score, 0) / landedRes.length) : 0;
+  $('endTitle').textContent = G.failMsg ? '✖ APPROACH FAILED' : 'Session complete';
+  $('endTitle').style.color = G.failMsg ? 'var(--red)' : '';
+  $('endGrade').innerHTML = G.failMsg ? `<span style="color:var(--red)">${esc(G.failMsg)}</span><br><span style="font-size:14px;color:#cfcce6">Watch the lower safety limit line and call "${ph('wave off', 'go around')}" early.</span>` : (landedRes.length ? `Average landed approach: ${gradeOf(avg)} (${avg} pts)` : 'No landings this time. Keep practicing!');
+  const rows = [['Level', G.d.name], ['Total score', G.score], ['Landed', G.landed], ...(G.practice ? [['Practice approaches', G.practice]] : []), ['Missed approaches / failures', G.missed], ['Crashes', G.crashes], ...(G.ship && G.ship.n ? [['Ship turn 99 calls', `${G.ship.pts} pts (turn ${G.ship.turnOk}/${G.ship.n}, steady ${G.ship.steadyOk}/${G.ship.n})`]] : []), ['Separation losses', G.sepLoss], ['Call accuracy', tot ? `${Math.round(100 * G.callsGood / tot)}% (${G.callsGood}/${tot})` : '--']];
+  $('endTable').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+  $('endList').innerHTML = '<table class="st">' + G.results.map(r => `<tr><td>${esc(r.cs)} · ${r.landed ? ph('on deck', 'landed') : r.practice ? 'practice approach' : esc(r.reason)}<br><span style="color:var(--dim);font-size:11px">tolerance ${r.tol}% · ${r.good} good / ${r.bad} bad calls · ${r.gaps} gaps · ${r.missedRange} missed range calls</span></td><td>${r.grade} · ${r.score}</td></tr>`).join('') + '</table>';
+  endOv.classList.remove('hidden');
+}
+
+/* ===================== tutorial ===================== */
+const TUT = [
+  ['1. What is PAR?', `<p><b>Precision Approach Radar (PAR)</b> is a very accurate radar that sits beside the runway. The final controller watches the aircraft on it and <b>talks the pilot down</b> with a steady stream of instructions, all the way to <b>decision height (DH)</b>, 200 ft above the ground about 0.6 NM from touchdown. The pilot needs no ILS; they just follow your voice.</p>
+   <p>Aircraft are fed to you <b>7 to 9 miles out</b>, a little off course and below the glidepath (level at about 1,300 to 1,550 ft, so they meet it 4 to 5 miles out). You work <b>one aircraft at a time</b>: the next one checks in 10 to 15 seconds after the previous one has left you (on deck, climbing out, or waved off); the status line shows the countdown. Your job is to get them onto the centerline and the 3° glidepath and keep them there.</p>`],
+  ['2. Reading the two displays', `<p><b>Top: ELEVATION.</b> Range from touchdown runs left to right (0 to 10 NM, a line every mile). Height runs up. The dotted sloping line is the <b>3° glidepath</b>. The target tick sits <i>above</i> the line when the plane is high and <i>below</i> it when it's low. Glidepath calls follow what you see on the tick: dotted line through the <b>middle</b> of the tick = <b>on glidepath</b>; between the middle and the end = <b>slightly above/below glidepath</b>; touching the <b>end</b> of the tick = <b>above/below glidepath</b>; tick not touching the line = <b>well above/below glidepath</b>.</p>
+   <p><b>Bottom: AZIMUTH.</b> Same range axis. The horizontal line is the <b>runway centerline / course cursor</b>. A target above the line is <b>right of course</b>; below the line is <b>left of course</b> (as the pilot sees it). <b>Course calls go by what you see</b>: course line through the <b>middle</b> of the tick = "on course"; between the middle and the end = "slightly left/right of course"; touching the <b>end</b> of the tick = "left/right of course"; tick not touching the line = "well left/right of course".</p>
+   <p>The readout gives exact numbers: range, height above/below the glidepath in feet, left/right of course in feet and degrees, groundspeed and heading.</p>`],
+  ['3. The talk-down, step by step', `<ol><li><b>Contact</b>: "Lightning two one, this is your final controller, how do you hear me?"</li>
+   <li><b>Line up</b> with small heading changes (2–5°): "turn left heading ${sayDigits(hdg3(BRC - 2))}", then say where it is: "slightly right of course".</li>
+   <li>As the glidepath comes down to the aircraft: "<b>approaching glidepath</b>", then, as a separate call when it reaches the glidepath, "<b>begin descent</b>", then on its own "<b>do not acknowledge further transmissions</b>". Pilots answer every call with their callsign until then; after one last callsign ack they stay quiet.</li>
+   <li>Every few seconds give course and glidepath calls: "on course", "slightly above glidepath"… and a <b>range call every mile</b>: "four miles from touchdown".</li>
+   <li>Around 4–5 miles: "<b>check gear down</b>". Before DH: "<b>runway ${RWY_SAY}, cleared to land, wind …</b>".</li>
+   <li>At 0.6 NM: "<b>at decision height</b>", then "<b>over landing threshold</b>", then "<b>contact tower</b>".</li></ol>
+   <p>If you need to send it around: "<b>go around, climb and maintain two thousand, fly heading ${BRC_SAY}</b>".</p>`],
+  ['4. Sample script', `<div class="say">"Lightning two one, this is your final controller, how do you hear me?"<br>"Turn left heading ${sayDigits(hdg3(BRC - 2))}, slightly right of course, eight miles from touchdown."<br>"Heading ${sayDigits(hdg3(BRC - 2))}, on course."<br>"Approaching glidepath."<br>"Begin descent."<br>"Do not acknowledge further transmissions."<br>"Seven miles from touchdown."<br>"On course, slightly above glidepath."<br>"Turn right heading ${BRC_SAY}, on course, on glidepath, five miles from touchdown, check gear down."<br>"Runway ${RWY_SAY}, cleared to land, wind ${sayDigits(hdg3(BRC + 10))} at four. Four miles from touchdown."<br>"On course, on glidepath, two miles from touchdown."<br>"At decision height." … "Over landing threshold." … "Contact tower."</div>
+   <p>Pilots react to glidepath calls: "slightly above" makes them descend a bit faster, "slightly below" a bit slower, and "on glidepath" brings them back to normal. Heading calls are the only way to move them sideways.</p>
+   <p><b>ASR (surveillance) approach</b>: no glidepath; the pilot holds altitude until told to descend to the <b>MDA (470 ft)</b> at the final approach fix and reaches it by the missed approach point (¾ mile). Announce it <b>no later than 4 miles (rotary, incl. MV-22B) / 5 miles (fixed wing)</b>; pilot: "(callsign), surveillance approach". Each scripted call is graded within ±0.3 mile.</p>
+   <div class="say"><b>Rotary wing</b><br>(≥4 mi) "Nighthawk two five, this will be a surveillance approach."<br>(4 mi) "Nighthawk two five, four miles. Prepare to descend in one mile."<br>(3 mi) "Nighthawk two five, three miles. Descend to your minimum descent altitude. Minimum descent altitude four seven zero." <i>("Nighthawk two five, descending to four seven zero")</i><br>(2 mi) "Nighthawk two five, two miles, on course."<br>(1 mi) "Nighthawk two five, one mile, on course."<br>(¾ mi) "Nighthawk two five, surveillance minimums, on course, if runway not in sight, execute missed approach." <i>(stable: "Runway in sight" and lands; otherwise executes the missed approach)</i></div>
+   <div class="say"><b>Fixed wing</b><br>(≥5 mi) "Lightning two one, this will be a surveillance approach."<br>(6 mi) "Lightning two one, six miles. Prepare to descend in one mile."<br>(5 mi) "Lightning two one, five miles, descend to your minimum descent altitude. Minimum descent altitude four seven zero."<br>(4 mi) "Lightning two one, four miles, on course."<br>(3 mi) "Lightning two one, three miles, on course."<br>(2 mi) "Lightning two one, two miles, on course."<br>(¾ mi) "Lightning two one, surveillance minimums, if runway not in sight, execute missed approach."</div>`],
+  ['5. Scoring', `<ul><li>Time inside the <b>course and glidepath tolerance</b> (up to 30 pts) plus <b>40 for a landing</b>.</li>
+   <li><b>Accurate trend calls</b> score; <b>wrong</b> ones (saying "left" when it's right) lose points.</li>
+   <li><b>Range call at least every mile.</b> Gear check and landing clearance <b>before DH</b>. Calls at DH and over the threshold.</li>
+   <li><b>Stable at DH</b> (both within "slightly") +10. Unstable or uncleared at DH means the pilot goes around.</li>
+   <li><b>Go-arounds cost no points</b> (yours or the pilot's): the approach simply ends, keeping what it earned so far but without the +40 for landing.</li>
+   <li><b>Penalties</b>: a gap of more than 15 s without a call on final, too steep or too shallow, inaccurate calls. Too low (below the red <b>lower limit</b> line) it crashes and the session fails, so call the go-around early if it gets that low.</li></ul>`],
+  ['6. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>HOLD TO TALK</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
+   <ul><li><b>Best in Chrome or Edge on a computer.</b> Firefox has no speech recognition; Safari and iOS vary. You can always <b>type</b> the same words in the box.</li>
+   <li>Chrome's speech recognition <b>needs an internet connection</b>, because the audio goes to Google's speech service.</li>
+   <li>If the mic is blocked on a <b>file://</b> page, serve the folder locally: open a terminal in the folder with this file and run<br><code>python -m http.server</code><br>then open <code>http://localhost:8000/final-controller-par.html</code></li>
+   <li>Allow the microphone when the browser asks. You can test it under ⚙ Voice → Test microphone.</li></ul>`],
+  ['7. Phrases the game understands', `<p>Callsigns are tactical callsigns plus a number, spoken digit by digit: "Lightning two one", "Nighthawk one zero two", "Viper four five", "Ridge three one two". If you leave the callsign out, the call goes to the selected PAR aircraft. Number words can be digit-by-digit ("${sayDigits(hdg3(BRC - 2))}", "niner", "tree", "fife") or grouped ("three thousand", "one hundred eighty knots"). Filler like "uh" is ignored.</p>
+   <ul><li>turn left/right heading ___ · heading ___</li><li>on course · slightly left/right of course · left/right of course · well left/right of course · going left/right of course</li>
+   <li>approaching glidepath · begin descent · on glidepath · above/below glidepath · slightly/well above/below glidepath · going above/below glidepath</li>
+   <li>adjust / reduce / increase rate of descent</li><li>___ miles from touchdown · do not acknowledge further transmissions</li>
+   <li>check gear down · cleared to land (wind ___ at ___) · at decision height · over landing threshold</li>
+   <li>go around, climb and maintain ___, fly heading ___ · reduce speed to ___ knots · contact tower · say callsign · how do you hear me</li>
+   <li><b>No gyro:</b> (callsign), this will be a no gyro PAR approach · turn left · turn right · stop turn · make half standard rate turns · (make standard rate turns). Turns are 3°/s, 1.5°/s after "half standard rate"; heading calls are not flown.</li>
+   <li><b>ASR (surveillance) approach</b>, no glidepath, MDA 470 ft (rotary and fixed wing): "(callsign), this will be a surveillance approach" (also "ASR approach", "A S R"; "no gyro surveillance approach" sets both) · "prepare to descend in one mile" · "descend to your minimum descent altitude, minimum descent altitude four seven zero" (or "descend to MDA", "M-D-A four seven zero") · "surveillance minimums, (course), if runway not in sight, execute missed approach". Glidepath calls ("above/below glidepath", "approaching glidepath", "begin descent") are wrong on an ASR.</li></ul>`],
+  ['8. Keys', `<p><span class="kbd">Space</span> hold to talk · <span class="kbd">P</span> pause · <span class="kbd">1</span>/<span class="kbd">2</span> = 1x/2x speed · <span class="kbd">Tab</span> select next aircraft · <span class="kbd">Enter</span> type a command · <span class="kbd">?</span> this help · <span class="kbd">Esc</span> close.</p>
+   <p>Tip: start on <b>Training</b>. The amber hint box shows a good next call; just read it out loud.</p>`],
+];
+const TUT_SHIP = {
+  0: ['1. What is shipboard PAR?', `<p><b>Precision Approach Radar (PAR)</b> on an amphibious assault ship (LHA/LHD) lets the ship's <b>final controller</b> (in CATCC/AATCC, callsign "${SHIP_NAME} Final") watch an aircraft on final and <b>talk the pilot down</b> to the deck in bad weather, all the way to <b>short final</b>, about half a mile aft of the ship, where the pilot lands visually.</p>
+   <p>Aircraft are fed to you <b>7 to 9 miles</b> astern on the <b>base recovery course (BRC) ${BRC3}</b>, a little off course and below the glidepath (level at about 1,300 to 1,550 ft, so they meet it 4 to 5 miles out). You work <b>one aircraft at a time</b>: the next one checks in 10 to 15 seconds after the previous one has left you (on deck, climbing out, or waved off); the status line shows the countdown. Get them onto the final bearing and the 3° glidepath, then hand them to <b>Tower</b> (Primary Flight Control / the Air Boss) for the landing spot.</p>`],
+  1: ['2. Reading the two displays', `<p><b>Top: ELEVATION.</b> Range from the landing <b>spot</b> on deck runs left to right (0 to 10 NM, a line every mile). Height runs up. The dotted sloping line is the <b>3° glidepath</b>. The white tick is the aircraft: <i>above</i> the line when it's high, <i>below</i> when it's low. Glidepath calls follow what you see on the tick: dotted line through the <b>middle</b> of the tick = <b>on glidepath</b>; between the middle and the end = <b>slightly above/below glidepath</b>; touching the <b>end</b> of the tick = <b>above/below glidepath</b>; tick not touching the line = <b>well above/below glidepath</b>.</p>
+   <p><b>Bottom: AZIMUTH.</b> Same range axis. The horizontal line is the <b>final bearing</b>, the ship's <b>base recovery course (BRC) ${BRC3}</b>. Aircraft are handed to you on a 20° intercept: from the <b>right</b> (above the line) heading <b>${hdg3(BRC - 20)}</b>, from the <b>left</b> (below) heading <b>${hdg3(BRC + 20)}</b>. Turn them onto the BRC before they cross it. <b>Course calls go by what you see</b>: course line through the <b>middle</b> of the tick = "on course"; between the middle and the end = "slightly left/right of course"; touching the <b>end</b> of the tick = "left/right of course"; tick not touching the line = "well left/right of course".</p>
+   <p>The side panel has the exact numbers (range, feet above/below glidepath, feet and degrees left/right, groundspeed, heading) and the status line (level, timer). The surveillance view shows the ship.</p>
+   <p><b>Ship turns</b> (solo: every 4 to 8 minutes, never in the first 2; linked: when Approach turns the ship): the side panel shows <b>SHIP TURN IN 5 · PORT/STARBOARD</b>, then <b>MOTHER IN PORT/STARBOARD TURN</b> while the ship turns at about 1°/s (BRC, FB = BRC − magvar and DWH update live), then <b>MOTHER STEADY — NEW BRC ___</b>. The final course line moves with the ship, so aircraft already on final drift off it: correct them. Broadcast "<b>ninety-nine, mother is in port turn, standby for new BRC</b>" during the turn and "<b>ninety-nine, mother is steady, new BRC is one seven three</b>" once steady (no readback).</p>`],
+  2: ['3. The talk-down, step by step', `<ol><li><b>Contact</b> (+1 bonus when complete): "Lightning two one, ${SHIP_NAME} final, how do you hear me, wheels should be down, report see me." Pilot: "Lightning two one, loud and clear, wheels down, will report see you."</li>
+   <li><b>Line up</b>: say where it is, then a turn: "well right of course, <b>come right heading ${sayDigits(hdg3(BRC - 10))}</b>", then onto the BRC: "come right heading ${BRC_SAY}".</li>
+   <li>As the glidepath comes down to the aircraft, <b>10 to 30 seconds before it meets it</b>: "<b>approaching glidepath</b>" (+1 bonus), then, as a separate call when it reaches the glidepath, "<b>begin descent</b>" (the pilot only starts down on this call), then on its own "<b>do not acknowledge further transmissions</b>". Until you say that, the pilot answers every call with just the callsign ("Lightning two one"); it acks that call once more and then stays quiet (except "see you", the deck calls and emergencies).</li>
+   <li>Every few seconds: "on course, on glidepath", "slightly above glidepath"… and a <b>range every mile</b>: "four miles", "one and a half miles". At <b>2 miles</b> the pilot reports "<b>Lightning two one, see you</b>" (no reply needed; "roger" is fine).</li>
+   <li><b>Sinker:</b> on some approaches the aircraft starts sinking below the glidepath and glidepath calls won't stop it. Only "<b>Low altitude alert, Lightning two one, check your altitude immediately, altimeter two niner niner two</b>" does (pilot: "Lightning two one, climbing.", even after "do not acknowledge"); it then climbs back to the glidepath.</li>
+   <li>If you didn't say "wheels should be down" on contact: "<b>check wheels down</b>". No separate landing clearance is needed: the deck call exchange below clears the aircraft to land ("deck is clear, cleared to land spot seven" is still accepted).</li>
+   <li><b>Deck call</b> (required before half a mile): helicopters and Ospreys (MV-22B, CH-53E, AH-1Z, UH-1Y, MH-60S) get "<b>one mile, go green</b>" (pilot: "<b>Going green</b>"). Jets (F-35B, AV-8B) get "<b>three-quarter mile, call the ball</b>" (pilot: "<b>Ball, state four point nine</b>", the fuel state). That reply is the landing clearance: the aircraft may land. "Roger ball" is optional. Pilots make these replies even after "do not acknowledge".</li>
+   <li><b>Practice approaches</b>: at check-in each pilot states an intention: "…for the PAR to the ship, <b>full stop</b>" (FS) or "…<b>request multiple practice PARs</b>" (PRAC; shown in the side panel). A practice aircraft gets no deck call. At <b>one mile</b> instead: jets "<b>one mile, execute climb outs, go blue</b>" (pilot: "Lightning two one, going blue"; climbs to 1,200 ft, left turn to ${hdg3(CLIMB_JET.hdg)}); helicopters "<b>one mile, enter starboard delta, go green</b>" (pilot: "Nighthawk two five, entering starboard delta"; climbs to 1,000 ft, right turn to ${hdg3(CLIMB_HELO.hdg)}). It then comes back around for another approach; after 1–3 practice approaches it checks in with "<b>this will be a full stop</b>" and lands.</li>
+   <li>Full stop, inside half a mile: "<b>over the deck</b>", then "<b>contact Tower</b>" (or "Tower has you").</li></ol>
+   <p>If you need to wave it off: "<b>wave off, wave off, climb and maintain two thousand, fly base recovery course ${BRC_SAY}</b>". No deck call (or spot clearance) by half a mile means a <b>fouled deck</b> and the pilot waves off.</p>`],
+  3: ['4. Sample script', `<div class="say">"Lightning two one, ${SHIP_NAME} final, how do you hear me, wheels should be down, report see me." <i>(pilot: "Lightning two one, loud and clear, wheels down, will report see you")</i><br>"Well right of course, come right heading ${sayDigits(hdg3(BRC - 10))}, nine and a half miles." <i>("Lightning two one")</i><br>"Slightly right of course, come right heading ${BRC_SAY}." <i>("Lightning two one")</i><br>"Approaching glidepath." <i>("Lightning two one")</i><br>"Begin descent." <i>("Lightning two one")</i><br>"Do not acknowledge further transmissions." <i>("Lightning two one", then silent)</i><br>"On course, on glidepath, seven miles."<br>"On course, slightly above glidepath."<br>"On course, on glidepath, five miles."<br>"On course, on glidepath, four miles."<br><i>(pilot, at 2 miles: "Lightning two one, see you")</i><br>"On course, on glidepath, one and a half miles."<br>"Three-quarter mile, call the ball." <i>(pilot: "Ball, state four point nine": cleared to land)</i><br>"Over the deck." … "Contact Tower."</div>
+   <p>For a helicopter, the deck call at one mile is "<b>One mile, go green.</b>" <i>(pilot: "Going green": cleared to land)</i>.</p>
+   <p><b>Practice approach</b> (pilot checked in with "request multiple practice PARs"): the same talk-down, but at one mile: jet "<b>One mile, execute climb outs, go blue.</b>" <i>("Lightning two one, going blue": climbs to 1,200, left to ${hdg3(CLIMB_JET.hdg)})</i>; helicopter "<b>One mile, enter starboard delta, go green.</b>" <i>("Nighthawk two five, entering starboard delta": climbs to 1,000, right to ${hdg3(CLIMB_HELO.hdg)})</i>. It comes back for another PAR; the last one starts "…this will be a full stop".</p>
+   <p>Pilots react to glidepath calls: "slightly above" makes them descend a bit faster, "slightly below" a bit slower, and "on glidepath" brings them back to normal. Heading calls are the only way to move them sideways.</p>
+   <p><b>ASR (surveillance) approach</b>: no glidepath; the pilot holds altitude until told to descend to the <b>MDA (470 ft)</b> at the final approach fix and reaches it by the missed approach point (¾ mile). Announce it <b>no later than 4 miles (rotary, incl. MV-22B) / 5 miles (fixed wing)</b>; pilot: "(callsign), surveillance approach". Each scripted call is graded within ±0.3 mile.</p>
+   <div class="say"><b>Rotary wing</b><br>(≥4 mi) "Nighthawk two five, this will be a surveillance approach."<br>(4 mi) "Nighthawk two five, four miles. Prepare to descend in one mile."<br>(3 mi) "Nighthawk two five, three miles. Descend to your minimum descent altitude. Minimum descent altitude four seven zero." <i>("Nighthawk two five, descending to four seven zero")</i><br>(2 mi) "Nighthawk two five, two miles, on course."<br>(1 mi) "Nighthawk two five, one mile, on course."<br>(¾ mi) "Nighthawk two five, surveillance minimums, on course, if mother not in sight, execute missed approach." <i>(stable: "Mother in sight" and lands; otherwise executes the missed approach)</i></div>
+   <div class="say"><b>Fixed wing</b><br>(≥5 mi) "Lightning two one, this will be a surveillance approach."<br>(6 mi) "Lightning two one, six miles. Prepare to descend in one mile."<br>(5 mi) "Lightning two one, five miles, descend to your minimum descent altitude. Minimum descent altitude four seven zero."<br>(4 mi) "Lightning two one, four miles, on course."<br>(3 mi) "Lightning two one, three miles, on course."<br>(2 mi) "Lightning two one, two miles, on course."<br>(1 mi, at MDA and on course) "Lightning two one, one mile, call the ball." <i>("Lightning two one, Lightning ball")</i>; if not stable or no ball: (¾ mi) "Lightning two one, surveillance minimums, if mother not in sight, execute missed approach."</div>`],
+  4: ['5. Scoring', `<ul><li>Time inside the <b>course and glidepath tolerance</b> (up to 30 pts) plus <b>40 for getting it on deck</b>.</li>
+   <li><b>Accurate trend calls</b> score; <b>wrong</b> ones (saying "left" when it's right) lose points.</li>
+   <li><b>Range call at least every mile.</b> Wheels check and the deck call (go green / call the ball, which is the landing clearance, +5) <b>before half a mile</b>. There is no decision height or "at minimums" call on the ship.</li>
+   <li><b>Low altitude alert +5</b> when the aircraft is really sinking; -3 if it isn't. An incomplete alert (missing the callsign, "check your altitude immediately" or "altimeter two niner niner two") is not accepted and the aircraft keeps sinking.</li>
+   <li><b>Bonus +1</b> for the complete contact call ("…${SHIP_NAME} final, how do you hear me, wheels should be down, report see me", with the callsign) and +1 for "approaching glidepath" 10–30 s before the aircraft reaches the glidepath. Both show in the log with ★.</li>
+   <li><b>Deck call</b>: "one mile, go green" (helos) or "three-quarter mile, call the ball" (jets) gives +3 at the right range. Using the wrong one counts as an inaccurate call; missing it by half a mile costs 5.</li>
+   <li><b>Practice approaches</b>: the right one-mile call for the type ("execute climb outs, go blue" for jets, "enter starboard delta, go green" for helicopters) between 0.6 and 1.4 NM gives +3, and +10 if the aircraft is stable at that point. A completed practice approach counts as a successful approach (+40). A landing call ("call the ball", "go green") to a practice aircraft, or a climb-out/delta call to a full-stop aircraft, is an inaccurate call (-3); the pilot answers "negative, practice approach" / "unable, full stop". No climb-out call by minimums: the pilot climbs out on its own (-5).</li>
+   <li><b>Stable at half a mile</b> (both within "slightly") +10. Unstable or not cleared (no deck call: fouled deck) at half a mile means the pilot waves off.</li>
+   <li><b>Wave-offs cost no points</b> (called by you or by the pilot: fouled deck, unstable, too high, safety limit, lost comms): the approach simply ends, keeping what it earned so far but without the +40 for getting on deck.</li>
+   <li><b>Penalties</b>: a gap of more than 15 s without a call on final, too steep or too shallow, inaccurate calls. Far too low (below the lower limit) it crashes and the session fails, so call the wave-off early if it gets that low.</li>
+   <li><b>Ship turns</b>: +10 for "ninety-nine, mother is in port/starboard turn, standby for new BRC" during the turn (or up to 10 s after) with the right direction, and +10 for "ninety-nine, mother is steady, new BRC is ___" with the right BRC. Wrong direction/BRC scores nothing; no penalties. 99 calls with no turn are not scored.</li></ul>`],
+  6: ['7. Phrases the game understands', `<p>Callsigns are tactical callsigns plus a number, spoken digit by digit: "Lightning two one", "Nighthawk one zero two", "Viper four five", "Ridge three one two" (Lightning, Nighthawk, Viper, Venom, Knight, Ridge, Gunfighter, Charger). If you leave the callsign out, the call goes to the selected PAR aircraft. Both ship and tower phrasing are always understood.</p>
+   <ul><li>come/turn left/right heading ___ · fly base recovery course ___ · heading ___</li><li>on course · slightly left/right of course · left/right of course · well left/right of course · going left/right of course</li>
+   <li>approaching glidepath · begin descent · on glidepath · above/below glidepath · slightly/well above/below glidepath · going above/below glidepath</li>
+   <li>adjust / reduce / increase rate of descent</li><li>___ miles · one and a half miles · three-quarter mile · do not acknowledge further transmission(s) (pilots ack every call with their callsign until then)</li>
+   <li>[callsign], ${SHIP_NAME} final, how do you hear me, wheels should be down, report see me</li>
+   <li>check wheels down · roger · deck is clear, cleared to land spot ___ (winds ___ at ___) · over the deck</li>
+   <li><b>one mile, go green</b> (helos) · <b>three-quarter mile, call the ball</b> (jets): the pilot's "Going green" / "Ball, state …" reply clears it to land · roger ball (optional)</li>
+   <li>practice approaches: <b>one mile, execute climb outs, go blue</b> (jets; "climb out" / "climbout" / "climb outs" all work) · <b>one mile, enter starboard delta, go green</b> (helos)</li>
+   <li>low altitude alert, (callsign), check your altitude immediately, altimeter two niner niner two</li>
+   <li><b>Ship turns (broadcast, no readback):</b> ninety-nine, mother is in port/starboard turn, standby for new BRC · ninety-nine, mother is steady, new BRC is ___ (digit by digit, e.g. "one seven three"; "99", "niner niner", "nine nine" all work)</li>
+   <li>wave off, wave off, climb and maintain ___, fly base recovery course ___ · reduce speed to ___ knots · contact Tower / Tower has you · say callsign · how do you hear me</li>
+   <li><b>No gyro:</b> (callsign), this will be a no gyro PAR approach · come/turn left · come/turn right · stop turn · make half standard rate turns · (make standard rate turns). Turns are 3°/s, 1.5°/s after "half standard rate"; heading calls are not flown.</li>
+   <li><b>ASR (surveillance) approach</b>, no glidepath, MDA 470 ft (rotary and fixed wing): "(callsign), this will be a surveillance approach" (also "ASR approach", "A S R"; "no gyro surveillance approach" sets both) · "prepare to descend in one mile" · "descend to your minimum descent altitude, minimum descent altitude four seven zero" (or "descend to MDA", "M-D-A four seven zero") · "surveillance minimums, (course), if mother not in sight, execute missed approach" · jets: "one mile, call the ball". Glidepath calls ("above/below glidepath", "approaching glidepath", "begin descent") are wrong on an ASR.</li></ul>`],
+};
+const tutPage = i => (isShip() && TUT_SHIP[i]) || TUT[i];
+let tutIdx = 0;
+function openTutorial(i) { tutIdx = i; uiPaused = true; helpOv.classList.remove('hidden'); renderTut(); }
+function closeTutorial() { helpOv.classList.add('hidden'); uiPaused = !setOv.classList.contains('hidden'); try { localStorage.setItem('fcpar_tut_seen', '1'); } catch (e) {} }
+function tutGo(d) { tutIdx = clamp(tutIdx + d, 0, TUT.length - 1); renderTut(); }
+function renderTut() { $('tutTitle').textContent = tutPage(tutIdx)[0]; $('tutBody').innerHTML = tutPage(tutIdx)[1]; $('tutPage').textContent = `${tutIdx + 1} / ${TUT.length}`; $('tutPrev').disabled = tutIdx === 0; $('tutNext').disabled = tutIdx === TUT.length - 1; }
+$('tutPrev').onclick = () => tutGo(-1); $('tutNext').onclick = () => tutGo(1); $('tutClose').onclick = closeTutorial;
+
+/* ===================== PAR rendering ===================== */
+let W = 0, H = 0, DPR = 1;
+const RMIN = -0.4, RMAX = 10.3, ZMAX = 3600, YMAX = 2200;
+// Harris-style PAR palette: monochrome white/grey on dark indigo, cyan accents
+// Amphib (AN/SPN-35 style) phosphor palette: near-black green screen, yellow-green P7-type traces, bright target
+const C = {
+  g: 'rgba(120,255,140,0.9)', // primary trace (phosphor green, as Approach Controller)
+  gd: 'rgba(120,255,140,',    // phosphor green with alpha suffix
+  amber: '#ffbf3c', red: '#ff5a6e', cyan: '#78ff8c',
+  bg: '#0b0d0b', panel: '#031006', tgt: 'rgba(220,255,225,1)',
+  lim: 'rgba(196,190,228,', low: 'rgba(255,110,140,',
+};
+const RANGE_MARKS = [0, 0.25, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const FONT = s => `${s}px Consolas, Menlo, "DejaVu Sans Mono", monospace`;
+let L = {};
+function resize() {
+  const r = canvas.getBoundingClientRect(); DPR = Math.min(window.devicePixelRatio || 1, 3);
+  W = Math.max(100, r.width); H = Math.max(100, r.height);
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  const left = 18, right = 18, top = 18, bottom = 30, gap = 24;
+  const avail = H - top - bottom - gap;
+  const eh = avail * 0.5, ah = avail - eh;
+  L = { left, right, plotW: W - left - right, eTop: top, eBot: top + eh, eh, aTop: top + eh + gap, aBot: top + eh + gap + ah, ah };
+  L.aMid = (L.aTop + L.aBot) / 2;
+  const ir = inset.getBoundingClientRect(); inset.width = Math.round(ir.width * DPR); inset.height = Math.round(ir.height * DPR);
+}
+window.addEventListener('resize', resize);
+const xr = r => L.left + (r - RMIN) / (RMAX - RMIN) * L.plotW;
+const ez = z => L.eBot - z / ZMAX * L.eh;
+const ay = y => L.aMid - y / YMAX * (L.ah / 2);
+const azLineFt = (deg, r) => Math.tan(deg * DEG) * (r + 0.5) * NM_FT;
+const angAlt = (deg, r) => Math.tan(deg * DEG) * Math.max(0, r) * NM_FT;
+
+function glow(on, col, blur = 6) { ctx.shadowColor = on ? col : 'transparent'; ctx.shadowBlur = on ? blur : 0; }
+function line(x1, y1, x2, y2) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+function pathFn(fn, r0, r1, n = 40) { ctx.beginPath(); for (let i = 0; i <= n; i++) { const r = r0 + (r1 - r0) * i / n; const [x, y] = fn(r); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); }
+const px5 = v => Math.round(v) + 0.5;
+
+function draw(now) {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  glow(false);
+  // console + bezel (Approach Controller style: #0b0d0b console, #1b201b > #2a302a > #0e110e bezel)
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  { const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) / 2);
+    g.addColorStop(0, '#1b201b'); g.addColorStop(0.5, '#2a302a'); g.addColorStop(1, '#0e110e');
+    ctx.fillStyle = g; ctx.fillRect(3, 3, W - 6, H - 6); }
+  // scope faces: radial #031006 centre > #000300 edge, thin dim green outline
+  for (const [t, b] of [[L.eTop, L.eBot], [L.aTop, L.aBot]]) {
+    const cx = L.left + L.plotW / 2, cy = (t + b) / 2;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(L.plotW, b - t) / 2);
+    g.addColorStop(0, '#031006'); g.addColorStop(1, '#000300');
+    ctx.fillStyle = g; ctx.fillRect(L.left, t, L.plotW, b - t);
+    ctx.strokeStyle = C.gd + '0.5)'; ctx.lineWidth = 1; ctx.strokeRect(px5(L.left), px5(t), Math.round(L.plotW) - 1, Math.round(b - t) - 1);
+  }
+  glow(true, 'rgba(120,255,140,0.35)', 2);   // slight phosphor bloom on traces
+  ctx.font = FONT(11); ctx.lineWidth = 1;
+  // range lines: one per whole mile, full panel height, with plain mile numbers
+  for (let n = 0; n <= 10; n++) {
+    const x = px5(xr(n));
+    ctx.strokeStyle = C.gd + '0.18)';
+    line(x, L.eTop, x, L.eBot); line(x, L.aTop, x, L.aBot);
+    ctx.fillStyle = C.gd + '0.8)'; ctx.textAlign = 'center';
+    ctx.fillText(String(n), x, L.eBot + 12); ctx.fillText(String(n), x, L.aBot + 12);
+  }
+  ctx.textAlign = 'left';
+  // ---------- ELEVATION: glide slope only ----------
+  ctx.save(); ctx.beginPath(); ctx.rect(L.left, L.eTop, L.plotW, L.eh); ctx.clip();
+  ctx.setLineDash([2, 3]); ctx.strokeStyle = C.gd + '0.6)'; ctx.lineWidth = 1.2;
+  line(xr(0), ez(0), xr(RMAX), ez(gpAlt(RMAX)));
+  ctx.setLineDash([]); ctx.lineWidth = 1;
+  ctx.restore();
+  // ---------- AZIMUTH: course line only ----------
+  ctx.save(); ctx.beginPath(); ctx.rect(L.left, L.aTop, L.plotW, L.ah); ctx.clip();
+  ctx.strokeStyle = C.gd + '0.6)'; ctx.lineWidth = 1; line(xr(RMIN), px5(ay(0)), xr(RMAX), px5(ay(0)));
+  ctx.restore();
+  // targets
+  if (G) {
+    const blink = Math.floor(now / 260) % 2 === 0;
+    const par = G.ac.filter(a => a.phase !== 'queue' && a.phase !== 'gone' && a.r <= RMAX + 0.2 && a.r >= RMIN - 0.2 && !(a.phase === 'climbout' && (Math.abs(a.yft) > YMAX || a.z > ZMAX)));
+    par.sort((p, q) => (p === G.selected) - (q === G.selected));
+    glow(true, 'rgba(120,255,140,0.8)', 6);   // bright target bloom
+    for (const a of par) drawTarget(a, blink);
+    glow(false);
+    drawHud(now, blink);
+  }
+  glow(false);
+  drawInset();
+}
+
+// target tick size (px), shared by drawing and the course-call categorizer
+function tickSize() { const k = clamp((L.eh || 362) / 362, 0.6, 1.6); return { TW: Math.max(2, Math.round(3 * k)), TH: Math.round(21 * k) }; }
+// Course position exactly as seen on the AZIMUTH panel: d = screen pixels between the course line and the tick centre,
+// h = half the tick length. on: line through the middle; slightly: between middle and end; plain: line at the end of
+// the tick; well: tick clear of the line. EDGE px either side of a boundary accepts both neighbouring calls.
+const CC_ON = 0.2, CC_END = 0.85, CC_PAD = 1.5, CC_EDGE = 1.0;
+function courseGeom(a) {
+  const half = (L.ah || 290) / 2, d = Math.abs(clamp(a.yft, -YMAX, YMAX)) / YMAX * half, h = tickSize().TH / 2;
+  return { d, h, b1: Math.max(CC_PAD, CC_ON * h), b2: CC_END * h, b3: h + CC_PAD };
+}
+function courseCatAt(g, d) { return d <= g.b1 ? 'on' : d < g.b2 ? 'slightly' : d <= g.b3 ? 'plain' : 'well'; }
+function courseCat(a) { const g = courseGeom(a); return courseCatAt(g, g.d); }
+function courseAccepts(a, cat) { const g = courseGeom(a); return [g.d, g.d - CC_EDGE, g.d + CC_EDGE].some(d => courseCatAt(g, Math.max(0, d)) === cat); }
+// Glidepath position exactly as seen on the ELEVATION panel: d = vertical screen pixels between the glidepath line
+// (at the aircraft's range) and the tick centre; same zones and edge tolerance as the course calls.
+function gpGeom(a) {
+  const d = Math.abs(ez(a.z) - ez(gpAlt(a.r))), h = tickSize().TH / 2;
+  return { d, h, b1: Math.max(CC_PAD, CC_ON * h), b2: CC_END * h, b3: h + CC_PAD };
+}
+function gpCat(a) { const g = gpGeom(a); return courseCatAt(g, g.d); }
+function gpAccepts(a, cat) { const g = gpGeom(a); return [g.d, g.d - CC_EDGE, g.d + CC_EDGE].some(d => courseCatAt(g, Math.max(0, d)) === cat); }
+const gpSide = a => a.z >= gpAlt(a.r) ? 'above' : 'below';
+const gpWords = (cat, a) => cat === 'on' ? 'on glidepath' : `${cat === 'plain' ? '' : cat + ' '}${gpSide(a)} glidepath`;
+const courseWords = (cat, yft) => cat === 'on' ? 'on course' : `${cat === 'plain' ? '' : cat + ' '}${yft > 0 ? 'right' : 'left'} of course`;
+function drawTarget(a, blink) {
+  // plain white tick on each panel; no trail, no selection marker (selection is shown in the side panel)
+  const X = xr(a.r), YE = ez(a.z), YA = ay(clamp(a.yft, -YMAX, YMAX));
+  ctx.fillStyle = C.tgt;
+  const { TW, TH } = tickSize();               // ~3 x 21 px tick at 1280x800, scales with the panel height
+  const tx = Math.round(X - TW / 2);
+  ctx.fillRect(tx, Math.round(YE - TH / 2), TW, TH);
+  ctx.fillRect(tx, Math.round(YA - TH / 2), TW, TH);
+  a.hitE = { x: X, y: YE, hw: TW / 2, hh: TH / 2 }; a.hitA = { x: X, y: YA, hw: TW / 2, hh: TH / 2 };
+}
+
+// Scope carries no text: status + alerts are shown in the side panel instead.
+let hudCache = { st: null, al: null };
+function drawHud(now, blink) {
+  const w = G.wind;
+  const st = `${ph('PAR · ' + SHIP_NAME.toUpperCase() + ' · BRC ' + BRC3, 'PAR RWY ' + RWY_NUM)} · WIND ${String(w.dir).padStart(3, '0')}/${w.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
+  const waiting = !G.busy && !G.ac.some(a => PAR_PHASES.includes(a.phase)) && (G.rejoin.length || G.ac.some(a => a.phase === 'queue') || G.spawned < G.toSpawn);
+  const st2 = st + (G.linked ? (G.ac.some(a => alive(a) && a.removeAt == null) ? '' : ' · LINKED, AWAITING HANDOFF') : (waiting && G.gateAt > G.t ? ` · NEXT AIRCRAFT IN ${Math.ceil(G.gateAt - G.t)}s` : ''));
+  if (st2 !== hudCache.st) { hudCache.st = st2; $('scopeStatus').textContent = st2; }
+}
+
+function drawInset() {
+  const w = inset.width / DPR, h = inset.height / DPR;
+  if (!w || !h) return;
+  const c = ictx; c.setTransform(DPR, 0, 0, DPR, 0, 0);
+  c.fillStyle = C.bg; c.fillRect(0, 0, w, h);
+  // frame (x = outbound along the course, y = right of course for an inbound aircraft) -> north-up screen
+  const ob = (BRC + 180) * DEG, rt = (BRC + 90) * DEG;
+  const geo = (x, y) => [x * Math.sin(ob) + y * Math.sin(rt), x * Math.cos(ob) + y * Math.cos(rt)];
+  const pts = [[-2.5, 0], [13.5, 0], [HOLD_FIX.x + 1.6, HOLD_FIX.y + 1.6], [HOLD_FIX.x + 1.6, -HOLD_FIX.y - 1.6], [HOLD_FIX.x - 1.6, HOLD_FIX.y + 1.6], [HOLD_FIX.x - 1.6, -HOLD_FIX.y - 1.6]].map(p => geo(p[0], p[1]));
+  const e0 = Math.min(...pts.map(p => p[0])), e1 = Math.max(...pts.map(p => p[0])), n0 = Math.min(...pts.map(p => p[1])), n1 = Math.max(...pts.map(p => p[1]));
+  const sc = Math.min((w - 16) / (e1 - e0), (h - 16) / (n1 - n0)), ox = w / 2 - (e0 + e1) / 2 * sc, oy = h / 2 + (n0 + n1) / 2 * sc;
+  const P = (x, y) => { const g = geo(x, y); return [ox + g[0] * sc, oy - g[1] * sc]; };
+  const ang = Math.atan2(-Math.cos(ob), Math.sin(ob));   // canvas angle of the outbound course
+  const S0 = P(0, 0);
+  c.strokeStyle = 'rgba(120,255,140,0.14)'; c.lineWidth = 1;
+  for (let r = 5; r <= 25; r += 5) { c.beginPath(); c.arc(S0[0], S0[1], r * sc, 0, Math.PI * 2); c.stroke(); }
+  { const E = P(12, 0); c.strokeStyle = 'rgba(120,255,140,0.5)'; c.setLineDash([2, 3]); c.beginPath(); c.moveTo(S0[0], S0[1]); c.lineTo(E[0], E[1]); c.stroke(); c.setLineDash([]); }
+  c.strokeStyle = 'rgba(140,255,120,0.5)'; c.beginPath(); c.arc(S0[0], S0[1], 10 * sc, ang - 6 * DEG, ang + 6 * DEG); c.stroke();
+  c.save(); c.translate(S0[0], S0[1]); c.rotate(ang);   // local +x = outbound, local -y = right of course... drawn as in the original (BRC 270) picture
+  if (isShip()) {
+    // amphib silhouette: stern at the landing spot, bow pointing down the BRC, island on the starboard side
+    c.fillStyle = C.g; c.beginPath();
+    c.moveTo(3, -3); c.lineTo(-13, -3); c.lineTo(-19, 0); c.lineTo(-13, 3); c.lineTo(3, 3); c.closePath(); c.fill();
+    c.fillStyle = C.bg; c.fillRect(-9, -3, 4, 2);
+  } else { c.strokeStyle = C.g; c.lineWidth = 2; c.beginPath(); c.moveTo(0, 0); c.lineTo(-1.2 * sc, 0); c.stroke(); c.lineWidth = 1; }
+  c.restore();
+  c.font = FONT(9); c.fillStyle = 'rgba(120,255,140,0.5)';
+  { const T = P(9.2, 0); c.fillText('PAR 10NM', T[0] + 4, T[1] - 6); }
+  if (isShip()) { const T = P(-1.6, 0); c.fillText(SHIP_NAME.toUpperCase(), T[0] + 6, T[1] + 12); }
+  if (!(G && G.linked)) for (const s of [1, -1]) { const H = P(HOLD_FIX.x, s * HOLD_FIX.y); c.strokeStyle = 'rgba(120,255,140,0.3)'; c.beginPath(); c.arc(H[0], H[1], 1.3 * sc, 0, Math.PI * 2); c.stroke(); c.fillText('HOLD', H[0] - 10, H[1] - 1.6 * sc); }
+  if (!G) return;
+  c.font = FONT(10);
+  for (const a of G.ac) {
+    if (!alive(a) && a.phase !== 'landed') continue;
+    const p = planPos(a);
+    const sel = a === G.selected;
+    c.fillStyle = a.conflict ? C.red : sel ? C.cyan : a.phase === 'queue' ? C.amber : C.tgt;
+    const Q = P(p.x, p.y);
+    c.beginPath(); c.arc(Q[0], Q[1], sel ? 3 : 2.2, 0, Math.PI * 2); c.fill();
+    c.fillText(`${a.cs} ${String(Math.round(p.z / 100)).padStart(3, '0')}`, Q[0] + 5, Q[1] - 4);
+    a.hitI = { x: Q[0], y: Q[1] };
+  }
+}
+
+function pickAt(px, py) {
+  if (!G) return;
+  let best = null, bd = 14;
+  for (const a of G.ac) for (const h of [a.hitE, a.hitA]) { if (!h || a.phase === 'queue') continue; const dx = Math.max(0, Math.abs(h.x - px) - (h.hw || 0)), dy = Math.max(0, Math.abs(h.y - py) - (h.hh || 0)), d = Math.hypot(dx, dy); if (d < bd) { bd = d; best = a; } }   // distance to the tick rectangle (+14 px slop)
+  if (best) selectAc(best);
+}
+canvas.addEventListener('pointerdown', e => { Sound.ensure(); const r = canvas.getBoundingClientRect(); pickAt(e.clientX - r.left, e.clientY - r.top); });
+inset.addEventListener('pointerdown', e => {
+  if (!G) return; const r = inset.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  let best = null, bd = 22; for (const a of G.ac) if (a.hitI) { const d = Math.hypot(a.hitI.x - x, a.hitI.y - y); if (d < bd) { bd = d; best = a; } }
+  if (best) selectAc(best);
+});
+
+/* ===================== main loop ===================== */
+let last = performance.now();
+function frame(now) {
+  const rdt = Math.min(0.1, Math.max(0, (now - last) / 1000)); last = now;
+  if (G && !G.over && !G.paused && !uiPaused) { let sdt = rdt * G.scale; while (sdt > 1e-6 && !G.over) { const h = Math.min(0.1, sdt); step(h); sdt -= h; } }
+  const r = canvas.getBoundingClientRect();
+  if (Math.abs(r.width - W) > 0.5 || Math.abs(r.height - H) > 0.5) resize();
+  draw(now);
+  refreshPanel(false);
+  requestAnimationFrame(frame);
+}
+resize();
+$('sPhr').value = $('sPhr2').value = isShip() ? 'ship' : 'tower'; applyPhrUI();
+initVoiceStatus();
+requestAnimationFrame(frame);
+
+/* ===================== test hooks ===================== */
+{ const ck = document.getElementById('linkChk'); let on = false; try { on = localStorage.getItem('stingerLink') === '1'; } catch (e) {}
+  ck.checked = on; ck.addEventListener('change', () => { try { localStorage.setItem('stingerLink', ck.checked ? '1' : '0'); } catch (e) {} }); }
+window.PAR = {
+  start(diff = 'training', opts = {}) { startGame(diff, opts); return true; },
+  parse(text, known) { const p = parseSpeech(text, known || (G ? G.ac.filter(alive).map(a => a.cs) : [])); return parsedStr(p); },
+  spawnFinal(spec) { return spawnFinal(spec || {}).cs; },
+  spawnQueue(spec) { return spawnQueue(spec || {}).cs; },
+  advance(sec) { let t = 0; while (t < sec - 1e-9 && G && !G.over) { step(0.1); t += 0.1; } refreshPanel(true); return this.summary(); },
+  suggest(cs) { const a = cs ? G.ac.find(x => x.cs === cs) : defaultTarget(); const s = suggestCall(a); return s; },
+  select(cs) { const a = G.ac.find(x => x.cs === cs); selectAc(a || null); return !!a; },
+  pause(p) { setPaused(p); },
+  openHelp(i) { openTutorial(i || 0); }, closeHelp() { closeTutorial(); },
+  gpTest(ft, r) { r = r || 3; const a = { r, z: gpAlt(r) + ft }, g = gpGeom(a); return { cat: gpCat(a), side: gpSide(a), d: +g.d.toFixed(2), h: g.h, b1: g.b1, b2: +g.b2.toFixed(2), b3: g.b3, acc: ['on', 'slightly', 'plain', 'well'].filter(c => gpAccepts(a, c)) }; },
+  forceSink(v) { G.forceSink = v; },
+  courseTest(yft) { const g = courseGeom({ yft }); return { cat: courseCatAt(g, g.d), d: +g.d.toFixed(2), h: g.h, b1: g.b1, b2: +g.b2.toFixed(2), b3: g.b3, acc: ['on', 'slightly', 'plain', 'well'].filter(c => courseAccepts({ yft }, c)), ftPerPx: +(YMAX / ((L.ah || 290) / 2)).toFixed(2) }; },
+  ac(cs) { const a = G.ac.find(x => x.cs === cs); if (!a) return null; return { cs: a.cs, phase: a.phase, r: +a.r.toFixed(2), yft: Math.round(a.yft), z: Math.round(a.z), gpFt: Math.round(a.z - gpAlt(a.r)), dev: +elevDev(a).toFixed(2), az: +azDeg(a).toFixed(2), hdg: Math.round(a.hdg), vs: Math.round(a.vs), pts: a.pts, gear: a.gear, cleared: a.cleared, limit: a.limit, silent: a.silent, result: a.result }; },
+  says() { return sayLog.slice(); },
+  hit(cs) { const a = G && G.ac.find(x => x.cs === cs); return a ? { e: a.hitE, az: a.hitA } : null; },
+  selected() { return G && G.selected ? G.selected.cs : null; },
+  deselect() { selectAc(null); },
+  summary() { return G ? { t: Math.round(G.t), score: G.score, landed: G.landed, practice: G.practice, missed: G.missed, crashes: G.crashes, sepLoss: G.sepLoss, good: G.callsGood, bad: G.callsBad, over: G.over, fail: G.failMsg, results: G.results } : null; },
+  log() { return logEl.innerText; },
+  ship() { const S2 = G && G.ship; return { brc: shipBrcT(), fb: BRC, dwh: norm(shipBrcT() + 180) || 360, mv: SHIP_MV, phase: S2 ? S2.phase : null, dir: S2 ? S2.dir : null, amt: S2 ? S2.amt : 0, next: S2 ? S2.next : null, n: S2 ? S2.n : 0, pts: S2 ? S2.pts : 0, banner: (document.getElementById('shipBanner').dataset || {}).t || '', info: document.getElementById('shipInfo').textContent, wind: G ? G.wind.dir : null, climbJet: CLIMB_JET.hdg }; },
+  shipLink(m) { shipLinkBrc(Object.assign({ type: 'brc' }, m)); return this.ship(); },
+  link(on) { if (on != null) { document.getElementById('linkChk').checked = !!on; linkSet(on); } return { on: LINK.on, peer: LINK.peer, linked: !!(G && G.linked) }; },
+};
+})();
+</script>
+</body>
+</html>
