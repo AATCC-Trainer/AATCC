@@ -94,7 +94,7 @@ table.st td:last-child{text-align:right;color:var(--cyan)}
 </style>
 <link rel="manifest" href="final.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="final-192.png">
+<link rel="icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0b0d0b">
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
 <style>@media (pointer:coarse),(display-mode:standalone){#ptt{display:none!important}}</style>
@@ -826,6 +826,7 @@ const alive = a => !['landed', 'crashed', 'gone'].includes(a.phase);
 
 function newGame(diffKey, opts = {}) {
   rng = opts.seed != null ? mulberry32(opts.seed) : Math.random;
+  if (!LINK.on && opts.brc == null) { SHIP_MV = 0; SHIP_BRCT = null; setBRC((Math.floor(rng() * 72) + 1) * 5); } else if (opts.brc != null) setBRC(opts.brc);   // solo: random BRC each run
   const d = DIFFS[diffKey]; lastDiff = diffKey;
   const wind = { dir: norm(Math.round((BRC + rand(-30, 30)) / 10) * 10) || 360, spd: randi(2, 5), gust: 0 };   // light wind: 2-5 kt within BRC +/-30, no gusts
   if (wind.gust == null) wind.gust = 0;
