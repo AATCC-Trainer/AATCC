@@ -1838,6 +1838,7 @@ function pttStart() {
       for (let i = 0; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) fin += r[0].transcript + ' '; else inter += r[0].transcript + ' '; }
       curUtter.final = fin; curUtter.interim = inter;
       renderTranscript(fin, inter);
+      ngLive(curUtter, fin + ' ' + inter);   // no-gyro turn/stop: act on the interim words right away
     };
     rec.onerror = ev => recError(ev.error);
     rec.onend = () => { ttsHoldUntil = performance.now() + 300; if (curUtter && curUtter.id === id && !pttDown) finishUtterance(id); };
@@ -1854,11 +1855,38 @@ function pttEnd() {
   try { rec && rec.stop(); } catch (e) {}
   setTimeout(() => finishUtterance(id), 1600);
 }
+// Low-latency no-gyro turns: while a transmission is in progress, the latest "turn/come left|right" or "stop turn"
+// heard so far (interim results) sets a.ngTurn immediately. Readback, logging and grading still come once from the
+// final transcript, which re-applies the same commands in order (idempotent) and so wins if the interim was wrong.
+function ngLiveTarget(p) {
+  const onPar = G.ac.filter(x => PAR_PHASES.includes(x.phase));
+  if (p.cs) { let a = G.ac.find(x => x.cs === p.cs && alive(x)); if (!a && p.csUnknown && onPar.length === 1 && p.cs.slice(0, 4) === onPar[0].cs.slice(0, 4)) a = onPar[0]; return a || null; }
+  return onPar.length ? defaultTarget() : null;
+}
+function ngLive(u, text) {
+  if (!u || u.done || !G || G.over || !String(text).trim()) return;
+  let p; try { p = parseSpeech(String(text), G.ac.filter(alive).map(a => a.cs)); } catch (e) { return; }
+  const ng = p.cmds.filter(c => c.k === 'ngTurn' || c.k === 'ngStop');
+  if (!ng.length) { if (u.ngLive) { u.ngLive.a.ngTurn = u.ngLive.prev; u.ngLive = null; } return; }   // revised interim dropped the turn/stop words
+  const a = ngLiveTarget(p);
+  if (!a || !a.ng || a.phase === 'visual' || a.phase === 'landed') return;
+  if (!u.ngLive || u.ngLive.a !== a) { if (u.ngLive) u.ngLive.a.ngTurn = u.ngLive.prev; u.ngLive = { a, prev: a.ngTurn }; }
+  const last = ng[ng.length - 1];
+  a.ngTurn = last.k === 'ngTurn' ? last.dir : null;
+}
+function ngLiveSettle(u, text) {   // final transcript has no no-gyro turn/stop for that aircraft: undo the interim action
+  const L = u && u.ngLive; if (!L || !G) return;
+  let ok = false;
+  if (text) { try { const p = parseSpeech(text, G.ac.filter(alive).map(a => a.cs)); ok = p.cmds.some(c => c.k === 'ngTurn' || c.k === 'ngStop') && ngLiveTarget(p) === L.a; } catch (e) {} }
+  if (!ok) L.a.ngTurn = L.prev;
+  u.ngLive = null;
+}
 function finishUtterance(id) {
   if (!curUtter || curUtter.id !== id || curUtter.done) return;
   curUtter.done = true;
   const text = (curUtter.final + ' ' + curUtter.interim).trim();
   if (micState !== 'error') setMic('idle', 'Mic ready: hold SPACE or the button and talk.');
+  ngLiveSettle(curUtter, text);
   if (!text) { $('parsed').textContent = 'Heard nothing.'; return; }
   handleTranscript(text, 'voice');
 }
