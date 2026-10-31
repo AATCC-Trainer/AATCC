@@ -1150,15 +1150,16 @@ function updatePar(a, dt) {
   if (a.phase === 'final' || a.phase === 'descent') {
     for (let m = 7; m >= 1; m--) {
       if (prevR > m && a.r <= m) {
-        if (a.lastRangeR == null || a.lastRangeR - a.r > 1.15) {
+        // only once the controller has started talking to this aircraft (first transmission addressed to it), and only for miles crossed since then
+        if (a.contacted && (a.lastRangeR != null ? a.lastRangeR - a.r > 1.15 : (a.startR != null ? a.startR : a.r) - a.r > 1.15)) {
           a.missedRange++; addPts(a, -5, `No range call in the last mile for ${a.cs} (now ${m} NM).`, 'warn');
         }
       }
     }
     if (a.asr) {   // ASR: required scripted calls (prepare to descend / MDA) missed by more than 0.3 NM
       const R = asrR(a);
-      if (!a.asrPrep && !a.asrPrepMiss && prevR > R.prep - ASR_TOL && a.r <= R.prep - ASR_TOL) { a.asrPrepMiss = true; addPts(a, -5, `No "${sayMiles(R.prep)}, prepare to descend in one mile" call for ${a.cs}.`, 'warn'); }
-      if (!a.asrMdaCalled && !a.asrMdaMiss && prevR > R.mda - ASR_TOL && a.r <= R.mda - ASR_TOL) { a.asrMdaMiss = true; addPts(a, -5, `No "descend to your minimum descent altitude" call for ${a.cs} at ${sayMiles(R.mda)}; it stays level.`, 'warn'); }
+      if (a.contacted && !a.asrPrep && !a.asrPrepMiss && prevR > R.prep - ASR_TOL && a.r <= R.prep - ASR_TOL) { a.asrPrepMiss = true; addPts(a, -5, `No "${sayMiles(R.prep)}, prepare to descend in one mile" call for ${a.cs}.`, 'warn'); }
+      if (a.contacted && !a.asrMdaCalled && !a.asrMdaMiss && prevR > R.mda - ASR_TOL && a.r <= R.mda - ASR_TOL) { a.asrMdaMiss = true; addPts(a, -5, `No "descend to your minimum descent altitude" call for ${a.cs} at ${sayMiles(R.mda)}; it stays level.`, 'warn'); }
     }
     // ---- transmission gap
     const gapLim = a.phase === 'descent' ? G.d.gap : G.d.gap * 2;
@@ -1388,13 +1389,14 @@ function execute(p, src) {
   // very short noise with nothing recognized (and no callsign): ignore without a reply
   if (!p.cmds.length && !p.cs && p.norm.split(/\s+/).filter(w => w.length > 1 && w !== ',').length < 2) { log('sys', `Ignored noise: "${p.raw}"`); return; }
   if (!a.ng) { const ngK = ['ngTurn', 'ngStop', 'ngHalf', 'ngStd']; p.cmds = p.cmds.filter(c => !ngK.includes(c.k)); }   // gyro aircraft: as before
+  if (!a.contacted && a.startR == null) a.startR = a.r;   // start of the controller's talk-down: mile-call penalties count from here
+  a.contacted = true;
   if (p.hdgMissing && !a.ng) {   // turn with an unreadable heading: no bare turn, pilot asks for the heading again
     log('sys', `Heading not understood for ${a.cs} (no number heard): "${p.raw}". Say it again.`); Sound.buzz();
     pilotSay(a, `${a.tel}, say again heading.`, `${a.telSay}, say again heading.`, true, false, false);
     return;
   }
   selectAc(a);
-  a.contacted = true;
   const silentBefore = a.dna;          // pilots acknowledge every call until "do not acknowledge further transmissions"
   a.lastTx = G.t; a.lastRealTx = G.t;
   log('ctl', `${a.cs}${p.cs ? '' : ' (selected)'}: "${p.raw.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${p.cmds.length ? p.cmds.map(cmdStr).join('; ') : '??'}`);
