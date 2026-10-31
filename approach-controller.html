@@ -601,20 +601,34 @@ const h3z = v => String(Math.round(norm(v)) % 360 || 360).padStart(3, '0');   //
 let nextBRC = null, TBRC = 180;   // TBRC = ship's TRUE course; internal BRC (all geometry, magnetic) = FB = TBRC - MV
 const randBRC = () => 5 * (1 + Math.floor(Math.random() * 72));   // 005..360 in 5 deg steps
 function prepBRC() { nextBRC = TBRC = randBRC(); MV = randMV(); setBRC(norm(TBRC - MV)); makeLand((Math.random() * 2 ** 31) >>> 0); try { applyPhrUI(); } catch (e) {} }   // picked when the start screen is shown
-/* ---------- random surrounding land (visual only), seeded, generated with the BRC ---------- */
+/* ---------- random land on the outer scope only (visual only; ship and traffic areas stay over water), seeded, generated with the BRC ---------- */
 let LAND = null;
 let MV = 7;   // magnetic variation, deg: true = magnetic + MV (scope is magnetic-up)
 const randMV = () => (Math.random() < 0.5 ? -1 : 1) * (1 + Math.floor(Math.random() * 15));   // +/-1..15, never 0
 const fmtMV = () => 'MV' + (MV < 0 ? '-' : '+') + String(Math.abs(MV)).padStart(2, '0');
 const rotB = (e, n, a) => { const r = a * DEG, c = Math.cos(r), s = Math.sin(r); return [e * c + n * s, -e * s + n * c]; };   // rotate a position's bearing by +a deg
 const t2m = (e, n) => rotB(e, n, -MV);   // true -> magnetic (drawn) frame
-function landForbidden(e, n) {   // ship area and the final-approach corridor (1.5 NM either side, 10 NM astern) stay clear
-  if (Math.hypot(e, n) < 3.2) return true;
-  const [le, ln] = toLoc(e, n); return ln > -1 && ln < 10.8 && Math.abs(le) < 1.8;
+const LAND_CLEAR_NM = 7.5, LAND_MAX_FRAC = 0.4, LAND_MIN_FRAC = 0.17, LAND_MAX_BRG = 0.5, LAND_HOLD_NM = 12.5;   // land only in the outer ring of the 14 NM scope (ship is at sea)
+function landForbidden(e, n) {   // magnetic frame: inner water ring, final + upwind corridors to the scope edge, the four sector hold points
+  if (Math.hypot(e, n) < LAND_CLEAR_NM) return true;
+  const [le, ln] = toLoc(e, n); if (Math.abs(le) < 2.2) return true;
+  for (const b of [45, 135, 225, 315]) { const x = Math.sin(b * DEG) * LAND_HOLD_NM, y = Math.cos(b * DEG) * LAND_HOLD_NM; if (Math.hypot(e - x, n - y) < 3.2) return true; }
+  return false;
 }
+const pip = (x, y, p) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+function landStats(polys) {   // grid sample inside the scope (true frame): area fraction, min range, bearing coverage, any forbidden hit
+  const S = 1.4 * APP_RANGE_L / 40; let tot = 0, land = 0, minR = 99, bad = false; const bins = new Array(72).fill(0);
+  for (let x = -APP_RANGE_L; x <= APP_RANGE_L; x += S) for (let y = -APP_RANGE_L; y <= APP_RANGE_L; y += S) {
+    const rr = Math.hypot(x, y); if (rr > APP_RANGE_L) continue; tot++;
+    if (!polys.some(p => pip(x, y, p)) || landForbidden(...t2m(x, y))) continue;   // water areas are carved out of the land when drawn
+    land++; minR = Math.min(minR, rr); bins[Math.floor(norm(Math.atan2(x, y) / DEG) / 5) % 72] = 1;
+  }
+  return { frac: land / tot, minR, brg: bins.reduce((s, v) => s + v, 0) / 72, bad };
+}
+const APP_RANGE_L = 14;   // scope radius (same as APP_RANGE)
 function makeLand(seed) {
-  const r = mulberry32(seed >>> 0), U = (a, b) => a + (b - a) * r(), polys = [];
-  const ok = pts => pts.every(([e, n]) => !landForbidden(...t2m(e, n)));
+  const r = mulberry32(seed >>> 0), U = (a, b) => a + (b - a) * r();
+  const ok = pts => pts.every(([e, n]) => !landForbidden(...t2m(e, n)) || Math.hypot(e, n) > APP_RANGE_L + 0.5);
   const mpd = (a, b, depth, rough) => {   // midpoint displacement between two points
     let pts = [a, b];
     for (let d = 0; d < depth; d++) { const nx = [pts[0]];
@@ -623,25 +637,34 @@ function makeLand(seed) {
       pts = nx; }
     return pts;
   };
-  const coasts = r() < 0.15 ? 0 : r() < 0.7 ? 1 : 2;
-  let th0 = U(0, 360), placed = 0;
-  for (let c = 0; c < coasts; c++) {
-    for (let tries = 0; tries < 40; tries++) {
-      const th = (c === 0 ? th0 + tries * 37 : th0 + U(70, 150) * (r() < 0.5 ? -1 : 1) + tries * 23) * DEG, d = U(6, 12.5);
-      const ux = Math.sin(th), uy = Math.cos(th), px = uy, py = -ux;   // outward unit + along-shore unit
-      const A = [ux * d - px * 32, uy * d - py * 32], B = [ux * d + px * 32, uy * d + py * 32];
-      const shore = mpd(A, B, 8, 0.55).map(([x, y]) => { const t = (x - ux * d) * px + (y - uy * d) * py, bay = 1.6 * Math.sin(t * 0.35 + seed % 7) + 0.9 * Math.sin(t * 0.9 + c); return [x + ux * bay, y + uy * bay]; });
-      if (!ok(shore)) continue;
-      placed++; polys.push(shore.concat([[B[0] + ux * 40, B[1] + uy * 40], [A[0] + ux * 40, A[1] + uy * 40]])); if (c === 0) th0 = th / DEG; break;
+  const coastAt = (c, th, d, span) => {   // polar coastline: shore radius d + noise over a bearing span, ends run off the scope edge; pushed out of the water areas
+    const N = 140, k = [U(0, 6), U(0, 6), U(0, 6), U(0, 6)], amp = U(0.6, 1.6), pts = [];
+    for (let i = 0; i <= N; i++) {
+      const u = i / N, b = th + (u - 0.5) * span * DEG, edge = Math.pow(Math.abs(2 * u - 1), 6) * 9;
+      let rr = d + edge + amp * (0.55 * Math.sin(u * 7 + k[0]) + 0.3 * Math.sin(u * 17 + k[1]) + 0.15 * Math.sin(u * 37 + k[2])) + 0.25 * (r() - 0.5);
+      rr = Math.max(rr, LAND_CLEAR_NM + 0.4);
+      while (rr < APP_RANGE_L + 2 && landForbidden(...t2m(Math.sin(b) * rr, Math.cos(b) * rr))) rr += 0.15;
+      pts.push([Math.sin(b) * rr, Math.cos(b) * rr]);
     }
+    for (let i = N; i >= 0; i -= 10) { const b = th + (i / N - 0.5) * span * DEG; pts.push([Math.sin(b) * 22, Math.cos(b) * 22]); }
+    return pts;
+  };
+  let best = null;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const polys = [], coasts = r() < 0.1 ? 0 : r() < 0.8 ? 1 : 2, th0 = U(0, 360); let placed = 0;
+    for (let c = 0; c < coasts; c++) { const th = c ? th0 + U(110, 180) * (r() < 0.5 ? -1 : 1) : th0, span = c ? U(40, 70) : U(80, 140); polys.push(coastAt(c, th * DEG, U(LAND_CLEAR_NM + 0.8, 10.5), span)); placed++; }
+    const nIsl = placed ? Math.floor(U(0, 4)) : Math.floor(U(3, 7));
+    for (let k = 0; k < nIsl; k++) for (let tries = 0; tries < 30; tries++) {
+      const b = U(0, 360) * DEG, rad = U(0.4, placed ? 1.3 : 2), d = U(LAND_CLEAR_NM + rad * 1.5, APP_RANGE_L + 1), cx = Math.sin(b) * d, cy = Math.cos(b) * d, N = 28, ph = [U(0, 6), U(0, 6), U(0, 6)];
+      const pts = []; for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2, rr = rad * (1 + 0.28 * Math.sin(2 * a + ph[0]) + 0.18 * Math.sin(3 * a + ph[1]) + 0.12 * Math.sin(5 * a + ph[2]) + (r() - 0.5) * 0.25); pts.push([cx + Math.sin(a) * rr, cy + Math.cos(a) * rr]); }
+      if (ok(pts)) { polys.push(pts); break; }
+    }
+    const st = landStats(polys);
+    if (st.bad || st.frac > LAND_MAX_FRAC || st.brg > LAND_MAX_BRG || st.minR < LAND_CLEAR_NM) continue;
+    if (!best || st.frac > best.st.frac) best = { polys, placed, st }; if (st.frac >= LAND_MIN_FRAC) break;
   }
-  const nIsl = coasts === 0 ? Math.floor(U(2, 6)) : Math.floor(U(0, 5));
-  for (let k = 0; k < nIsl; k++) for (let tries = 0; tries < 40; tries++) {
-    const b = U(0, 360) * DEG, d = U(4, 16), rad = U(0.35, 1.6), cx = Math.sin(b) * d, cy = Math.cos(b) * d, N = 28, ph = [U(0, 6), U(0, 6), U(0, 6)];
-    const pts = []; for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2, rr = rad * (1 + 0.28 * Math.sin(2 * a + ph[0]) + 0.18 * Math.sin(3 * a + ph[1]) + 0.12 * Math.sin(5 * a + ph[2]) + (r() - 0.5) * 0.25); pts.push([cx + Math.sin(a) * rr, cy + Math.cos(a) * rr]); }
-    if (ok(pts)) { polys.push(pts); break; }
-  }
-  LAND = { seed: seed >>> 0, mv: MV, polys, coasts: placed, islands: polys.length - placed, key: '' };
+  if (!best) best = { polys: [], placed: 0, st: { frac: 0, minR: 99, brg: 0, bad: false } };
+  LAND = { seed: seed >>> 0, mv: MV, polys: best.polys, coasts: best.placed, islands: best.polys.length - best.placed, stats: best.st, key: '' };
   if (typeof G !== 'undefined' && G) G.landSeed = LAND.seed;
   return LAND;
 }
@@ -659,11 +682,13 @@ function landLayer(cx, cy, R, sc) {   // offscreen pre-render, rebuilt only when
   c.globalCompositeOperation = 'source-over';
   c.strokeStyle = 'rgba(130,200,110,0.5)'; c.lineWidth = 1.2; c.lineJoin = 'round'; c.stroke();
   c.globalCompositeOperation = 'destination-out';   // safety net: ship area + approach corridor always clear
-  c.beginPath(); c.arc(R, R, 3 * sc, 0, Math.PI * 2); c.fill();
-  { const q = [[-1.5, -0.5], [1.5, -0.5], [1.5, 10], [-1.5, 10]].map(([le, ln]) => P(...fromLoc(le, ln))); c.beginPath(); q.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fill(); }
+  c.beginPath(); c.arc(R, R, LAND_CLEAR_NM * sc, 0, Math.PI * 2); c.fill();
+  { const q = [[-2.2, -20], [2.2, -20], [2.2, 20], [-2.2, 20]].map(([le, ln]) => P(...fromLoc(le, ln))); c.beginPath(); q.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fill(); }
+  for (const b of [45, 135, 225, 315]) { const [x, y] = P(Math.sin(b * DEG) * LAND_HOLD_NM, Math.cos(b * DEG) * LAND_HOLD_NM); c.beginPath(); c.arc(x, y, 3.2 * sc, 0, Math.PI * 2); c.fill(); }   // sector hold points
   c.restore(); LAND.cv = cv; LAND.key = key; return cv;
 }
-window.__land = () => LAND && { seed: LAND.seed, coasts: LAND.coasts, islands: LAND.islands, polys: LAND.polys };
+window.__land = () => LAND && { seed: LAND.seed, coasts: LAND.coasts, islands: LAND.islands, polys: LAND.polys, stats: LAND.stats };
+window.__makeLand = s => makeLand(s);
 function setBRC(v) {   // random BRC per simulation start; everything course-related derives from it
   BRC = norm(v) % 360 || 360; RWY = BRC; BRC_OFF = BRC - 270; BRC3 = h3z(BRC); BRC_SAY = sayDigits(BRC3);
   RWY_NUM = String(Math.round(BRC / 10) || 36).padStart(2, '0'); RWY_SAY = sayDigits(RWY_NUM);
@@ -2646,7 +2671,7 @@ function appExecute(p, src) {
       marked = true; continue;
     }
     if (c.k === 'sector') {   // bearings FROM the ship (magnetic): 1 = 360-090, 2 = 090-180, 3 = 180-270, 4 = 270-360
-      a.sector = { n: c.v, c: SECTOR_CTR[c.v], R: Math.max(SECTOR_PT_NM, Math.min(appRng(a), 30)), est: false }; a.turnDir = null;
+      a.sector = { n: c.v, c: SECTOR_CTR[c.v], R: SECTOR_PT_NM, est: false }; a.turnDir = null;
       secRb = c.v; continue;
     }
     if (c.k === 'climbout') { if (c.v.length) { a.climbout = c.v.slice(); award(a, 'co', 'climbout instructions'); } rb.push('wilco'); rbSay.push('wilco'); continue; }   // stored for after the low approach
