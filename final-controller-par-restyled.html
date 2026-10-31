@@ -187,6 +187,7 @@ table.st td:last-child{text-align:right;color:var(--cyan)}
     <div class="set"><label for="sVol">Readback volume</label><input type="range" id="sVol" min="0" max="1" step="0.05"></div>
     <div class="set"><label for="sRate">Pilot speaking rate</label><input type="range" id="sRate" min="0.8" max="1.5" step="0.05"></div>
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sSweep">Radar scan line</label><input type="checkbox" id="sSweep" style="width:22px;height:22px"></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
     <div id="setInfo" class="note" style="color:var(--dim)"></div>
   </div>
@@ -577,7 +578,7 @@ const GREEN_R = 1.0, BALL_R = 0.75;                            // ship calls: 'o
 // ASR (surveillance) approach: no glidepath; descend to the MDA at the FAF, level off, visual or missed approach at the MAP
 const ASR_MDA = 470, ASR_MAP_R = 0.75, ASR_GATE_R = 0.45, ASR_TOL = 0.3;
 const asrR = a => isHelo(a) ? { start: 4, prep: 4, mda: 3 } : { start: 5, prep: 6, mda: 5 };   // MV-22B counts as rotary
-const asrStable = a => a.phase === 'descent' && Math.abs(a.z - ASR_MDA) <= 100 && ['on', 'slightly'].includes(courseCat(a));
+const asrStable = a => a.phase === 'descent' && Math.abs(a.z - ASR_MDA) <= 100 && ['on', 'slightly'].includes(courseCat({ yft: a.yft }));   // pilot logic: true position
 const SEE_YOU_R = 2.0;                                         // pilot transmits "see you" at 2 NM (ship)
 // seconds until a level (or slowly descending) aircraft below the glidepath meets it
 const ttiGp = a => { const gap = gpAlt(a.r) - a.z, rate = Math.max(30, a.gs) / 3600 * NM_FT * GP_TAN - a.vs / 60; return rate > 0.1 ? gap / rate : Infinity; };
@@ -959,6 +960,7 @@ function step(dt) {
     if (a.phase === 'queue') updateQueue(a, dt);
     else if (alive(a)) updatePar(a, dt);
   }
+  for (const a of G.ac) sweepPaint(a);   // radar display: positions only refresh when the scan passes
   // one aircraft on final at a time: when it leaves the controller (on deck, climb-out, wave-off, lost comms...), start the gap
   const onFinal = G.ac.some(a => PAR_PHASES.includes(a.phase));
   if (G.busy && !onFinal) { G.gateAt = G.t + rand(NEXT_GAP[0], NEXT_GAP[1]); log('sys', `Final scope clear. Next aircraft in ${Math.round(G.gateAt - G.t)} s.`); }
@@ -1283,6 +1285,23 @@ function doCrash(a) {
   G.endAt = G.t + 3;
 }
 
+/* ===================== radar sweep (display + grading only; physics untouched) ===================== */
+// Each target is re-painted only when the scan passes it; between scans the last painted position is held.
+// Azimuth and elevation scans alternate: the elevation scan is offset by SWEEP_EL_OFFSET of a period.
+const SWEEP_PAR_S = 1.0;        // s: PAR scan period (azimuth and elevation each)
+const SWEEP_ASR_S = 4.5;        // s: ASR (surveillance) update period, also used for aircraft in the hold (plan view)
+const SWEEP_EL_OFFSET = 0.5;    // fraction of a period between the azimuth and the elevation scan
+const sweepPer = a => (a.asr || a.phase === 'queue') ? SWEEP_ASR_S : SWEEP_PAR_S;
+const sweepFracA = yft => (YMAX - clamp(yft, -YMAX, YMAX)) / (2 * YMAX);   // 0 = top of the azimuth panel, 1 = bottom
+const sweepFracE = z => 1 - clamp(z / ZMAX, 0, 1);                          // 0 = top of the elevation panel, 1 = bottom
+function sweepPaint(a) {
+  const per = sweepPer(a);
+  const kA = Math.floor(G.t / per - sweepFracA(a.yft || 0)), kE = Math.floor(G.t / per - SWEEP_EL_OFFSET - sweepFracE(a.z || 0));
+  if (!a.pA || a.kA !== kA || a.pA.phase !== a.phase) { a.kA = kA; a.pA = { r: a.r, yft: a.yft, z: a.z, px: a.px, py: a.py, alt: a.alt, phase: a.phase, t: G.t }; }
+  if (!a.pE || a.kE !== kE || a.pE.phase !== a.phase) { a.kE = kE; a.pE = { r: a.r, z: a.z, phase: a.phase, t: G.t }; }
+}
+const paintA = a => a.pA || a, paintE = a => a.pE || a;   // painted (displayed) azimuth / elevation position
+
 function planPos(a) {
   if (a.phase === 'queue') return { x: a.px, y: a.py, z: a.alt };
   return { x: a.r - THR_R, y: a.yft / NM_FT, z: a.z };
@@ -1313,8 +1332,8 @@ function judge(a, ok, said, actual) {
   if (ok) { a.accCalls++; G.callsGood++; if (a.accCalls <= 15) a.pts += 1; }
   else { a.badCalls++; G.callsBad++; addPts(a, -3, `Inaccurate call to ${a.cs}: you said "${said}", but it's actually ${actual}.`, 'warn'); }
 }
-function actualCourse(a) { const c = courseCat(a), g = courseGeom(a); return `${courseWords(c, a.yft)} (${Math.abs(Math.round(a.yft))} ft: course line ${g.d.toFixed(1)} px from the tick centre, tick half-length ${g.h.toFixed(1)} px)`; }
-function actualGp(a) { const c = gpCat(a), g = gpGeom(a), ft = Math.round(a.z - gpAlt(a.r)); return `${gpWords(c, a)} (${ft >= 0 ? '+' : ''}${ft} ft: glidepath line ${g.d.toFixed(1)} px from the tick centre, tick half-length ${g.h.toFixed(1)} px)`; }
+function actualCourse(a) { const c = courseCat(a), g = courseGeom(a), y = paintA(a).yft; return `${courseWords(c, y)} (${Math.abs(Math.round(y))} ft: course line ${g.d.toFixed(1)} px from the tick centre, tick half-length ${g.h.toFixed(1)} px)`; }
+function actualGp(a) { const c = gpCat(a), g = gpGeom(a), e = paintE(a), ft = Math.round(e.z - gpAlt(e.r)); return `${gpWords(c, a)} (${ft >= 0 ? '+' : ''}${ft} ft: glidepath line ${g.d.toFixed(1)} px from the tick centre, tick half-length ${g.h.toFixed(1)} px)`; }
 
 // Low altitude alert: "low altitude alert" + "check your altitude immediately" + "altimeter two niner niner two"
 const SINK_P = 0.35;   // chance of a sinker event per approach
@@ -1465,7 +1484,7 @@ function execute(p, src) {
         a.tgtSpd = c.v; rb.push(`speed ${c.v}`); rbSay.push(`speed ${sayDigits(c.v)}`); break;
       case 'course': {
         // pixel categories on the azimuth panel: slightly / plain ("right of course") / well; side must match
-        const side = a.yft > 0 ? 'R' : 'L', want = c.q || 'plain';
+        const side = paintA(a).yft > 0 ? 'R' : 'L', want = c.q || 'plain';
         const ok = side === c.side && courseAccepts(a, want) && !(courseCat(a) === 'on' && !courseAccepts(a, want));
         judge(a, ok, `${c.q ? c.q + ' ' : ''}${c.side === 'L' ? 'left' : 'right'} of course`, actualCourse(a)); break; }
       case 'onCourse': judge(a, courseAccepts(a, 'on'), 'on course', actualCourse(a)); break;
@@ -1640,7 +1659,7 @@ function suggestCall(a) {
     if (hdg === 0) hdg = 360;
     const needTurn = Math.abs(angDiff(hdg, a.tgtHdg)) >= 1 && (Math.abs(a.yft) > 40 || Math.abs(a.latRate) > 6);
     const cc = courseCat(a);   // as seen on the azimuth panel
-    const courseCall = () => add(courseWords(cc, a.yft));
+    const courseCall = () => add(courseWords(cc, paintA(a).yft));
     if (isShip()) courseCall();   // ship style: position first, then "come left/right heading ___"
     if (needTurn) {
       const dir = angDiff(hdg, a.hdg) < 0 ? 'left' : 'right', verb = ph('come', 'turn');
@@ -1681,7 +1700,7 @@ function suggestCall(a) {
 
 /* ===================== settings & sound ===================== */
 const SETTINGS_KEY = 'fcpar_settings_v1';
-const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship' };
+const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', sweep: true };
 try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) {}
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) {} };
 
@@ -1955,7 +1974,7 @@ function readoutText(a) {
   return `${a.cs} ${a.type} "${a.tel}"${itTxt}  [${a.phase.toUpperCase()}${a.silent ? ', SILENT' : ''}${a.ng ? `, NO GYRO ${a.ngHalf ? '1.5' : '3'}°/S${a.ngTurn ? ' TURNING ' + (a.ngTurn === 'L' ? 'L' : 'R') : ''}` : ''}${a.asr ? `, ASR · MDA ${a.mda}` : ''}]
 RANGE ${a.r.toFixed(2)} NM   GS ${Math.round(a.gs)} KT   HDG ${hdg3(a.hdg)}${Math.abs(angDiff(a.tgtHdg, a.hdg)) > 0.5 ? '→' + hdg3(a.tgtHdg) : ''}
 ELEV ${ft >= 0 ? '+' : ''}${ft} FT (${dev >= 0 ? '+' : ''}${dev.toFixed(2)}°) ${a.phase === 'final' && ft < 0 ? 'BELOW GP, LEVEL' : gpWords(cg, a).toUpperCase()}
-AZ   ${Math.abs(Math.round(a.yft))} FT ${a.yft >= 0 ? 'R' : 'L'} (${Math.abs(az).toFixed(2)}°) ${courseWords(cc, a.yft).toUpperCase()}
+AZ   ${Math.abs(Math.round(a.yft))} FT ${a.yft >= 0 ? 'R' : 'L'} (${Math.abs(az).toFixed(2)}°) ${courseWords(cc, paintA(a).yft).toUpperCase()}
 ALT ${fmtAlt(a.z)}  VS ${a.vs > 0 ? '-' : '+'}${Math.abs(Math.round(a.vs))} FPM (3° ≈ ${Math.round(vsNominal(a))})
 GEAR ${a.gear ? '✓' : '–'}  CLRD ${a.cleared ? '✓' : '–'}  TOL ${tol}  CALLS ${a.accCalls}✓/${a.badCalls}✗  PTS ${a.pts >= 0 ? '+' : ''}${a.pts}`;
 }
@@ -2021,12 +2040,12 @@ window.addEventListener('blur', () => pttEnd());
 /* ===================== settings overlay ===================== */
 function openSettings() {
   uiPaused = true; setOv.classList.remove('hidden'); loadVoices();
-  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
+  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sSweep').checked = S.sweep !== false; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
   $('setInfo').innerHTML = `Speech recognition: ${SR ? 'available' : '<b>not available</b> in this browser'} · Speech output: ${TTS ? voices.length + ' English voice(s)' : 'not available'} · Page: ${esc(location.protocol)}`;
 }
 function closeSettings() { setOv.classList.add('hidden'); uiPaused = !helpOv.classList.contains('hidden'); initVoiceStatus(); }
-['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice'].forEach(id => $(id).addEventListener('change', () => {
-  S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.voice = $('sVoice').value; saveSettings();
+['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice', 'sSweep'].forEach(id => $(id).addEventListener('change', () => {
+  S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.sweep = $('sSweep').checked; S.voice = $('sVoice').value; saveSettings();
 }));
 function setPhr(v) { S.phr = v === 'tower' ? 'tower' : 'ship'; saveSettings(); $('sPhr').value = $('sPhr2').value = S.phr; applyPhrUI(); if (G) refreshPanel(true); }
 function applyPhrUI() {
@@ -2250,6 +2269,14 @@ function draw(now) {
   ctx.save(); ctx.beginPath(); ctx.rect(L.left, L.aTop, L.plotW, L.ah); ctx.clip();
   ctx.strokeStyle = C.gd + '0.6)'; ctx.lineWidth = 1; line(xr(RMIN), px5(ay(0)), xr(RMAX), px5(ay(0)));
   ctx.restore();
+  // optional faint scan lines (Settings: Radar scan line), in sync with the PAR target updates
+  if (G && S.sweep) {
+    const fA = (G.t / SWEEP_PAR_S) % 1, fE = (G.t / SWEEP_PAR_S - SWEEP_EL_OFFSET + 1) % 1;
+    glow(false); ctx.strokeStyle = C.gd + '0.10)'; ctx.lineWidth = 1;
+    const yA = px5(ay(YMAX - fA * 2 * YMAX)), yE = px5(ez(ZMAX * (1 - fE)));
+    line(L.left, yA, L.left + L.plotW, yA); line(L.left, yE, L.left + L.plotW, yE);
+    glow(true, 'rgba(120,255,140,0.35)', 2);
+  }
   // targets
   if (G) {
     const blink = Math.floor(now / 260) % 2 === 0;
@@ -2270,8 +2297,8 @@ function tickSize() { const k = clamp((L.eh || 362) / 362, 0.6, 1.6); return { T
 // h = half the tick length. on: line through the middle; slightly: between middle and end; plain: line at the end of
 // the tick; well: tick clear of the line. EDGE px either side of a boundary accepts both neighbouring calls.
 const CC_ON = 0.2, CC_END = 0.85, CC_PAD = 1.5, CC_EDGE = 1.0;
-function courseGeom(a) {
-  const half = (L.ah || 290) / 2, d = Math.abs(clamp(a.yft, -YMAX, YMAX)) / YMAX * half, h = tickSize().TH / 2;
+function courseGeom(a) {   // painted (displayed) position: grading matches what the controller sees
+  const half = (L.ah || 290) / 2, d = Math.abs(clamp(paintA(a).yft, -YMAX, YMAX)) / YMAX * half, h = tickSize().TH / 2;
   return { d, h, b1: Math.max(CC_PAD, CC_ON * h), b2: CC_END * h, b3: h + CC_PAD };
 }
 function courseCatAt(g, d) { return d <= g.b1 ? 'on' : d < g.b2 ? 'slightly' : d <= g.b3 ? 'plain' : 'well'; }
@@ -2280,23 +2307,23 @@ function courseAccepts(a, cat) { const g = courseGeom(a); return [g.d, g.d - CC_
 // Glidepath position exactly as seen on the ELEVATION panel: d = vertical screen pixels between the glidepath line
 // (at the aircraft's range) and the tick centre; same zones and edge tolerance as the course calls.
 function gpGeom(a) {
-  const d = Math.abs(ez(a.z) - ez(gpAlt(a.r))), h = tickSize().TH / 2;
+  const e = paintE(a), d = Math.abs(ez(e.z) - ez(gpAlt(e.r))), h = tickSize().TH / 2;
   return { d, h, b1: Math.max(CC_PAD, CC_ON * h), b2: CC_END * h, b3: h + CC_PAD };
 }
 function gpCat(a) { const g = gpGeom(a); return courseCatAt(g, g.d); }
 function gpAccepts(a, cat) { const g = gpGeom(a); return [g.d, g.d - CC_EDGE, g.d + CC_EDGE].some(d => courseCatAt(g, Math.max(0, d)) === cat); }
-const gpSide = a => a.z >= gpAlt(a.r) ? 'above' : 'below';
+const gpSide = a => { const e = paintE(a); return e.z >= gpAlt(e.r) ? 'above' : 'below'; };
 const gpWords = (cat, a) => cat === 'on' ? 'on glidepath' : `${cat === 'plain' ? '' : cat + ' '}${gpSide(a)} glidepath`;
 const courseWords = (cat, yft) => cat === 'on' ? 'on course' : `${cat === 'plain' ? '' : cat + ' '}${yft > 0 ? 'right' : 'left'} of course`;
 function drawTarget(a, blink) {
   // plain white tick on each panel; no trail, no selection marker (selection is shown in the side panel)
-  const X = xr(a.r), YE = ez(a.z), YA = ay(clamp(a.yft, -YMAX, YMAX));
+  const pa = paintA(a), pe = paintE(a);   // painted positions: they step once per scan
+  const XE = xr(pe.r), XA = xr(pa.r), YE = ez(pe.z), YA = ay(clamp(pa.yft, -YMAX, YMAX)), X = XA;
   ctx.fillStyle = C.tgt;
   const { TW, TH } = tickSize();               // ~3 x 32 px tick at 1280x800, scales with the panel height
-  const tx = Math.round(X - TW / 2);
-  ctx.fillRect(tx, Math.round(YE - TH / 2), TW, TH);
-  ctx.fillRect(tx, Math.round(YA - TH / 2), TW, TH);
-  a.hitE = { x: X, y: YE, hw: TW / 2, hh: TH / 2 }; a.hitA = { x: X, y: YA, hw: TW / 2, hh: TH / 2 };
+  ctx.fillRect(Math.round(XE - TW / 2), Math.round(YE - TH / 2), TW, TH);
+  ctx.fillRect(Math.round(XA - TW / 2), Math.round(YA - TH / 2), TW, TH);
+  a.hitE = { x: XE, y: YE, hw: TW / 2, hh: TH / 2 }; a.hitA = { x: XA, y: YA, hw: TW / 2, hh: TH / 2 };
 }
 
 // Scope carries no text: status + alerts are shown in the side panel instead.
@@ -2343,7 +2370,7 @@ function drawInset() {
   c.font = FONT(10);
   for (const a of G.ac) {
     if (!alive(a) && a.phase !== 'landed') continue;
-    const p = planPos(a);
+    const p = planPos(Object.assign({}, paintA(a), { phase: a.phase }));   // plan view also shows the painted position
     const sel = a === G.selected;
     c.fillStyle = a.conflict ? C.red : sel ? C.cyan : a.phase === 'queue' ? C.amber : C.tgt;
     const Q = P(p.x, p.y);
@@ -2400,6 +2427,7 @@ window.PAR = {
   courseTest(yft) { const g = courseGeom({ yft }); return { cat: courseCatAt(g, g.d), d: +g.d.toFixed(2), h: g.h, b1: g.b1, b2: +g.b2.toFixed(2), b3: g.b3, acc: ['on', 'slightly', 'plain', 'well'].filter(c => courseAccepts({ yft }, c)), ftPerPx: +(YMAX / ((L.ah || 290) / 2)).toFixed(2) }; },
   ac(cs) { const a = G.ac.find(x => x.cs === cs); if (!a) return null; return { cs: a.cs, phase: a.phase, r: +a.r.toFixed(2), yft: Math.round(a.yft), z: Math.round(a.z), gpFt: Math.round(a.z - gpAlt(a.r)), dev: +elevDev(a).toFixed(2), az: +azDeg(a).toFixed(2), hdg: Math.round(a.hdg), vs: Math.round(a.vs), pts: a.pts, gear: a.gear, cleared: a.cleared, limit: a.limit, silent: a.silent, result: a.result }; },
   says() { return sayLog.slice(); },
+  paint(cs) { const a = G && G.ac.find(x => x.cs === cs); return a ? { a: a.pA ? Object.assign({}, a.pA) : null, e: a.pE ? Object.assign({}, a.pE) : null } : null; },
   hit(cs) { const a = G && G.ac.find(x => x.cs === cs); return a ? { e: a.hitE, az: a.hitA } : null; },
   selected() { return G && G.selected ? G.selected.cs : null; },
   deselect() { selectAc(null); },
