@@ -155,9 +155,9 @@ html,body{background:#030503}
     <div style="color:var(--dim)" id="subTitle">Precision Approach Radar talk-down simulator · Runway 18</div>
     <p id="introP">You're the <b>final controller</b>. Each aircraft appears on your scope 7 to 9 miles out. Using your <b>voice</b>, talk it down: heading corrections, course and glidepath calls, range calls, the gear check and the landing clearance, all the way to <b id="introDH">decision height</b>. Pilots answer each call with their callsign until you say "do not acknowledge further transmissions"; after that they stay quiet, so keep talking!</p>
     <div class="diffs">
-      <div class="diff on" data-d="training"><b>Training</b><span>Launches every 2–4 min, about 1 traffic conflict, and a hint that shows your suggested next call.</span></div>
-      <div class="diff" data-d="normal"><b>Normal</b><span>Launches every 2–4 min, 2–4 traffic conflicts, firmer pilots. No hints.</span></div>
-      <div class="diff" data-d="gusty"><b>Rush</b><span>Launches every 2–4 min, 4–6 traffic conflicts, livelier pilots. No hints.</span></div>
+      <div class="diff on" data-d="training"><b>Training</b><span>Launches every 4–6 min, about 1 traffic conflict, and a hint that shows your suggested next call.</span></div>
+      <div class="diff" data-d="normal"><b>Normal</b><span>Launches every 4–6 min, 2–4 traffic conflicts, firmer pilots. No hints.</span></div>
+      <div class="diff" data-d="gusty"><b>Rush</b><span>Launches every 4–6 min, 4–6 traffic conflicts, livelier pilots. No hints.</span></div>
     </div>
     <div class="row" style="margin:4px 0 2px;gap:8px"><label for="sPhr2" style="color:var(--dim)">Phraseology</label><select id="sPhr2"><option value="ship">Ship: amphibious assault ship (LHA/LHD)</option><option value="tower">Tower: shore runway PAR</option></select></div>
     <div class="row" style="margin:6px 0 2px;gap:8px;align-items:center"><span style="color:var(--dim)">Link to Final Control</span>
@@ -765,7 +765,7 @@ function newGame(diffKey, opts = {}) {
   G.gateAt = rand(FIRST_GAP[0], FIRST_GAP[1]);
   logEl.innerHTML = '';
   setScale(1); setPaused(false);
-  log('sys', `${d.name}: ${ph('PAR to ' + SHIP_NAME + ', BRC ' + BRC3, 'PAR runway ' + RWY_NUM)}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? 'Launches every 2–4 min; press End to finish.' : G.toSpawn + ' arrivals.'}`);
+  log('sys', `${d.name}: ${ph('PAR to ' + SHIP_NAME + ', BRC ' + BRC3, 'PAR runway ' + RWY_NUM)}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? 'Launches every 4–6 min; press End to finish.' : G.toSpawn + ' arrivals.'}`);
   if (d.hints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
   selectAc(null);
   refreshPanel(true);
@@ -2512,7 +2512,7 @@ function appStep(dt) {
   appConflicts();
   if (G.confPair && (G.t >= G.confPair.until || !G.ac.includes(G.confPair.lead))) G.confPair = null;
   if (G.confPair && Math.hypot(G.confPair.lead.e, G.confPair.lead.n) >= G.confPair.rng) { const cp = G.confPair; cp.rng += 0.3; const d = confLeadOk(cp.lead, 1000) || confLeadOk(cp.lead, 1200) ? confChase(cp.lead) : null; if (d) G.confPair = null; const l = G.confLog && G.confLog[G.confLog.length - 1]; if (d && l) l.cs.push(d.cs), l.chaseT = Math.round(G.t); }
-  if (G.t >= G.nextLaunch) { G.launches = (G.launches || 0) + 1; appLaunch(); G.launchLog = (G.launchLog || []).concat(G.t); G.nextLaunch = G.t + rand(120, 240); }   // first at 10 s, then every 2-4 min for the whole run
+  if (G.t >= G.nextLaunch) { G.launches = (G.launches || 0) + 1; appLaunch(); G.launchLog = (G.launchLog || []).concat(G.t); G.nextLaunch = G.t + rand(240, 360); }   // first at 10 s, then every 4-6 min for the whole run
   const w = appWind();
   if (LINK.pendingHandoff) { const h = LINK.pendingHandoff; LINK.pendingHandoff = null; LINK.handoff(h.a, h.freq); }
   for (const a of G.ac) {
@@ -2746,7 +2746,7 @@ IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Ma
 function appPanel() {
   const hint = $('hint');
   hint.style.display = G.d.hints ? 'block' : 'none';
-  if (G.d.hints) hint.innerHTML = `💡 Vector your launches onto the final approach course (FB ${BRC3}, inbound from ${hdg3(norm(BRC + 180))}) and descend them to 3,000 ft or below inside 3 NM to hand them to ${SHIP_NAME} Final. Aircraft launch from ${SHIP_NAME} one at a time (every 2–4 min), fly up to ${APP_MAX_PARS} practice PARs (low approach, then back to you) and recover full stop on the last. After each check-in, your first altitude must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets (−5 if not). Call <b>radar contact</b> within 2 NM of the ship (−5 if later). To slow down: ${G.selected && G.selected.phase === 'app' ? (isHelo(G.selected) ? `${G.selected.tel} (helo): "<b>perform landing checks</b>"` : `${G.selected.tel} (jet): "<b>dirty up</b>"`) : 'helos "<b>perform landing checks</b>", jets "<b>dirty up</b>"'}.`;
+  if (G.d.hints) hint.innerHTML = `💡 Vector your launches onto the final approach course (FB ${BRC3}, inbound from ${hdg3(norm(BRC + 180))}) and descend them to 3,000 ft or below inside 3 NM to hand them to ${SHIP_NAME} Final. Aircraft launch from ${SHIP_NAME} one at a time (every 4–6 min), fly up to ${APP_MAX_PARS} practice PARs (low approach, then back to you) and recover full stop on the last. After each check-in, your first altitude must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets (−5 if not). Call <b>radar contact</b> within 2 NM of the ship (−5 if later). To slow down: ${G.selected && G.selected.phase === 'app' ? (isHelo(G.selected) ? `${G.selected.tel} (helo): "<b>perform landing checks</b>"` : `${G.selected.tel} (jet): "<b>dirty up</b>"`) : 'helos "<b>perform landing checks</b>", jets "<b>dirty up</b>"'}.`;
   $('scopeStatus').textContent = `APPROACH · ${SHIP_NAME.toUpperCase()} · FB ${BRC3} · ${APP_RANGE} NM · WIND ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   $('stLanded').textContent = G.landed; $('stLanded').nextElementSibling.textContent = 'Handed off';
   const list = G.ac.filter(appCtl).sort((p, q) => appRng(p) - appRng(q));
