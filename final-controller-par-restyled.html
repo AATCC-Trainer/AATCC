@@ -260,10 +260,10 @@ function sayMiles(r) {
 // military tactical callsigns (code = short scope tag prefix); numbers are spoken digit by digit
 const AIRLINES = [
   { icao: 'LTNG', tel: 'Lightning', words: ['lightning', 'lightening'], types: ['F35B'] },
-  { icao: 'NHWK', tel: 'Nighthawk', words: ['nighthawk', 'night hawk', 'nite hawk', 'night hawks'], types: ['MV22B'] },
+  { icao: 'NHWK', tel: 'Nighthawk', words: ['nighthawk', 'night hawk', 'nite hawk', 'night hawks'], types: ['UH1Y'] },
   { icao: 'VIPR', tel: 'Viper', words: ['viper', 'vipers', 'piper'], types: ['AH1Z'] },
   { icao: 'VENM', tel: 'Venom', words: ['venom'], types: ['UH1Y'] },
-  { icao: 'KNGT', tel: 'Knight', words: ['knight', 'night', 'nite'], types: ['MV22B'] },
+  { icao: 'KNGT', tel: 'Knight', words: ['knight', 'night', 'nite'], types: ['MH60S'] },
   { icao: 'RDGE', tel: 'Ridge', words: ['ridge'], types: ['CH53E'] },
   { icao: 'GUNF', tel: 'Gunfighter', words: ['gunfighter', 'gun fighter', 'gunfighters'], types: ['AV8B'] },
   { icao: 'CHGR', tel: 'Charger', words: ['charger', 'chargers'], types: ['MH60S'] },
@@ -320,6 +320,8 @@ function normalizeSpeech(raw) {
   s = s.replace(/[^a-z0-9\s,]/g, ' ');
   s = s.replace(/dot/g, '.');
   s = s.replace(/\b(\d+)(miles?|knots|kts|feet|ft)\b/g, '$1 $2');
+  s = s.replace(/\b(?:glide|glyde|glad|guide|light)\s*-?\s*(?:path|pat|pass|bath|past|pad|patch|back|paths|pats|pads|baths)s?\b/g, m => /^(?:light|glad|guide)/.test(m) && !/path/.test(m) ? m : ' glidepath ');
+  s = s.replace(/\bg\s*l\s*i\s*d\s*e\s*p\s*a\s*t\s*h\s*s?\b/g, ' glidepath ');
   s = s.replace(/\bglide\s*(?:path|slope|pass|bath|past)\b|\bglideslope\b|\bglide\b(?=\s+(?:and|,|$))/g, ' glidepath ');
   s = s.replace(/\bcall\s+sign\b/g, 'callsign').replace(/\btouch\s+down\b/g, 'touchdown').replace(/\bx\s+ray\b/g, 'xray');
   s = s.replace(/\b(dissent|decent|descents)\b/g, 'descent');
@@ -597,15 +599,16 @@ let RWY = BRC;
 let BRC_OFF = BRC - 270;                    // physics runs in a course-aligned frame (inbound = frame west); headings/winds are rotated by this
 let BRC3 = hdg3(BRC), BRC_SAY = sayDigits(hdg3(BRC));
 let RWY_NUM = String(Math.round(BRC / 10) || 36).padStart(2, '0'), RWY_SAY = sayDigits(RWY_NUM);
-const isHelo = a => !!(a.T && a.T.helo);                       // MV-22B counts as helo for deck calls
+const isHelo = a => !!(a.T && a.T.helo);                       
 const GREEN_R = 1.0, BALL_R = 0.75;                            // ship calls: 'one mile, go green' (helo) / 'three-quarter mile, call the ball' (fixed wing)
 // ASR (surveillance) approach: no glidepath; descend to the MDA at the FAF, level off, visual or missed approach at the MAP
 const ASR_MDA = 470, ASR_MAP_R = 0.75, ASR_GATE_R = 0.45, ASR_TOL = 0.3;
-const asrR = a => isHelo(a) ? { start: 4, prep: 4, mda: 3 } : { start: 5, prep: 6, mda: 5 };   // MV-22B counts as rotary
+const asrR = a => isHelo(a) ? { start: 4, prep: 4, mda: 3 } : { start: 5, prep: 6, mda: 5 };   
 const asrStable = a => a.phase === 'descent' && Math.abs(a.z - ASR_MDA) <= 100 && ['on', 'slightly'].includes(courseCat({ yft: a.yft }));   // pilot logic: true position
 const SEE_YOU_R = 2.0;                                         // pilot transmits "see you" at 2 NM (ship)
 // seconds until a level (or slowly descending) aircraft below the glidepath meets it
 const ttiGp = a => { const gap = gpAlt(a.r) - a.z, rate = Math.max(30, a.gs) / 3600 * NM_FT * GP_TAN - a.vs / 60; return rate > 0.1 ? gap / rate : Infinity; };
+const TX_GAP_S = 5;                                              // PAR final: no more than 5 s without a transmission (after the first call)
 const APPR_WIN = [10, 30];                                      // bonus window for "approaching glidepath" (s before intercept)
 const fuelOf = a => (3.2 + ((a.uid * 37) % 30) / 10).toFixed(1); // ball-call fuel state (thousands of lb), display only
 const HOLD_FIX = { x: 10.9, y: 4.6 };        // feeder hold/entry fix, ~12 NM from touchdown (was 14, 5.5 = ~15 NM)
@@ -631,7 +634,6 @@ const classify = (v, on, sl) => Math.abs(v) <= on ? 'on' : Math.abs(v) <= sl ? '
 const TYPES = {
   F35B:  { ball: 'Lightning', vapp: 105, vmin: 95, vmax: 190, feed: 160 },   // F-35B Lightning II
   AV8B:  { ball: 'Harrier', vapp: 100, vmin: 90, vmax: 180, feed: 150 },   // AV-8B Harrier II
-  MV22B: { helo: true, vapp: 90, vmin: 80, vmax: 160, feed: 150 },    // MV-22B Osprey (airplane/conversion mode)
   CH53E: { helo: true, vapp: 80, vmin: 70, vmax: 120, feed: 110 },     // CH-53E Super Stallion
   AH1Z:  { helo: true, vapp: 80, vmin: 70, vmax: 120, feed: 110 },     // AH-1Z Viper
   UH1Y:  { helo: true, vapp: 80, vmin: 70, vmax: 120, feed: 110 },     // UH-1Y Venom
@@ -668,6 +670,7 @@ function linkRecv(m) {
   linkStatus();
 }
 function linkType(m) {
+  if (m.acType && /^MV-?22/i.test(String(m.acType))) return 'MH60S';   // MV-22B removed (conversion mode is ambiguous): fly it as a helo
   if (m.acType && TYPES[m.acType]) return m.acType;
   const helo = m.acType === 'helo', al = AIRLINES.find(x => String(m.callsign || '').toUpperCase().startsWith(x.icao));
   const t = al && al.types.find(k => !!TYPES[k].helo === helo);
@@ -880,7 +883,7 @@ function makeAc(spec) {
       if (!G.ac.some(a => a.cs === cs) && !G.rejoin.some(j => j.cs === cs)) break;
     }
   }
-  if (!type) { const al = AIRLINES.find(a => cs.startsWith(a.icao)); type = al ? al.types[0] : 'MV22B'; }
+  if (!type) { const al = AIRLINES.find(a => cs.startsWith(a.icao)); type = al ? al.types[0] : 'MH60S'; }
   const tel = telephony(cs), T = TYPES[type];
   const bias = G.pilotBias != null ? G.pilotBias : rand(-1, 1) * G.d.bias;
   const uid = ++uidC;
@@ -1162,13 +1165,15 @@ function updatePar(a, dt) {
       if (a.contacted && !a.asrMdaCalled && !a.asrMdaMiss && prevR > R.mda - ASR_TOL && a.r <= R.mda - ASR_TOL) { a.asrMdaMiss = true; addPts(a, -5, `No "descend to your minimum descent altitude" call for ${a.cs} at ${sayMiles(R.mda)}; it stays level.`, 'warn'); }
     }
     // ---- transmission gap
-    const gapLim = a.phase === 'descent' ? G.d.gap : G.d.gap * 2;
-    if (G.t - a.lastTx > gapLim) {
+    const lcLim = (a.phase === 'descent' ? G.d.gap : G.d.gap * 2) * 2.6;   // lost-comms timer: unchanged from the old gap-based value
+    const gapLim = TX_GAP_S;
+    if (!a.contacted) a.lastTx = Math.max(a.lastTx, G.t - 0.001);   // not started yet: no gap penalty, clock held at now
+    if (a.contacted && G.t - a.lastTx > gapLim) {
       a.gaps++; a.lastTx = G.t;
       addPts(a, -5, `Transmission gap: ${Math.round(gapLim)} s without a call to ${a.cs}. On PAR final, keep talking!`, 'warn');
       Sound.buzz();
     }
-    if (G.t - a.lastRealTx > gapLim * 2.6) {
+    if (G.t - a.lastRealTx > lcLim) {
       { const t = ph('lost communications, waving off', 'lost communications, executing missed approach'); pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true); }
       doMissed(a, 'lost communications (no transmissions)', -30);
       return;
@@ -2151,7 +2156,7 @@ const TUT = [
    <li><b>Range call at least every mile.</b> Gear check and landing clearance <b>before DH</b>. Calls at DH and over the threshold.</li>
    <li><b>Stable at DH</b> (both within "slightly") +10. Unstable or uncleared at DH means the pilot goes around.</li>
    <li><b>Go-arounds cost no points</b> (yours or the pilot's): the approach simply ends, keeping what it earned so far but without the +40 for landing.</li>
-   <li><b>Penalties</b>: a gap of more than 15 s without a call on final, too steep or too shallow, inaccurate calls. Too low (below the red <b>lower limit</b> line) it crashes and the session fails, so call the go-around early if it gets that low.</li></ul>`],
+   <li><b>Penalties</b>: a gap of more than 5 s without a call on final once you have made your first call (−5 each time), too steep or too shallow, inaccurate calls. Too low (below the red <b>lower limit</b> line) it crashes and the session fails, so call the go-around early if it gets that low.</li></ul>`],
   ['6. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>HOLD TO TALK</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
    <ul><li><b>Best in Chrome or Edge on a computer.</b> Firefox has no speech recognition; Safari and iOS vary. You can always <b>type</b> the same words in the box.</li>
    <li>Chrome's speech recognition <b>needs an internet connection</b>, because the audio goes to Google's speech service.</li>
@@ -2181,7 +2186,7 @@ const TUT_SHIP = {
    <li>Every few seconds: "on course, on glidepath", "slightly above glidepath"… and a <b>range every mile</b>: "four miles", "one and a half miles". At <b>2 miles</b> the pilot reports "<b>Lightning two one, see you</b>" (no reply needed; "roger" is fine).</li>
    <li><b>Sinker:</b> on some approaches the aircraft starts sinking below the glidepath and glidepath calls won't stop it. Only "<b>Low altitude alert, Lightning two one, check your altitude immediately, altimeter two niner niner two</b>" does (pilot: "Lightning two one, climbing.", even after "do not acknowledge"); it then climbs back to the glidepath.</li>
    <li>If you didn't say "wheels should be down" on contact: "<b>check wheels down</b>". No separate landing clearance is needed: the deck call exchange below clears the aircraft to land ("deck is clear, cleared to land spot seven" is still accepted).</li>
-   <li><b>Deck call</b> (required before half a mile): helicopters and Ospreys (MV-22B, CH-53E, AH-1Z, UH-1Y, MH-60S) get "<b>one mile, go green</b>" (pilot: "<b>Going green</b>"). Jets (F-35B, AV-8B) get "<b>three-quarter mile, call the ball</b>" (pilot: "<b>Ball, state four point nine</b>", the fuel state). That reply is the landing clearance: the aircraft may land. "Roger ball" is optional. Pilots make these replies even after "do not acknowledge".</li>
+   <li><b>Deck call</b> (required before half a mile): helicopters (CH-53E, AH-1Z, UH-1Y, MH-60S) get "<b>one mile, go green</b>" (pilot: "<b>Going green</b>"). Jets (F-35B, AV-8B) get "<b>three-quarter mile, call the ball</b>" (pilot: "<b>Ball, state four point nine</b>", the fuel state). That reply is the landing clearance: the aircraft may land. "Roger ball" is optional. Pilots make these replies even after "do not acknowledge".</li>
    <li><b>Practice approaches</b>: at check-in each pilot states an intention: "…for the PAR to the ship, <b>full stop</b>" (FS) or "…<b>request multiple practice PARs</b>" (PRAC; shown in the side panel). A practice aircraft gets no deck call. At <b>one mile</b> instead: jets "<b>one mile, execute climb outs, go blue</b>" (pilot: "Lightning two one, going blue"; climbs to 1,200 ft, left turn to ${hdg3(CLIMB_JET.hdg)}); helicopters "<b>one mile, enter starboard delta, go green</b>" (pilot: "Nighthawk two five, entering starboard delta"; climbs to 1,000 ft, right turn to ${hdg3(CLIMB_HELO.hdg)}). It then comes back around for another approach; after 1–3 practice approaches it checks in with "<b>this will be a full stop</b>" and lands.</li>
    <li>Full stop, inside half a mile: "<b>over the deck</b>", then "<b>contact Tower</b>" (or "Tower has you").</li></ol>
    <p>If you need to wave it off: "<b>wave off, wave off, climb and maintain two thousand, fly base recovery course ${BRC_SAY}</b>". No deck call (or spot clearance) by half a mile means a <b>fouled deck</b> and the pilot waves off.</p>`],
@@ -2201,7 +2206,7 @@ const TUT_SHIP = {
    <li><b>Practice approaches</b>: the right one-mile call for the type ("execute climb outs, go blue" for jets, "enter starboard delta, go green" for helicopters) between 0.6 and 1.4 NM gives +3, and +10 if the aircraft is stable at that point. A completed practice approach counts as a successful approach (+40). A landing call ("call the ball", "go green") to a practice aircraft, or a climb-out/delta call to a full-stop aircraft, is an inaccurate call (-3); the pilot answers "negative, practice approach" / "unable, full stop". No climb-out call by minimums: the pilot climbs out on its own (-5).</li>
    <li><b>Stable at half a mile</b> (both within "slightly") +10. Unstable or not cleared (no deck call: fouled deck) at half a mile means the pilot waves off.</li>
    <li><b>Wave-offs cost no points</b> (called by you or by the pilot: fouled deck, unstable, too high, safety limit, lost comms): the approach simply ends, keeping what it earned so far but without the +40 for getting on deck.</li>
-   <li><b>Penalties</b>: a gap of more than 15 s without a call on final, too steep or too shallow, inaccurate calls. Far too low (below the lower limit) it crashes and the session fails, so call the wave-off early if it gets that low.</li>
+   <li><b>Penalties</b>: a gap of more than 5 s without a call on final once you have made your first call (−5 each time), too steep or too shallow, inaccurate calls. Far too low (below the lower limit) it crashes and the session fails, so call the wave-off early if it gets that low.</li>
    <li><b>Ship turns</b>: +10 for "ninety-nine, mother is in port/starboard turn, standby for new BRC" during the turn (or up to 10 s after) with the right direction, and +10 for "ninety-nine, mother is steady, new BRC is ___" with the right BRC. Wrong direction/BRC scores nothing; no penalties. 99 calls with no turn are not scored.</li></ul>`],
   6: ['7. Phrases the game understands', `<p>Callsigns are tactical callsigns plus a number, spoken digit by digit: "Lightning two one", "Nighthawk one zero two", "Viper four five", "Ridge three one two" (Lightning, Nighthawk, Viper, Venom, Knight, Ridge, Gunfighter, Charger). If you leave the callsign out, the call goes to the selected PAR aircraft. Both ship and tower phrasing are always understood.</p>
    <ul><li>come/turn left/right heading ___ · fly base recovery course ___ · heading ___</li><li>on course · slightly left/right of course · left/right of course · well left/right of course · going left/right of course</li>
