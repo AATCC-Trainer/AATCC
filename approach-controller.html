@@ -1712,6 +1712,7 @@ function fixSpeech(raw) {
   s = s.replace(/\b(?:radar\s+contacts?|radio\s+contact|raider\s+contact|radar\s+can\s+tact)\b/g, 'radar contact');
   s = s.replace(/\bclimb\s+(?:aut|about)\b|\bclimate\b/g, 'climb out').replace(/\bperform\s+(?:landing|landings|lending)\s+(?:check|checks|checking)\b/g, 'perform landing checks');
   s = s.replace(/\b(\d+|zero|one|two|three|four|five|six|seven|eight|nine)\s+point\s+(\d|zero|one|two|three|four|five|six|seven|eight|nine)\b/g, (m, a, b) => `${/\d/.test(a) ? a : NUMW.indexOf(a)}.${/\d/.test(b) ? b : NUMW.indexOf(b)}`);
+  s = s.replace(/\b(?:correct\s*-?\s*ions?|corrections|korrection|correctioned)\b/g, 'correction').replace(/\bcorrection\b\s*[,.;:!-]*/g, ' correction ');
   s = fuzzyCallsigns(s);
   return s.replace(/\s+/g, ' ').trim();
 }
@@ -1759,7 +1760,14 @@ function handleTranscript(text, src) {
   const heard = String(text).trim(); text = fixSpeech(text);
   const sc = shipCallParse(heard) || shipCallParse(text);
   if (sc) { if (src === 'voice') renderTranscript(text, ''); $('parsed').textContent = 'Understood → ' + (sc.k === 'turn' ? `99 mother in ${sc.dir || '?'} turn` : `99 mother steady, BRC ${sc.brc ?? '?'}`); $('parsed').classList.remove('bad'); if (G && !G.over) shipCallExec(sc, heard, src); return { cs: null, cmds: [sc.k], str: JSON.stringify(sc) }; }
+  const cor = splitCorrection(text, known);
+  if (cor) {
+    text = cor.post;
+    if (cor.undoPrev && G && !G.over) undoLastTx(cor.cs);
+    if (!cor.post.trim()) { setHeard(heard, null); if (src === 'voice') renderTranscript(cor.pre + ' correction', ''); $('parsed').textContent = 'Correction: earlier words disregarded, nothing after it.'; $('parsed').classList.add('bad'); if (G && !G.over) log('sys', `Correction: "${cor.pre.trim()}" disregarded.`); return { cs: cor.cs, cmds: [], str: 'disregarded', norm: '' }; }
+  }
   const p = parseSpeech(text, known);
+  if (cor) { if (!p.cs && cor.cs) { p.cs = cor.cs; p.csUnknown = cor.csUnknown; } p.stinger = p.stinger || cor.stinger; if (cor.pre.trim()) { p.raw = String(p.raw || text); if (G && !G.over) log('sys', `Correction: "${cor.pre.trim()}" disregarded.`); } }
   setHeard(heard, p);
   if (src === 'voice') renderTranscript(text, '');
   const pe = $('parsed');
@@ -1768,6 +1776,35 @@ function handleTranscript(text, src) {
   if (G && !G.over) execute(p, src);
   return { cs: p.cs, cmds: p.cmds.map(cmdStr), str: parsedStr(p), norm: p.norm };
 }
+/* 'correction': everything before the LAST "correction" in a transmission is disregarded; the callsign before it carries over.
+   A transmission that starts with "correction" (nothing actionable before it) also undoes the previous transmission to that aircraft if it was within ~10 s. */
+function splitCorrection(text, known) {
+  const re = /\bcorrection\b/g; let m, last = null; while ((m = re.exec(text))) last = m;
+  if (!last) return null;
+  const pre = text.slice(0, last.index), post = text.slice(last.index + last[0].length);
+  // callsign from anywhere before the last correction (the latest one mentioned wins)
+  let cs = null, csUnknown = false, stinger = STINGER_RE.test(pre), preCmds = 0;
+  for (const seg of pre.split(/\bcorrection\b/)) { if (!seg.trim()) continue; try { const q = parseSpeech(seg, known); if (q.cs) { cs = q.cs; csUnknown = q.csUnknown; } } catch (e) {} }
+  try { const first = pre.split(/\bcorrection\b/)[0]; preCmds = first.trim() ? parseSpeech(first, known).cmds.length : 0; } catch (e) {}
+  const undoPrev = !preCmds;   // nothing said before it but (maybe) a callsign: it corrects the previous transmission
+  if (undoPrev && !cs) { try { const q = parseSpeech(post, known); if (q.cs) { cs = q.cs; csUnknown = q.csUnknown; } } catch (e) {} }
+  return { pre, post, cs, csUnknown, stinger, undoPrev };
+}
+const UNDO_FIELDS = ['tgtHdg', 'turnDir', 'tgtAlt', 'tgtSpd', 'sector', 'climbout', 'dirty', 'landChk', 'button', 'needAlt', 'rcDone', 'firstTx', 'tasks', 'pts10'];
+function snapTx(a) { const o = {}; for (const k of UNDO_FIELDS) { const v = a[k]; o[k] = v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v; } return o; }
+function undoLastTx(cs) {
+  const L = G && G.lastTx; if (!L) return false;
+  const a = L.a;
+  if (cs && a.cs !== cs) { log('sys', `Correction: last transmission was to ${a.cs}, not ${cs}; nothing undone.`); return false; }
+  if (G.t - L.t > 10) { log('sys', `Correction: previous transmission to ${a.cs} is too old to undo; applying the new instruction only.`); G.lastTx = null; return false; }
+  if (!alive(a) || L.irreversible) { log('sys', `Correction: previous instruction to ${a.cs} can't be undone (${L.irreversible ? 'frequency change' : 'gone'}).`); G.lastTx = null; return false; }
+  for (const k of UNDO_FIELDS) a[k] = L.snap[k];
+  G.score -= L.dScore;
+  G.lastTx = null;
+  log('sys', `Correction: previous instruction to ${a.cs} cancelled${L.dScore ? ` (score ${L.dScore > 0 ? '−' : '+'}${Math.abs(L.dScore)} reverted)` : ''}.`);
+  refreshPanel(true); return true;
+}
+window.__correction = { splitCorrection, undoLastTx, handle: (t, src) => handleTranscript(t, src || 'voice'), get G() { return G; }, appCtl: a => appCtl(a), isHelo: a => isHelo(a), select: a => selectAc(a) };
 window.__injectTranscript = text => handleTranscript(String(text), 'voice');
 
 const pttBtn = $('ptt');
@@ -2637,6 +2674,7 @@ function appExecute(p, src) {
   if (!p.cmds.length && !p.cs && p.norm.split(/\s+/).filter(w => w.length > 1 && w !== ',').length < 2) { log('sys', `Ignored noise: "${p.raw}"`); return; }
   if (!a.accepted) { log('sys', `${a.cs} not accepted (click its target to accept): no response to "${p.raw.trim()}".`); return; }
   selectAc(a); a.lastTx = G.t;
+  { const snap = snapTx(a), sc0 = G.score, rec = { a, t: G.t, snap, dScore: 0, irreversible: p.cmds.some(c => c.k === 'purple') }; G.lastTx = rec; queueMicrotask(() => { rec.dScore = G.score - sc0; }); }
   log('ctl', `${a.cs}${p.cs ? '' : ' (selected)'}: "${p.raw.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${p.cmds.length ? p.cmds.map(cmdStr).join('; ') : '??'}`);
   if (a.firstTx) { a.firstTx = false; if (p.stinger) award(a, 'cs', 'Stinger Approach'); }   // never penalized
   const rb = [], rbSay = []; let marked = false, secRb = 0;
