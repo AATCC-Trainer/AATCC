@@ -604,8 +604,8 @@ const azDeg = a => Math.atan2(a.yft, (Math.max(0, a.r) + 0.5) * NM_FT) / DEG;
 const classify = (v, on, sl) => Math.abs(v) <= on ? 'on' : Math.abs(v) <= sl ? 'slightly' : 'well';
 
 const TYPES = {
-  F35B:  { ball: 'Lightning', vapp: 130, vmin: 120, vmax: 190, feed: 180 },   // F-35B Lightning II
-  AV8B:  { ball: 'Harrier', vapp: 120, vmin: 115, vmax: 180, feed: 170 },   // AV-8B Harrier II
+  F35B:  { ball: 'Lightning', vapp: 105, vmin: 95, vmax: 190, feed: 160 },   // F-35B Lightning II
+  AV8B:  { ball: 'Harrier', vapp: 100, vmin: 90, vmax: 180, feed: 150 },   // AV-8B Harrier II
   MV22B: { helo: true, vapp: 90, vmin: 80, vmax: 160, feed: 150 },    // MV-22B Osprey (airplane/conversion mode)
   CH53E: { helo: true, vapp: 80, vmin: 70, vmax: 120, feed: 110 },     // CH-53E Super Stallion
   AH1Z:  { helo: true, vapp: 80, vmin: 70, vmax: 120, feed: 110 },     // AH-1Z Viper
@@ -1067,7 +1067,7 @@ function updatePar(a, dt) {
   // ---- speed
   let ts = a.tgtSpd;
   if (a.phase === 'visual' || (a.phase === 'descent' && a.r < 2)) ts = T.vapp;
-  if (OUT_PHASES.includes(a.phase)) ts = Math.max(T.vapp + 20, 160 * (T.vapp > 100 ? 1 : 0.6));
+  if (OUT_PHASES.includes(a.phase)) ts = Math.max(T.vapp + 20, 160 * (!T.helo ? 1 : 0.6));
   if (a.ias !== ts) { const r = 1.5 * dt; a.ias = Math.abs(ts - a.ias) <= r ? ts : a.ias + Math.sign(ts - a.ias) * r; }
   // ---- move
   const w = windVec(), tas = tasOf(a), h = (headingForTrack(tas, a.hdg) - BRC_OFF) * DEG;   // pilot crabs automatically: a.hdg is held as the ground track
@@ -1720,10 +1720,10 @@ let ttsQueued = 0;   // kept for compatibility (pttStart resets it)
 const ttsQ = []; let ttsCur = null, ttsWatch = null;
 const sayLog = [];   // test hook: every pilot reply in order {t, text, routine}
 // Keying the mic silences the pilot. Routine replies are discarded, but priority calls ("see you") are kept
-// (an interrupted one is put back at the front) and spoken as soon as the mic is released.
+// (only ones not yet started; each plays at most once) and spoken as soon as the mic is released.
 function ttsClear() {
-  const cur = ttsCur, keep = ttsQ.filter(x => x.prio);
-  ttsQ.length = 0; if (cur && cur.prio) ttsQ.push(cur); ttsQ.push(...keep);
+  const keep = ttsQ.filter(x => x.prio);   // the utterance already started (ttsCur) is NOT re-queued: it was heard, and re-queuing it made "see you" replay after every transmission
+  ttsQ.length = 0; ttsQ.push(...keep);
   ttsCur = null; clearTimeout(ttsWatch); try { speechSynthesis.cancel(); } catch (e) {}
 }
 let ttsHoldUntil = 0, ttsHoldT = null;   // pause pilot speech ~300 ms after recognition ends (iOS audio session switch)
