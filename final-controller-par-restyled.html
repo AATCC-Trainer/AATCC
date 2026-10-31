@@ -1051,7 +1051,7 @@ function updatePar(a, dt) {
   // ---- lateral steering
   if (a.phase === 'visual' && !a.ng) {   // no-gyro: no auto-steer; only controller turns move the heading
     const vDes = clamp(-a.yft / 12, -30, 30), gsFt = Math.max(60, a.gs) * 1.68781;
-    a.tgtHdg = headingForTrack(tasOf(a), RWY + Math.asin(clamp(vDes / gsFt, -0.5, 0.5)) / DEG); a.turnDir = null;
+    a.tgtHdg = norm(RWY + Math.asin(clamp(vDes / gsFt, -0.5, 0.5)) / DEG) || 360; a.turnDir = null;
   }
   const diff = angDiff(a.tgtHdg, a.hdg);
   if (a.ng) {   // no-gyro: turn only while told to ("turn left/right" ... "stop turn"), standard (3°/s) or half standard (1.5°/s)
@@ -1070,7 +1070,7 @@ function updatePar(a, dt) {
   if (OUT_PHASES.includes(a.phase)) ts = Math.max(T.vapp + 20, 160 * (T.vapp > 100 ? 1 : 0.6));
   if (a.ias !== ts) { const r = 1.5 * dt; a.ias = Math.abs(ts - a.ias) <= r ? ts : a.ias + Math.sign(ts - a.ias) * r; }
   // ---- move
-  const w = windVec(), tas = tasOf(a), h = (a.hdg - BRC_OFF) * DEG;
+  const w = windVec(), tas = tasOf(a), h = (headingForTrack(tas, a.hdg) - BRC_OFF) * DEG;   // pilot crabs automatically: a.hdg is held as the ground track
   const vx = tas * Math.sin(h) + w.x, vy = tas * Math.cos(h) + w.y;
   a.gs = Math.hypot(vx, vy);
   a.r += vx / 3600 * dt;
@@ -1636,7 +1636,7 @@ function suggestCall(a) {
     // azimuth
     const gsFt = Math.max(60, a.gs) * 1.68781;
     const vDes = clamp(-a.yft / 30, -40, 40);
-    let hdg = Math.round(headingForTrack(tasOf(a), RWY + Math.asin(clamp(vDes / gsFt, -0.3, 0.3)) / DEG));   // includes the small wind correction
+    let hdg = Math.round(norm(RWY + Math.asin(clamp(vDes / gsFt, -0.3, 0.3)) / DEG));   // plain heading: pilots hold assigned headings as ground tracks
     if (hdg === 0) hdg = 360;
     const needTurn = Math.abs(angDiff(hdg, a.tgtHdg)) >= 1 && (Math.abs(a.yft) > 40 || Math.abs(a.latRate) > 6);
     const cc = courseCat(a);   // as seen on the azimuth panel
@@ -2237,7 +2237,7 @@ function draw(now) {
 }
 
 // target tick size (px), shared by drawing and the course-call categorizer
-function tickSize() { const k = clamp((L.eh || 362) / 362, 0.6, 1.6); return { TW: Math.max(2, Math.round(3 * k)), TH: Math.round(21 * k) }; }
+function tickSize() { const k = clamp((L.eh || 362) / 362, 0.6, 1.6); return { TW: Math.max(2, Math.round(3 * k)), TH: Math.round(32 * k) }; }
 // Course position exactly as seen on the AZIMUTH panel: d = screen pixels between the course line and the tick centre,
 // h = half the tick length. on: line through the middle; slightly: between middle and end; plain: line at the end of
 // the tick; well: tick clear of the line. EDGE px either side of a boundary accepts both neighbouring calls.
@@ -2264,7 +2264,7 @@ function drawTarget(a, blink) {
   // plain white tick on each panel; no trail, no selection marker (selection is shown in the side panel)
   const X = xr(a.r), YE = ez(a.z), YA = ay(clamp(a.yft, -YMAX, YMAX));
   ctx.fillStyle = C.tgt;
-  const { TW, TH } = tickSize();               // ~3 x 21 px tick at 1280x800, scales with the panel height
+  const { TW, TH } = tickSize();               // ~3 x 32 px tick at 1280x800, scales with the panel height
   const tx = Math.round(X - TW / 2);
   ctx.fillRect(tx, Math.round(YE - TH / 2), TW, TH);
   ctx.fillRect(tx, Math.round(YA - TH / 2), TW, TH);
