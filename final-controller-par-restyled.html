@@ -329,7 +329,10 @@ function normalizeSpeech(raw) {
   s = s.replace(/\bb\s+r\s+c\b/g, 'brc').replace(/\bpri\s+fly\b/g, 'prifly').replace(/\bfoul(?:ed)?\s+deck\b/g, 'fouled deck');
   s = s.replace(/\bwrite\b|\bwright\b/g, 'right').replace(/\bleft\s+of\s+cores\b/g, 'left of course');
   s = s.replace(/\bcent(?:er|re)\s*line\b/g, 'centerline').replace(/\bthresh\s+hold\b/g, 'threshold');
+  // "heading" misheard ("hitting", "heading's", "header in"...): only when a number follows
+  s = s.replace(/\b(?:hitting|heading|hedding|heddings?|headings|header|headers|headed|heating|hiding|heeding|hidden|header\s+in|hit\s+in|head\s+in|had\s+in|hitting\s+in)(?:\s+s)?\s+(?=(?:\d+|zero|oh|one|two|to|too|three|tree|four|for|five|fife|six|seven|eight|nine|niner)\b)/g, 'heading ');
   s = s.replace(/\bheading\s+(?:to|too)\s+(?=\w)/g, 'heading two ');
+  s = s.replace(/\bheading\s+(?:for)\s+(?=(?:\d|zero|one|two|three|tree|four|five|fife|six|seven|eight|nine|niner)\b)/g, 'heading four ');
   s = s.replace(/\bno\s*(?:gyro|gyros|jyro|jiro|giro|gyra|jairo|guyro|gyrus)\b/g, ' no gyro ').replace(/\bp\s+a\s+r\b/g, 'par');
   s = s.replace(/\bsur?v[ae]?[iy]?l+[ae]?n[cs]e\b|\bsurvey\s*(?:lance|ance|lence)\b|\bserv[ae]?l+[ae]n[cs]e\b|\bsurveill?ence\b/g, ' surveillance ').replace(/\ba\s+s\s+r\b/g, 'asr').replace(/\bm\s+d\s+a\b/g, 'mda');   // ASR
   s = s.replace(/\bhalf\s*standard\s*rate\b/g, ' half standard rate ').replace(/\bstandard\s*rate\b/g, 'standard rate');
@@ -357,7 +360,9 @@ function normalizeSpeech(raw) {
     flush(); out.push(t);
   }
   flush();
-  return ' ' + out.join(' ') + ' ';
+  let res = ' ' + out.join(' ') + ' ';
+  res = res.replace(/\bheading (\d) (\d{2})\b/g, 'heading $1$2').replace(/\bheading (\d{2}) (\d)\b/g, 'heading $1$2');   // "two 70", "to 70", "27 0" -> 270
+  return res;
 }
 
 const PHON_RE = Object.keys(PHON).join('|');
@@ -524,7 +529,10 @@ function parseSpeech(raw, known = []) {
   // leftover words (for UI)
   let left = ''; for (let i = 0; i < s.length; i++) left += used[i] ? ' ' : s[i];
   left = left.replace(/\b(runway|27|two seven|18|one eight|and|the|is|this|your|final|controller|approach|at|of|a|to|now|then|you|are|come|ship|deck|fouled|spot|for|landing|stinger|99|\d)\b/g, ' ').replace(/\s+/g, ' ').trim();
-  return { raw, norm: norm0.trim(), cs: csr.cs, csUnknown: csr.unknown, cmds, leftover: left };
+  // "turn right heading <garbled>": heading-like words but no usable number -> not understood (no bare turn), except no-gyro
+  const hdgMissing = !cmds.some(c => c.k === 'hdg') && /\b(?:turn|come)\s+(?:left|right)\b/.test(s) &&
+    /\b(?:heading|hitting|hedding|header|headed|heating|hiding|heeding|hidden|headings?|hit\s+in|head\s+in|had\s+in)\b/.test(norm0);
+  return { raw, norm: norm0.trim(), cs: csr.cs, csUnknown: csr.unknown, cmds, leftover: left, hdgMissing };
 }
 
 function cmdStr(c) {
@@ -1380,6 +1388,11 @@ function execute(p, src) {
   // very short noise with nothing recognized (and no callsign): ignore without a reply
   if (!p.cmds.length && !p.cs && p.norm.split(/\s+/).filter(w => w.length > 1 && w !== ',').length < 2) { log('sys', `Ignored noise: "${p.raw}"`); return; }
   if (!a.ng) { const ngK = ['ngTurn', 'ngStop', 'ngHalf', 'ngStd']; p.cmds = p.cmds.filter(c => !ngK.includes(c.k)); }   // gyro aircraft: as before
+  if (p.hdgMissing && !a.ng) {   // turn with an unreadable heading: no bare turn, pilot asks for the heading again
+    log('sys', `Heading not understood for ${a.cs} (no number heard): "${p.raw}". Say it again.`); Sound.buzz();
+    pilotSay(a, `${a.tel}, say again heading.`, `${a.telSay}, say again heading.`, true, false, false);
+    return;
+  }
   selectAc(a);
   a.contacted = true;
   const silentBefore = a.dna;          // pilots acknowledge every call until "do not acknowledge further transmissions"
