@@ -473,7 +473,23 @@ const PATTERNS = [
   [/\b(?:reduce|increase|maintain|slow)(?:\s+(?:your\s+)?speed)?(?:\s+to)?\s+(\d{2,3})(?:\s+knots)?\b|\bspeed\s+(\d{2,3})(?:\s+knots)?\b|\b(\d{2,3})\s+knots\b/g, m => ({ k: 'spd', v: +(m[1] || m[2] || m[3]) })],
 ];
 
+// "correction": disregard everything said before the LAST "correction" (also "corrections", "correct shun");
+// a callsign said before it still addresses the call when none follows it.
+const CORR_RE = /\bcorrect(?:ions?|\s*-?\s*shun|ed\s+shun)\b[\s,.;:!-]*/gi;
+function splitCorrection(raw) {
+  raw = String(raw); let m, last = null; CORR_RE.lastIndex = 0;
+  while ((m = CORR_RE.exec(raw))) last = m;
+  return last ? { pre: raw.slice(0, last.index), post: raw.slice(last.index + last[0].length) } : null;
+}
+const afterCorrection = raw => { const c = splitCorrection(raw); return c ? c.post : String(raw); };
 function parseSpeech(raw, known = []) {
+  { const c = splitCorrection(raw);
+    if (c) {
+      const p = parseSpeech(c.post, known);
+      if (!p.cs) { const q = parseSpeech(c.pre, known); if (q.cs) { p.cs = q.cs; p.csUnknown = q.csUnknown; } }
+      p.corrected = true; p.fullRaw = String(raw);
+      return p;
+    } }
   const norm0 = normalizeSpeech(raw);
   let s = norm0.replace(/\bheading\s+(\d{3})(\d+)\b/g, 'heading $1 $2');
   const csr = extractCallsign(s, known);
@@ -1913,9 +1929,9 @@ function renderTranscript(fin, inter) {
   $('transcript').innerHTML = (fin || inter) ? `${esc(fin)}<span class="interim">${esc(inter)}</span>` : '<span style="color:var(--dim)">…listening…</span>';
 }
 function handleTranscript(text, src) {
-  const sc = G && !G.over ? shipCall(text) : null;
+  const sc = G && !G.over ? shipCall(afterCorrection(text)) : null;   // "correction": only what follows counts
   if (sc) {
-    if (src === 'voice') renderTranscript(text, '');
+    if (src === 'voice') renderTranscript(afterCorrection(text).trim(), '');
     $('parsed').textContent = 'Understood → 99 ' + (sc.kind === 'steady' ? 'mother steady, BRC ' + (sc.brc != null ? hdg3(sc.brc) : '?') : 'mother in ' + (sc.dir === 'L' ? 'port' : sc.dir === 'R' ? 'starboard' : '?') + ' turn');
     $('parsed').classList.remove('bad');
     shipCallExec(sc);
@@ -1923,7 +1939,7 @@ function handleTranscript(text, src) {
   }
   const known = G ? G.ac.filter(alive).map(a => a.cs) : [];
   const p = parseSpeech(text, known);
-  if (src === 'voice') renderTranscript(text, '');
+  if (src === 'voice') renderTranscript(p.corrected ? afterCorrection(text).trim() : text, '');
   const pe = $('parsed');
   pe.textContent = 'Understood → ' + parsedStr(p);
   pe.classList.toggle('bad', !p.cmds.length || p.csUnknown);
