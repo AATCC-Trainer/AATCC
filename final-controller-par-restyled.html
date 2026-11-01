@@ -105,15 +105,28 @@ table.st td:last-child{text-align:right;color:var(--cyan)}
 #layBar button.on{color:rgb(120,255,140);border-color:rgba(120,255,140,.7);text-shadow:0 0 6px rgba(120,255,140,.6)}
 #app{padding-top:28px}
 body.lay-expand #panel{display:none}
-body.lay-trans #scopeWrap{display:none}
-body.lay-trans #panel{width:100%;border-left:none;border-top:none}
+/* Log mode: narrow docked transcript on the right, scopes fill the rest */
+body.lay-trans{--logw:clamp(260px,24vw,320px)}
+body.lay-trans #app{flex-direction:row}
+body.lay-trans #scopeWrap{flex:1;height:auto;min-width:0}
+body.lay-trans #panel{width:var(--logw);flex:none;border-left:1px solid var(--gdd);border-top:none;padding:5px;gap:5px;overflow:hidden}
 body.lay-trans #panel > *:not(#micBox):not(#log):not(#cmdForm){display:none}
-body.lay-trans #log{max-height:none;font-size:14px}
+body.lay-trans #log{order:1;flex:1;min-height:0;max-height:none;font-size:10.5px;line-height:1.25}
+body.lay-trans #micBox{order:2;padding:4px}
+body.lay-trans #cmdForm{order:3}
+body.lay-trans #panel,body.lay-trans #panel *{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body.lay-trans #ptt{font-size:13px;padding:6px;min-height:0}
+body.lay-trans #micRow,body.lay-trans #transcript,body.lay-trans #parsed{font-size:10.5px}
+body.lay-trans #transcript{min-height:0;margin-top:3px;padding:3px}
+body.lay-trans #cmdInput{font-size:11px;padding:4px;width:100%;box-sizing:border-box}
+body.lay-trans.touchdev #pttBig{left:auto;right:5px;transform:none;width:calc(var(--logw) - 10px);min-height:46px;font-size:13px;bottom:max(6px,env(safe-area-inset-bottom))}
+body.lay-trans.touchdev #panel{padding-bottom:62px}
+@media (max-width:600px){ body.lay-trans{--logw:max(150px,40vw)} }
 @media (max-width:950px){ body.lay-expand #scopeWrap{flex:1;height:auto} }
 </style>
 </head>
 <body>
-<div id="layBar" role="group" aria-label="Layout"><button type="button" data-lay="normal" title="Normal layout">▦ Normal</button><button type="button" data-lay="expand" title="Expand the scopes (hide side panel)">⤢ Scope</button><button type="button" data-lay="trans" title="Transcript only">☰ Log</button></div>
+<div id="layBar" role="group" aria-label="Layout"><button type="button" data-lay="normal" title="Normal layout">▦ Normal</button><button type="button" data-lay="expand" title="Expand the scopes (hide side panel)">⤢ Scope</button><button type="button" data-lay="trans" title="Scopes + narrow transcript log">☰ Log</button></div>
 <div id="app">
   <div id="scopeWrap"><canvas id="scope"></canvas></div>
   <div id="panel">
@@ -2280,10 +2293,11 @@ function setLayout(m) {
   document.body.classList.remove('lay-normal', 'lay-expand', 'lay-trans'); document.body.classList.add('lay-' + m);
   document.querySelectorAll('#layBar button').forEach(b => b.classList.toggle('on', b.dataset.lay === m));
   try { localStorage.setItem(LAY_KEY, m); } catch (e) {}
-  if (m !== 'trans') resize();
+  resize(); requestAnimationFrame(resize);
   const lg = $('log'); if (lg) lg.scrollTop = lg.scrollHeight;
 }
 document.querySelectorAll('#layBar button').forEach(b => b.addEventListener('click', e => { e.preventDefault(); setLayout(b.dataset.lay); b.blur(); }));
+if (window.ResizeObserver) new ResizeObserver(() => resize()).observe($('scopeWrap'));
 try { setLayout(localStorage.getItem(LAY_KEY) || 'normal'); } catch (e) { setLayout('normal'); }
 const xr = r => L.left + (r - RMIN) / (RMAX - RMIN) * L.plotW;
 const ez = z => L.eBot - z / ZMAX * L.eh;
