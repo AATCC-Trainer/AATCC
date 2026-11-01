@@ -1,7 +1,7 @@
 {
   "id": "./approach-controller.html",
-  "name": "Stinger Approach Control",
-  "short_name": "Approach",
+  "name": "Wasp Approach",
+  "short_name": "Wasp Approach",
   "start_url": "./approach-controller.html",
   "scope": "./",
   "display": "standalone",

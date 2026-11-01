@@ -1,7 +1,7 @@
 {
   "id": "./final-controller-par-restyled.html",
-  "name": "Stinger Final Control PAR",
-  "short_name": "Final PAR",
+  "name": "Wasp Final",
+  "short_name": "Wasp Final",
   "start_url": "./final-controller-par-restyled.html",
   "scope": "./",
   "display": "standalone",
