@@ -100,8 +100,9 @@ html,body{background:#030503}
 #panel{border-left-color:#1e3f24}
 .box{background:#071209}
 #ptt{background:#0b2410}
-#layBar{position:fixed;top:6px;right:8px;z-index:60;display:flex;gap:2px;opacity:.55}
-#layBar:hover{opacity:1}
+#layBar{position:fixed;top:0;left:0;right:0;height:26px;padding:2px 8px;z-index:60;display:flex;gap:2px;justify-content:flex-end;align-items:center;background:#030503;border-bottom:1px solid #1e3f24}
+#layBar button{opacity:.7}#layBar button:hover,#layBar button.on{opacity:1}
+@media (min-width:951px){#app{height:calc(100% - 26px);margin-top:26px}}
 #layBar button{min-height:22px;padding:2px 7px;font-size:11px;background:#071209;border-color:#1e3f24}
 #layBar button.on{background:#123f4a;color:var(--cyan);border-color:var(--cyan)}
 @media (max-width:950px){#layBar{display:none}}
@@ -116,7 +117,6 @@ body.lay-transcript #micRow{font-size:10.5px}
 body.lay-transcript #transcript{font-size:12px;min-height:28px}
 body.lay-transcript #parsed,body.lay-transcript #heard{font-size:10.5px}
 body.lay-transcript #log{flex:1;max-height:none;font-size:11px;line-height:1.3}
-body.lay-transcript #layBar{right:298px}
 body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;max-height:30vh;overflow-y:auto}}
 }
 </style>
@@ -680,10 +680,10 @@ function makeLand(seed) {
       const u = i / N, b = th + (u - 0.5) * span * DEG, edge = Math.pow(Math.abs(2 * u - 1), 6) * 9;
       let rr = d + edge + amp * (0.55 * Math.sin(u * 7 + k[0]) + 0.3 * Math.sin(u * 17 + k[1]) + 0.15 * Math.sin(u * 37 + k[2])) + 0.25 * (r() - 0.5);
       rr = Math.max(rr, LAND_CLEAR_NM + 0.4);
-      while (rr < APP_RANGE_L * Math.SQRT2 + 2 && landForbidden(...t2m(Math.sin(b) * rr, Math.cos(b) * rr))) rr += 0.15;
+      while (rr < 45 && landForbidden(...t2m(Math.sin(b) * rr, Math.cos(b) * rr))) rr += 0.15;
       pts.push([Math.sin(b) * rr, Math.cos(b) * rr]);
     }
-    for (let i = N; i >= 0; i -= 10) { const b = th + (i / N - 0.5) * span * DEG; pts.push([Math.sin(b) * 22, Math.cos(b) * 22]); }
+    for (let i = N; i >= 0; i -= 10) { const b = th + (i / N - 0.5) * span * DEG; pts.push([Math.sin(b) * 60, Math.cos(b) * 60]); }   // closes far outside any scope extent
     return pts;
   };
   let best = null;
@@ -692,7 +692,7 @@ function makeLand(seed) {
     for (let c = 0; c < coasts; c++) { const th = c ? th0 + U(110, 180) * (r() < 0.5 ? -1 : 1) : th0, span = c ? U(40, 70) : U(80, 140); polys.push(coastAt(c, th * DEG, U(LAND_CLEAR_NM + 0.8, 10.5), span)); placed++; }
     const nIsl = placed ? Math.floor(U(0, 4)) : Math.floor(U(3, 7));
     for (let k = 0; k < nIsl; k++) for (let tries = 0; tries < 30; tries++) {
-      const b = U(0, 360) * DEG, rad = U(0.4, placed ? 1.3 : 2), d = U(LAND_CLEAR_NM + rad * 1.5, APP_RANGE_L * 1.35), cx = Math.sin(b) * d, cy = Math.cos(b) * d, N = 28, ph = [U(0, 6), U(0, 6), U(0, 6)];
+      const b = U(0, 360) * DEG, rad = U(0.4, placed ? 1.3 : 2), d = U(LAND_CLEAR_NM + rad * 1.5, APP_RANGE_L * 1.7), cx = Math.sin(b) * d, cy = Math.cos(b) * d, N = 28, ph = [U(0, 6), U(0, 6), U(0, 6)];
       const pts = []; for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2, rr = rad * (1 + 0.28 * Math.sin(2 * a + ph[0]) + 0.18 * Math.sin(3 * a + ph[1]) + 0.12 * Math.sin(5 * a + ph[2]) + (r() - 0.5) * 0.25); pts.push([cx + Math.sin(a) * rr, cy + Math.cos(a) * rr]); }
       if (ok(pts)) { polys.push(pts); break; }
     }
@@ -705,21 +705,21 @@ function makeLand(seed) {
   if (typeof G !== 'undefined' && G) G.landSeed = LAND.seed;
   return LAND;
 }
-function landLayer(cx, cy, R, sc) {   // offscreen pre-render, rebuilt only when the land or the scope size changes
+function landLayer(cx, cy, RX, RY, sc) {   // offscreen pre-render, rebuilt only when the land or the scope size changes
   if (!LAND) return null;
-  const key = `${LAND.seed}|${Math.round(R)}|${BRC}|${MV}`; if (LAND.key === key && LAND.cv) return LAND.cv;
-  const S2 = Math.ceil(2 * R), cv = LAND.cv || document.createElement('canvas'); cv.width = cv.height = S2;
-  const c = cv.getContext('2d'), P = (e, n) => [R + e * sc, R - n * sc], PT = (e, n) => P(...t2m(e, n));
-  c.clearRect(0, 0, S2, S2); c.save(); c.beginPath(); c.rect(0, 0, 2 * R, 2 * R); c.clip();
+  const key = `${LAND.seed}|${Math.round(RX)}x${Math.round(RY)}|${sc.toFixed(3)}|${BRC}|${MV}`; if (LAND.key === key && LAND.cv) return LAND.cv;
+  const SW = Math.ceil(2 * RX), SH = Math.ceil(2 * RY), cv = LAND.cv || document.createElement('canvas'); cv.width = SW; cv.height = SH;
+  const c = cv.getContext('2d'), P = (e, n) => [RX + e * sc, RY - n * sc], PT = (e, n) => P(...t2m(e, n));
+  c.clearRect(0, 0, SW, SH); c.save(); c.beginPath(); c.rect(0, 0, SW, SH); c.clip();
   c.beginPath(); for (const poly of LAND.polys) poly.forEach(([e, n], i) => { const [x, y] = PT(e, n); i ? c.lineTo(x, y) : c.moveTo(x, y); }), c.closePath();
   c.fillStyle = 'rgba(90,140,70,0.28)'; c.fill('nonzero');
   c.globalCompositeOperation = 'source-atop';   // speckle only on land
   const rs = mulberry32(LAND.seed ^ 0x9e3779b9);
-  for (let i = 0; i < S2 * S2 / 90; i++) { c.fillStyle = `rgba(150,220,120,${0.05 + rs() * 0.18})`; c.fillRect(rs() * S2, rs() * S2, 1 + rs() * 1.5, 1 + rs() * 1.5); }
+  for (let i = 0; i < SW * SH / 90; i++) { c.fillStyle = `rgba(150,220,120,${0.05 + rs() * 0.18})`; c.fillRect(rs() * SW, rs() * SH, 1 + rs() * 1.5, 1 + rs() * 1.5); }
   c.globalCompositeOperation = 'source-over';
   c.strokeStyle = 'rgba(130,200,110,0.5)'; c.lineWidth = 1.2; c.lineJoin = 'round'; c.stroke();
   c.globalCompositeOperation = 'destination-out';   // safety net: ship area + approach corridor always clear
-  c.beginPath(); c.arc(R, R, LAND_CLEAR_NM * sc, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.arc(RX, RY, LAND_CLEAR_NM * sc, 0, Math.PI * 2); c.fill();
   { const q = [[-2.2, -20], [2.2, -20], [2.2, 20], [-2.2, 20]].map(([le, ln]) => P(...fromLoc(le, ln))); c.beginPath(); q.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fill(); }
   for (const b of [45, 135, 225, 315]) { const [x, y] = P(Math.sin(b * DEG) * LAND_HOLD_NM, Math.cos(b * DEG) * LAND_HOLD_NM); c.beginPath(); c.arc(x, y, 3.2 * sc, 0, Math.PI * 2); c.fill(); }   // sector hold points
   c.restore(); LAND.cv = cv; LAND.key = key; return cv;
@@ -2669,7 +2669,7 @@ function appStep(dt) {
       log('good', `${a.cs} handed to ${SHIP_NAME} Final at ${rng.toFixed(1)} NM, ${fmtAlt(a.alt)} ft (+10). Practice PAR ${a.pars}/${APP_MAX_PARS}${a.pars >= APP_MAX_PARS ? ', full stop' : ''}.`);
       if (a.pars >= APP_MAX_PARS) pilotSay(a, `${SHIP_NAME} Final, ${a.tel}, this will be a full stop.`, `${SHIP_NAME} Final, ${a.telSay}, this will be a full stop.`);
       if (G.selected === a) selectAc(null);
-    } else if (Math.max(Math.abs(a.e), Math.abs(a.n)) > APP_RANGE + 3) {   // square scope: leaves 3 NM beyond any edge
+    } else if (Math.abs(a.e) > (G.viewE || APP_RANGE) + 3 || Math.abs(a.n) > (G.viewN || APP_RANGE) + 3) {   // rectangular scope: leaves 3 NM beyond the displayed edge
       a.phase = 'gone'; a.removeAt = G.t; G.missed++;
       log('warn', `${a.cs} left the airspace at ${Math.round(rng)} NM.`);
     }
@@ -2859,18 +2859,21 @@ function appPanel() {
 /* AATCC-style PPI (SPN-43 air search look): black scope, green phosphor, 4 s sweep, TPX-42 style beacon blocks. Visual only. */
 const PPI = { G: '120,255,140', sweepT: 4000, lastAng: null, scan: null };
 function ppiCol(a) { return `rgba(${PPI.G},${a})`; }
+function appView(w, h) {   // rectangular scope geometry (CSS px): half-extents and px per NM
+  const M = 2, RX = Math.max(10, w / 2 - M), RY = Math.max(10, h / 2 - M);
+  return { RX, RY, sc: Math.min(RX, RY) / APP_RANGE };
+}
 function drawApp(now) {
   now = now || performance.now();
-  const cx = W / 2, cy = H / 2, R = Math.min(W, H) / 2 - 30, sc = R / APP_RANGE;
+  // rectangular scope filling the canvas: ship at the centre, 14 NM to the nearer edge, longer axis shows more range
+  const cx = W / 2, cy = H / 2, { RX, RY, sc } = appView(W, H);
   const P = (e, n) => [cx + e * sc, cy - n * sc];
-  // console / bezel
+  if (G) { G.viewE = RX / sc; G.viewN = RY / sc; }   // scope extents in NM (aircraft-removal bounds)
   ctx.fillStyle = '#0b0d0b'; ctx.fillRect(0, 0, W, H);
-  { const g = ctx.createRadialGradient(cx, cy, R, cx, cy, R * Math.SQRT2 + 34); g.addColorStop(0, '#1b201b'); g.addColorStop(0.5, '#2a302a'); g.addColorStop(1, '#0e110e');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(cx - R - 30, cy - R - 30, 2 * R + 60, 2 * R + 60, 10) : ctx.rect(cx - R - 30, cy - R - 30, 2 * R + 60, 2 * R + 60); ctx.fill(); }
-  const RD = R * Math.SQRT2 + 2;   // square scope: corner distance (sweep/rings reach the corners)
-  ctx.save(); ctx.beginPath(); ctx.rect(cx - R, cy - R, 2 * R, 2 * R); ctx.clip();
-  { const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, RD); g.addColorStop(0, '#031006'); g.addColorStop(1, '#000300'); ctx.fillStyle = g; ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R); }
-  { const L = landLayer(cx, cy, R, sc); if (L) ctx.drawImage(L, cx - R, cy - R); }   // land returns under rings, sweep and targets
+  const RD = Math.hypot(RX, RY) + 2;   // corner distance (sweep/rings reach the corners)
+  ctx.save(); ctx.beginPath(); ctx.rect(cx - RX, cy - RY, 2 * RX, 2 * RY); ctx.clip();
+  { const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, RD); g.addColorStop(0, '#031006'); g.addColorStop(1, '#000300'); ctx.fillStyle = g; ctx.fillRect(cx - RX, cy - RY, 2 * RX, 2 * RY); }
+  { const L = landLayer(cx, cy, RX, RY, sc); if (L) ctx.drawImage(L, cx - RX, cy - RY); }   // land returns under rings, sweep and targets
   // sweep (clockwise from north) + afterglow wedge
   const ang = (now % PPI.sweepT) / PPI.sweepT * 360, prev = PPI.lastAng == null ? ang : PPI.lastAng; PPI.lastAng = ang;
   const toC = d => (d - 90) * DEG;
@@ -2885,7 +2888,7 @@ function drawApp(now) {
     ctx.strokeStyle = ppiCol(major ? 0.32 : 0.13); ctx.beginPath(); ctx.arc(cx, cy, r * sc, 0, Math.PI * 2); ctx.stroke();
   }
   // final course: faint dashed reciprocal of BRC with 2 NM ticks
-  const rec = (BRC + 180) * DEG, EDGE = APP_RANGE / Math.max(Math.abs(Math.sin(rec)), Math.abs(Math.cos(rec))), E = P(Math.sin(rec) * EDGE, Math.cos(rec) * EDGE);
+  const rec = (BRC + 180) * DEG, EDGE = Math.min(RX / Math.max(Math.abs(Math.sin(rec)), 1e-9), RY / Math.max(Math.abs(Math.cos(rec)), 1e-9)) / sc, E = P(Math.sin(rec) * EDGE, Math.cos(rec) * EDGE);
   ctx.strokeStyle = ppiCol(0.35); ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(E[0], E[1]); ctx.stroke(); ctx.setLineDash([]);
   for (let m = 2; m < EDGE; m += 2) { const T = P(Math.sin(rec) * m, Math.cos(rec) * m), px = Math.cos(rec) * 4, py = Math.sin(rec) * 4; ctx.beginPath(); ctx.moveTo(T[0] - px, T[1] - py); ctx.lineTo(T[0] + px, T[1] + py); ctx.stroke(); }
   ctx.textAlign = 'left';
@@ -2909,16 +2912,17 @@ function drawApp(now) {
     ctx.strokeStyle = g; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.sin(ang * DEG) * RD, cy - Math.cos(ang * DEG) * RD); ctx.stroke(); ctx.lineWidth = 1; }
   // scan lines (cheap cached pattern)
   if (!PPI.scan) { const c2 = document.createElement('canvas'); c2.width = 4; c2.height = 3; const x2 = c2.getContext('2d'); x2.fillStyle = 'rgba(0,0,0,0.28)'; x2.fillRect(0, 0, 4, 1); PPI.scan = ctx.createPattern(c2, 'repeat'); }
-  ctx.fillStyle = PPI.scan; ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+  ctx.fillStyle = PPI.scan; ctx.fillRect(cx - RX, cy - RY, 2 * RX, 2 * RY);
   ctx.restore();
   // azimuth ring on the bezel: ticks every 5 deg (10 longer), labels every 30
-  ctx.strokeStyle = ppiCol(0.75); ctx.lineWidth = 1.5; ctx.strokeRect(cx - R, cy - R, 2 * R, 2 * R); ctx.lineWidth = 1;
+  ctx.strokeStyle = ppiCol(0.75); ctx.lineWidth = 1.5; ctx.strokeRect(cx - RX, cy - RY, 2 * RX, 2 * RY); ctx.lineWidth = 1;
   ctx.font = FONT(11); ctx.textAlign = 'center';
-  for (let d = 0; d < 360; d += 5) {   // bearing ticks where each radial meets the square edge, pointing straight out of that edge
-    const s1 = Math.sin(d * DEG), c1 = Math.cos(d * DEG), l = d % 10 ? 4 : 8, k = R / Math.max(Math.abs(s1), Math.abs(c1));
-    const ex = cx + s1 * k, ey = cy - c1 * k, side = Math.abs(s1) > Math.abs(c1) + 1e-9, nx = side ? Math.sign(s1) : 0, ny = side ? 0 : -Math.sign(c1);
-    ctx.strokeStyle = ppiCol(d % 10 ? 0.4 : 0.7); ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex + nx * l, ey + ny * l); ctx.stroke();
-    if (d % 30 === 0) { ctx.fillStyle = ppiCol(0.8); ctx.fillText(String(d).padStart(3, '0'), ex + nx * (side ? 20 : 19), ey + ny * 19 + 4); }
+  for (let d = 0; d < 360; d += 5) {   // bearing ticks where each radial meets the rectangle edge, pointing inward; labels just inside the edge
+    const s1 = Math.sin(d * DEG), c1 = Math.cos(d * DEG), l = d % 10 ? 4 : 8;
+    const kx = Math.abs(s1) > 1e-9 ? RX / Math.abs(s1) : Infinity, ky = Math.abs(c1) > 1e-9 ? RY / Math.abs(c1) : Infinity, k = Math.min(kx, ky);
+    const ex = cx + s1 * k, ey = cy - c1 * k, side = kx < ky, nx = side ? Math.sign(s1) : 0, ny = side ? 0 : -Math.sign(c1);
+    ctx.strokeStyle = ppiCol(d % 10 ? 0.4 : 0.7); ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex - nx * l, ey - ny * l); ctx.stroke();
+    if (d % 30 === 0) { ctx.fillStyle = ppiCol(0.8); ctx.fillText(String(d).padStart(3, '0'), Math.max(cx - RX + 22, Math.min(cx + RX - 22, ex - nx * 24)), Math.max(cy - RY + 22, Math.min(cy + RY - 14, ey - ny * 20 + 4))); }
   }
   if (!G) { ctx.textAlign = 'left'; return; }
   // TPX-42 style beacon data blocks (computer generated: live position, no fade)
@@ -2984,7 +2988,7 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
 (function () {
   const canvas = document.getElementById('scope');
   const wrap = document.getElementById('scopeWrap'), ib = document.getElementById('infoBlk'), tb = document.getElementById('tbBlk');
-  const geo = () => { const w = canvas.clientWidth, h = canvas.clientHeight; const R = Math.min(w, h) / 2 - 30; return { w, h, cx: w / 2, cy: h / 2, R, sc: R / APP_RANGE }; };
+  const geo = () => { const w = canvas.clientWidth, h = canvas.clientHeight; const v = appView(w, h); return { w, h, cx: w / 2, cy: h / 2, RX: v.RX, RY: v.RY, sc: v.sc }; };
   const clamp = (el, x, y) => { const w = wrap.clientWidth, h = wrap.clientHeight; return [Math.max(0, Math.min(w - el.offsetWidth, x)), Math.max(0, Math.min(h - el.offsetHeight, y))]; };
   const place = (el, key, def) => { let p = null; try { p = JSON.parse(localStorage.getItem(key)); } catch (e) {} if (!p || !isFinite(p.x) || !isFinite(p.y) || p.x < 0 || p.y < 0 || p.x > wrap.clientWidth || p.y > wrap.clientHeight) p = def(); const [x, y] = clamp(el, p.x, p.y); el.style.left = x + 'px'; el.style.top = y + 'px'; };
   const defs = { infoBlk: () => ({ x: 10, y: 8 }), tbBlk: () => ({ x: 10, y: wrap.clientHeight - tb.offsetHeight - 8 }) };
@@ -3005,7 +3009,7 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   const dm = (v, pos, neg, w) => { const h = v >= 0 ? pos : neg; v = Math.abs(v); let d = Math.floor(v), m = Math.round((v - d) * 600) / 10; if (m >= 60) { d++; m = 0; } return h + String(d).padStart(w, '0') + ' ' + m.toFixed(1).padStart(4, '0'); };
   canvas.addEventListener('pointermove', e => {
     const r = canvas.getBoundingClientRect(), g = geo(), x = e.clientX - r.left - g.cx, y = e.clientY - r.top - g.cy;
-    if (Math.max(Math.abs(x), Math.abs(y)) > g.R) { tb.textContent = dash; return; }   // square scope
+    if (Math.abs(x) > g.RX || Math.abs(y) > g.RY) { tb.textContent = dash; return; }   // rectangular scope
     const east = x / g.sc, north = -y / g.sc, [eT, nT] = rotB(east, north, MV);   // screen is magnetic-up; lat/long needs true
     const lat = SHIP_LAT + nT / 60, lon = SHIP_LON + eT / (60 * Math.cos(SHIP_LAT * Math.PI / 180));
     let brg = Math.round(Math.atan2(east, north) * 180 / Math.PI); brg = ((brg % 360) + 360) % 360; if (brg === 0) brg = 360;
