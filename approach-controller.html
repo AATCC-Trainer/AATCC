@@ -644,16 +644,16 @@ const pip = (x, y, p) => { let c = false; for (let i = 0, j = p.length - 1; i < 
 function landStats(polys) {   // grid sample inside the scope (true frame): area fraction, min range, bearing coverage, any forbidden hit
   const S = 1.4 * APP_RANGE_L / 40; let tot = 0, land = 0, minR = 99, bad = false; const bins = new Array(72).fill(0);
   for (let x = -APP_RANGE_L; x <= APP_RANGE_L; x += S) for (let y = -APP_RANGE_L; y <= APP_RANGE_L; y += S) {
-    const rr = Math.hypot(x, y); if (rr > APP_RANGE_L) continue; tot++;
+    const rr = Math.hypot(x, y); tot++;   // square scope: whole square sampled
     if (!polys.some(p => pip(x, y, p)) || landForbidden(...t2m(x, y))) continue;   // water areas are carved out of the land when drawn
     land++; minR = Math.min(minR, rr); bins[Math.floor(norm(Math.atan2(x, y) / DEG) / 5) % 72] = 1;
   }
   return { frac: land / tot, minR, brg: bins.reduce((s, v) => s + v, 0) / 72, bad };
 }
-const APP_RANGE_L = 14;   // scope radius (same as APP_RANGE)
+const APP_RANGE_L = 14;   // scope half-width (square scope, edges at 14 NM; corners ~19.8 NM)
 function makeLand(seed) {
   const r = mulberry32(seed >>> 0), U = (a, b) => a + (b - a) * r();
-  const ok = pts => pts.every(([e, n]) => !landForbidden(...t2m(e, n)) || Math.hypot(e, n) > APP_RANGE_L + 0.5);
+  const ok = pts => pts.every(([e, n]) => !landForbidden(...t2m(e, n)) || Math.max(Math.abs(e), Math.abs(n)) > APP_RANGE_L + 0.5);
   const mpd = (a, b, depth, rough) => {   // midpoint displacement between two points
     let pts = [a, b];
     for (let d = 0; d < depth; d++) { const nx = [pts[0]];
@@ -668,7 +668,7 @@ function makeLand(seed) {
       const u = i / N, b = th + (u - 0.5) * span * DEG, edge = Math.pow(Math.abs(2 * u - 1), 6) * 9;
       let rr = d + edge + amp * (0.55 * Math.sin(u * 7 + k[0]) + 0.3 * Math.sin(u * 17 + k[1]) + 0.15 * Math.sin(u * 37 + k[2])) + 0.25 * (r() - 0.5);
       rr = Math.max(rr, LAND_CLEAR_NM + 0.4);
-      while (rr < APP_RANGE_L + 2 && landForbidden(...t2m(Math.sin(b) * rr, Math.cos(b) * rr))) rr += 0.15;
+      while (rr < APP_RANGE_L * Math.SQRT2 + 2 && landForbidden(...t2m(Math.sin(b) * rr, Math.cos(b) * rr))) rr += 0.15;
       pts.push([Math.sin(b) * rr, Math.cos(b) * rr]);
     }
     for (let i = N; i >= 0; i -= 10) { const b = th + (i / N - 0.5) * span * DEG; pts.push([Math.sin(b) * 22, Math.cos(b) * 22]); }
@@ -680,7 +680,7 @@ function makeLand(seed) {
     for (let c = 0; c < coasts; c++) { const th = c ? th0 + U(110, 180) * (r() < 0.5 ? -1 : 1) : th0, span = c ? U(40, 70) : U(80, 140); polys.push(coastAt(c, th * DEG, U(LAND_CLEAR_NM + 0.8, 10.5), span)); placed++; }
     const nIsl = placed ? Math.floor(U(0, 4)) : Math.floor(U(3, 7));
     for (let k = 0; k < nIsl; k++) for (let tries = 0; tries < 30; tries++) {
-      const b = U(0, 360) * DEG, rad = U(0.4, placed ? 1.3 : 2), d = U(LAND_CLEAR_NM + rad * 1.5, APP_RANGE_L + 1), cx = Math.sin(b) * d, cy = Math.cos(b) * d, N = 28, ph = [U(0, 6), U(0, 6), U(0, 6)];
+      const b = U(0, 360) * DEG, rad = U(0.4, placed ? 1.3 : 2), d = U(LAND_CLEAR_NM + rad * 1.5, APP_RANGE_L * 1.35), cx = Math.sin(b) * d, cy = Math.cos(b) * d, N = 28, ph = [U(0, 6), U(0, 6), U(0, 6)];
       const pts = []; for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2, rr = rad * (1 + 0.28 * Math.sin(2 * a + ph[0]) + 0.18 * Math.sin(3 * a + ph[1]) + 0.12 * Math.sin(5 * a + ph[2]) + (r() - 0.5) * 0.25); pts.push([cx + Math.sin(a) * rr, cy + Math.cos(a) * rr]); }
       if (ok(pts)) { polys.push(pts); break; }
     }
@@ -698,7 +698,7 @@ function landLayer(cx, cy, R, sc) {   // offscreen pre-render, rebuilt only when
   const key = `${LAND.seed}|${Math.round(R)}|${BRC}|${MV}`; if (LAND.key === key && LAND.cv) return LAND.cv;
   const S2 = Math.ceil(2 * R), cv = LAND.cv || document.createElement('canvas'); cv.width = cv.height = S2;
   const c = cv.getContext('2d'), P = (e, n) => [R + e * sc, R - n * sc], PT = (e, n) => P(...t2m(e, n));
-  c.clearRect(0, 0, S2, S2); c.save(); c.beginPath(); c.arc(R, R, R, 0, Math.PI * 2); c.clip();
+  c.clearRect(0, 0, S2, S2); c.save(); c.beginPath(); c.rect(0, 0, 2 * R, 2 * R); c.clip();
   c.beginPath(); for (const poly of LAND.polys) poly.forEach(([e, n], i) => { const [x, y] = PT(e, n); i ? c.lineTo(x, y) : c.moveTo(x, y); }), c.closePath();
   c.fillStyle = 'rgba(90,140,70,0.28)'; c.fill('nonzero');
   c.globalCompositeOperation = 'source-atop';   // speckle only on land
@@ -2652,7 +2652,7 @@ function appStep(dt) {
       log('good', `${a.cs} handed to ${SHIP_NAME} Final at ${rng.toFixed(1)} NM, ${fmtAlt(a.alt)} ft (+10). Practice PAR ${a.pars}/${APP_MAX_PARS}${a.pars >= APP_MAX_PARS ? ', full stop' : ''}.`);
       if (a.pars >= APP_MAX_PARS) pilotSay(a, `${SHIP_NAME} Final, ${a.tel}, this will be a full stop.`, `${SHIP_NAME} Final, ${a.telSay}, this will be a full stop.`);
       if (G.selected === a) selectAc(null);
-    } else if (rng > APP_RANGE + 3) {
+    } else if (Math.max(Math.abs(a.e), Math.abs(a.n)) > APP_RANGE + 3) {   // square scope: leaves 3 NM beyond any edge
       a.phase = 'gone'; a.removeAt = G.t; G.missed++;
       log('warn', `${a.cs} left the airspace at ${Math.round(rng)} NM.`);
     }
@@ -2831,28 +2831,29 @@ function drawApp(now) {
   const P = (e, n) => [cx + e * sc, cy - n * sc];
   // console / bezel
   ctx.fillStyle = '#0b0d0b'; ctx.fillRect(0, 0, W, H);
-  { const g = ctx.createRadialGradient(cx, cy, R, cx, cy, R + 34); g.addColorStop(0, '#1b201b'); g.addColorStop(0.5, '#2a302a'); g.addColorStop(1, '#0e110e');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R + 30, 0, Math.PI * 2); ctx.fill(); }
-  ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
-  { const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R); g.addColorStop(0, '#031006'); g.addColorStop(1, '#000300'); ctx.fillStyle = g; ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R); }
+  { const g = ctx.createRadialGradient(cx, cy, R, cx, cy, R * Math.SQRT2 + 34); g.addColorStop(0, '#1b201b'); g.addColorStop(0.5, '#2a302a'); g.addColorStop(1, '#0e110e');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(cx - R - 30, cy - R - 30, 2 * R + 60, 2 * R + 60, 10) : ctx.rect(cx - R - 30, cy - R - 30, 2 * R + 60, 2 * R + 60); ctx.fill(); }
+  const RD = R * Math.SQRT2 + 2;   // square scope: corner distance (sweep/rings reach the corners)
+  ctx.save(); ctx.beginPath(); ctx.rect(cx - R, cy - R, 2 * R, 2 * R); ctx.clip();
+  { const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, RD); g.addColorStop(0, '#031006'); g.addColorStop(1, '#000300'); ctx.fillStyle = g; ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R); }
   { const L = landLayer(cx, cy, R, sc); if (L) ctx.drawImage(L, cx - R, cy - R); }   // land returns under rings, sweep and targets
   // sweep (clockwise from north) + afterglow wedge
   const ang = (now % PPI.sweepT) / PPI.sweepT * 360, prev = PPI.lastAng == null ? ang : PPI.lastAng; PPI.lastAng = ang;
   const toC = d => (d - 90) * DEG;
   for (let k = 0; k < 24; k++) {
     const a0 = ang - (k + 1) * 3, a1 = ang - k * 3;
-    ctx.fillStyle = ppiCol(0.16 * Math.pow(1 - k / 24, 2)); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, toC(a0), toC(a1)); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = ppiCol(0.16 * Math.pow(1 - k / 24, 2)); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, RD, toC(a0), toC(a1)); ctx.closePath(); ctx.fill();
   }
   // range rings every 2 NM (10/20 brighter, labelled)
   ctx.lineWidth = 1; ctx.font = FONT(11); ctx.textAlign = 'center';
-  for (let r = 2; r <= APP_RANGE; r += 2) {
+  for (let r = 2; r * sc <= RD; r += 2) {   // circles clipped to the square, out into the corners
     const major = r % 10 === 0 || r === APP_RANGE;   // 10 and the outer ring slightly brighter; no numeric labels
     ctx.strokeStyle = ppiCol(major ? 0.32 : 0.13); ctx.beginPath(); ctx.arc(cx, cy, r * sc, 0, Math.PI * 2); ctx.stroke();
   }
   // final course: faint dashed reciprocal of BRC with 2 NM ticks
-  const rec = (BRC + 180) * DEG, E = P(Math.sin(rec) * APP_RANGE, Math.cos(rec) * APP_RANGE);
+  const rec = (BRC + 180) * DEG, EDGE = APP_RANGE / Math.max(Math.abs(Math.sin(rec)), Math.abs(Math.cos(rec))), E = P(Math.sin(rec) * EDGE, Math.cos(rec) * EDGE);
   ctx.strokeStyle = ppiCol(0.35); ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(E[0], E[1]); ctx.stroke(); ctx.setLineDash([]);
-  for (let m = 2; m < APP_RANGE; m += 2) { const T = P(Math.sin(rec) * m, Math.cos(rec) * m), px = Math.cos(rec) * 4, py = Math.sin(rec) * 4; ctx.beginPath(); ctx.moveTo(T[0] - px, T[1] - py); ctx.lineTo(T[0] + px, T[1] + py); ctx.stroke(); }
+  for (let m = 2; m < EDGE; m += 2) { const T = P(Math.sin(rec) * m, Math.cos(rec) * m), px = Math.cos(rec) * 4, py = Math.sin(rec) * 4; ctx.beginPath(); ctx.moveTo(T[0] - px, T[1] - py); ctx.lineTo(T[0] + px, T[1] + py); ctx.stroke(); }
   ctx.textAlign = 'left';
   // ship at centre, bow down the BRC
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(BRC * DEG); ctx.fillStyle = ppiCol(0.9);
@@ -2870,19 +2871,20 @@ function drawApp(now) {
     ctx.fillStyle = ppiCol(0.95 * al); ctx.beginPath(); ctx.arc(Q[0], Q[1], 2.6, 0, Math.PI * 2); ctx.fill();
   }
   // sweep line
-  { const g = ctx.createLinearGradient(cx, cy, cx + Math.sin(ang * DEG) * R, cy - Math.cos(ang * DEG) * R); g.addColorStop(0, ppiCol(0.3)); g.addColorStop(1, ppiCol(0.95));
-    ctx.strokeStyle = g; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.sin(ang * DEG) * R, cy - Math.cos(ang * DEG) * R); ctx.stroke(); ctx.lineWidth = 1; }
+  { const g = ctx.createLinearGradient(cx, cy, cx + Math.sin(ang * DEG) * RD, cy - Math.cos(ang * DEG) * RD); g.addColorStop(0, ppiCol(0.3)); g.addColorStop(1, ppiCol(0.95));
+    ctx.strokeStyle = g; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.sin(ang * DEG) * RD, cy - Math.cos(ang * DEG) * RD); ctx.stroke(); ctx.lineWidth = 1; }
   // scan lines (cheap cached pattern)
   if (!PPI.scan) { const c2 = document.createElement('canvas'); c2.width = 4; c2.height = 3; const x2 = c2.getContext('2d'); x2.fillStyle = 'rgba(0,0,0,0.28)'; x2.fillRect(0, 0, 4, 1); PPI.scan = ctx.createPattern(c2, 'repeat'); }
   ctx.fillStyle = PPI.scan; ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
   ctx.restore();
   // azimuth ring on the bezel: ticks every 5 deg (10 longer), labels every 30
-  ctx.strokeStyle = ppiCol(0.75); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;
+  ctx.strokeStyle = ppiCol(0.75); ctx.lineWidth = 1.5; ctx.strokeRect(cx - R, cy - R, 2 * R, 2 * R); ctx.lineWidth = 1;
   ctx.font = FONT(11); ctx.textAlign = 'center';
-  for (let d = 0; d < 360; d += 5) {
-    const s1 = Math.sin(d * DEG), c1 = Math.cos(d * DEG), l = d % 10 ? 4 : 8;
-    ctx.strokeStyle = ppiCol(d % 10 ? 0.4 : 0.7); ctx.beginPath(); ctx.moveTo(cx + s1 * R, cy - c1 * R); ctx.lineTo(cx + s1 * (R + l), cy - c1 * (R + l)); ctx.stroke();
-    if (d % 30 === 0) { ctx.fillStyle = ppiCol(0.8); ctx.fillText(String(d).padStart(3, '0'), cx + s1 * (R + 19), cy - c1 * (R + 19) + 4); }
+  for (let d = 0; d < 360; d += 5) {   // bearing ticks where each radial meets the square edge, pointing straight out of that edge
+    const s1 = Math.sin(d * DEG), c1 = Math.cos(d * DEG), l = d % 10 ? 4 : 8, k = R / Math.max(Math.abs(s1), Math.abs(c1));
+    const ex = cx + s1 * k, ey = cy - c1 * k, side = Math.abs(s1) > Math.abs(c1) + 1e-9, nx = side ? Math.sign(s1) : 0, ny = side ? 0 : -Math.sign(c1);
+    ctx.strokeStyle = ppiCol(d % 10 ? 0.4 : 0.7); ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex + nx * l, ey + ny * l); ctx.stroke();
+    if (d % 30 === 0) { ctx.fillStyle = ppiCol(0.8); ctx.fillText(String(d).padStart(3, '0'), ex + nx * (side ? 20 : 19), ey + ny * 19 + 4); }
   }
   if (!G) { ctx.textAlign = 'left'; return; }
   // TPX-42 style beacon data blocks (computer generated: live position, no fade)
@@ -2968,7 +2970,7 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   const dm = (v, pos, neg, w) => { const h = v >= 0 ? pos : neg; v = Math.abs(v); let d = Math.floor(v), m = Math.round((v - d) * 600) / 10; if (m >= 60) { d++; m = 0; } return h + String(d).padStart(w, '0') + ' ' + m.toFixed(1).padStart(4, '0'); };
   canvas.addEventListener('pointermove', e => {
     const r = canvas.getBoundingClientRect(), g = geo(), x = e.clientX - r.left - g.cx, y = e.clientY - r.top - g.cy;
-    if (Math.hypot(x, y) > g.R) { tb.textContent = dash; return; }
+    if (Math.max(Math.abs(x), Math.abs(y)) > g.R) { tb.textContent = dash; return; }   // square scope
     const east = x / g.sc, north = -y / g.sc, [eT, nT] = rotB(east, north, MV);   // screen is magnetic-up; lat/long needs true
     const lat = SHIP_LAT + nT / 60, lon = SHIP_LON + eT / (60 * Math.cos(SHIP_LAT * Math.PI / 180));
     let brg = Math.round(Math.atan2(east, north) * 180 / Math.PI); brg = ((brg % 360) + 360) % 360; if (brg === 0) brg = 360;
