@@ -227,6 +227,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
     <div class="set"><label for="sRate">Pilot speaking rate</label><input type="range" id="sRate" min="0.8" max="1.5" step="0.05"></div>
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
     <div class="set"><label for="sSweep">Radar scan line</label><input type="checkbox" id="sSweep" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sServo" title="Tap a scope to latch the servo, hold for momentary. While servoing either scope, the servoed aircraft shows on both scopes. Off: targets always show on both.">Servo mode</label><input type="checkbox" id="sServo" style="width:22px;height:22px"></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
     <div id="setInfo" class="note" style="color:var(--dim)"></div>
   </div>
@@ -528,6 +529,7 @@ function splitCorrection(raw) {
   return last ? { pre: raw.slice(0, last.index), post: raw.slice(last.index + last[0].length) } : null;
 }
 const afterCorrection = raw => { const c = splitCorrection(raw); return c ? c.post : String(raw); };
+const TRAFFIC_RE = /^[\s,.;:!?-]*(?:traffics?|trafic|trafics|traffick?|traffik|trafficks)\b/;   // first word after the callsign (common mishearings too)
 function parseSpeech(raw, known = []) {
   { const c = splitCorrection(raw);
     if (c) {
@@ -540,6 +542,8 @@ function parseSpeech(raw, known = []) {
   let s = norm0.replace(/\bheading\s+(\d{3})(\d+)\b/g, 'heading $1 $2');
   const csr = extractCallsign(s, known);
   s = csr.s;
+  // traffic advisory ("<callsign>, traffic, ..."): information only. Nothing in it is a command; the pilot just reports tally-ho.
+  if (TRAFFIC_RE.test(s)) return { raw, norm: norm0.trim(), cs: csr.cs, csUnknown: csr.unknown, cmds: [], leftover: '', hdgMissing: false, traffic: true };
   const used = new Array(s.length).fill(false);
   const found = [];
   for (const [re, fn] of PATTERNS) {
@@ -622,7 +626,7 @@ function cmdStr(c) {
   }
   return c.k;
 }
-function parsedStr(p) { return (p.cs ? p.cs + (p.csUnknown ? '?' : '') + ': ' : '') + (p.cmds.length ? p.cmds.map(cmdStr).join('; ') : 'NOT UNDERSTOOD'); }
+function parsedStr(p) { if (p.traffic) return (p.cs ? p.cs + (p.csUnknown ? '?' : '') + ': ' : '') + 'TRAFFIC (advisory, no action)'; return (p.cs ? p.cs + (p.csUnknown ? '?' : '') + ': ' : '') + (p.cmds.length ? p.cmds.map(cmdStr).join('; ') : 'NOT UNDERSTOOD'); }
 
 /* ===================== PAR geometry ===================== */
 const NM_FT = 6076.12;
@@ -1431,7 +1435,7 @@ function execute(p, src) {
   } else a = onPar.length ? defaultTarget() : null;
   if (!a) { log('sys', `No aircraft on PAR final right now${G.gateAt > G.t ? ` (next in ${Math.ceil(G.gateAt - G.t)} s)` : ''}; nobody answers. Heard: "${p.raw}"`); return; }
   // very short noise with nothing recognized (and no callsign): ignore without a reply
-  if (!p.cmds.length && !p.cs && p.norm.split(/\s+/).filter(w => w.length > 1 && w !== ',').length < 2) { log('sys', `Ignored noise: "${p.raw}"`); return; }
+  if (!p.cmds.length && !p.cs && !p.traffic && p.norm.split(/\s+/).filter(w => w.length > 1 && w !== ',').length < 2) { log('sys', `Ignored noise: "${p.raw}"`); return; }
   if (!a.ng) { const ngK = ['ngTurn', 'ngStop', 'ngHalf', 'ngStd']; p.cmds = p.cmds.filter(c => !ngK.includes(c.k)); }   // gyro aircraft: as before
   if (!a.contacted && a.startR == null) a.startR = a.r;   // start of the controller's talk-down: mile-call penalties count from here
   a.contacted = true;
@@ -1443,7 +1447,11 @@ function execute(p, src) {
   selectAc(a);
   const silentBefore = a.dna;          // pilots acknowledge every call until "do not acknowledge further transmissions"
   a.lastTx = G.t; a.lastRealTx = G.t;
-  log('ctl', `${a.cs}${p.cs ? '' : ' (selected)'}: "${p.raw.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${p.cmds.length ? p.cmds.map(cmdStr).join('; ') : '??'}`);
+  log('ctl', `${a.cs}${p.cs ? '' : ' (selected)'}: "${p.raw.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${p.traffic ? 'traffic advisory' : p.cmds.length ? p.cmds.map(cmdStr).join('; ') : '??'}`);
+  if (p.traffic) {   // counts as a transmission (silence timer reset above); no action, no grading; pilot reports tally-ho once
+    pilotSay(a, `${a.tel}, tally-ho.`, `${a.telSay}, tally ho.`);
+    return;
+  }
   if (!p.cmds.length) {
     if (!silentBefore) pilotSay(a, `Say again, ${a.tel}.`, `Say again, ${a.telSay}.`);
     else log('sys', `Not understood, and ${a.cs} won't reply (told not to acknowledge). Try again.`);
@@ -1775,7 +1783,7 @@ function suggestCall(a) {
 
 /* ===================== settings & sound ===================== */
 const SETTINGS_KEY = 'fcpar_settings_v1';
-const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', sweep: true };
+const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', sweep: true, servo: true };
 try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) {}
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) {} };
 
@@ -1960,7 +1968,7 @@ function ngLiveTarget(p) {
 function ngLive(u, text) {
   if (!u || u.done || !G || G.over || !String(text).trim()) return;
   let p; try { p = parseSpeech(String(text), G.ac.filter(alive).map(a => a.cs)); } catch (e) { return; }
-  const ng = p.cmds.filter(c => c.k === 'ngTurn' || c.k === 'ngStop');
+  const ng = p.traffic ? [] : p.cmds.filter(c => c.k === 'ngTurn' || c.k === 'ngStop');   // traffic advisory: never a turn
   if (!ng.length) { if (u.ngLive) { u.ngLive.a.ngTurn = u.ngLive.prev; u.ngLive = null; } return; }   // revised interim dropped the turn/stop words
   const a = ngLiveTarget(p);
   if (!a || !a.ng || a.phase === 'visual' || a.phase === 'landed') return;
@@ -1978,7 +1986,7 @@ function ngLiveSettle(u, text) {   // final transcript has no no-gyro turn/stop 
 function finishUtterance(id) {
   if (!curUtter || curUtter.id !== id || curUtter.done) return;
   curUtter.done = true;
-  const text = (curUtter.final + ' ' + curUtter.interim).trim();
+  const text = (curUtter.final.trim() || curUtter.interim).trim();   // the final result only (interim is a fallback if the recognizer never finalized)
   if (micState !== 'error') setMic('idle', 'Mic ready: hold SPACE or the button and talk.');
   ngLiveSettle(curUtter, text);
   if (!text) { $('parsed').textContent = 'Heard nothing.'; return; }
@@ -2001,7 +2009,7 @@ function handleTranscript(text, src) {
   if (src === 'voice') renderTranscript(p.corrected ? afterCorrection(text).trim() : text, '');
   const pe = $('parsed');
   pe.textContent = 'Understood → ' + parsedStr(p);
-  pe.classList.toggle('bad', !p.cmds.length || p.csUnknown);
+  pe.classList.toggle('bad', (!p.cmds.length && !p.traffic) || p.csUnknown);
   if (G && !G.over) execute(p, src);
   return { cs: p.cs, cmds: p.cmds.map(cmdStr), str: parsedStr(p), norm: p.norm };
 }
@@ -2038,6 +2046,7 @@ $('cmdInput').addEventListener('keydown', e => { if (e.key === 'Escape') $('cmdI
 function setScale(s) { if (!G) return; G.scale = s; $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 2); }
 function setPaused(p) { if (!G) return; G.paused = p; $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p); }
 function selectAc(a) { if (!G) return; G.selected = a; refreshPanel(true); }
+function servoTidy() { if (SERVO.ac && (!G || !G.ac.includes(SERVO.ac) || !alive(SERVO.ac) || !PAR_PHASES.includes(SERVO.ac.phase))) servoClear(); }
 let lastPanel = 0;
 function paintView(a) {   // the aircraft as last painted by the sweep (azimuth scan: range/lateral/gs/hdg; elevation scan: height/vs)
   if (!S.sweep) return a;
@@ -2123,12 +2132,12 @@ window.addEventListener('blur', () => pttEnd());
 /* ===================== settings overlay ===================== */
 function openSettings() {
   uiPaused = true; setOv.classList.remove('hidden'); loadVoices();
-  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sSweep').checked = S.sweep !== false; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
+  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sSweep').checked = S.sweep !== false; $('sServo').checked = S.servo !== false; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
   $('setInfo').innerHTML = `Speech recognition: ${SR ? 'available' : '<b>not available</b> in this browser'} · Speech output: ${TTS ? voices.length + ' English voice(s)' : 'not available'} · Page: ${esc(location.protocol)}`;
 }
 function closeSettings() { setOv.classList.add('hidden'); uiPaused = !helpOv.classList.contains('hidden'); initVoiceStatus(); }
-['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice', 'sSweep'].forEach(id => $(id).addEventListener('change', () => {
-  S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.sweep = $('sSweep').checked; S.voice = $('sVoice').value; saveSettings();
+['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice', 'sSweep', 'sServo'].forEach(id => $(id).addEventListener('change', () => {
+  S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.sweep = $('sSweep').checked; S.servo = $('sServo').checked; if (!S.servo) servoClear(); S.voice = $('sVoice').value; saveSettings();
 }));
 function setPhr(v) { S.phr = v === 'tower' ? 'tower' : 'ship'; saveSettings(); $('sPhr').value = $('sPhr2').value = S.phr; applyPhrUI(); if (G) refreshPanel(true); }
 function applyPhrUI() {
@@ -2153,6 +2162,7 @@ $('sMic').onclick = () => {
 let chosenDiff = 'training';
 document.querySelectorAll('.diff').forEach(el => { el.onclick = () => { chosenDiff = el.dataset.d; document.querySelectorAll('.diff').forEach(x => x.classList.toggle('on', x === el)); }; });
 function startGame(diff, opts) {
+  servoClear();
   Sound.ensure(); startOv.classList.add('hidden'); endOv.classList.add('hidden'); helpOv.classList.add('hidden');
   { const ck = document.getElementById('linkChk'); if (ck && ck.checked !== LINK.on) linkSet(ck.checked); }   // link choice from the start screen applies at run start
   uiPaused = false; newGame(diff, opts || {}); initVoiceStatus();
@@ -2377,12 +2387,17 @@ function draw(now) {
   }
   // targets
   if (G) {
+    servoTidy();
     const blink = Math.floor(now / 260) % 2 === 0;
     const par = G.ac.filter(a => a.phase !== 'queue' && a.phase !== 'gone' && a.r <= RMAX + 0.2 && a.r >= RMIN - 0.2 && !(a.phase === 'climbout' && (Math.abs(a.yft) > YMAX || a.z > ZMAX)));
     par.sort((p, q) => (p === G.selected) - (q === G.selected));
     glow(true, 'rgba(120,255,140,0.8)', 6);   // bright target bloom
     for (const a of par) drawTarget(a, blink);
     glow(false);
+    if (servoOn() && SERVO.scope) {   // faint brighter edge on the scope being servoed (no text, no box)
+      const top = SERVO.scope === 'E' ? L.eTop : L.aTop, h = SERVO.scope === 'E' ? L.eh : L.ah;
+      ctx.strokeStyle = C.gd + '0.55)'; ctx.lineWidth = 2; line(L.left - 3, top, L.left - 3, top + h); line(L.left + L.plotW + 3, top, L.left + L.plotW + 3, top + h);
+    }
     drawHud(now, blink);
   }
   glow(false);
@@ -2419,8 +2434,9 @@ function drawTarget(a, blink) {
   const XE = xr(pe.r), XA = xr(pa.r), YE = ez(pe.z), YA = ay(clamp(pa.yft, -YMAX, YMAX)), X = XA;
   ctx.fillStyle = C.tgt;
   const { TW, TH } = tickSize();               // ~3 x 32 px tick at 1280x800, scales with the panel height
-  ctx.fillRect(Math.round(XE - TW / 2), Math.round(YE - TH / 2), TW, TH);
-  ctx.fillRect(Math.round(XA - TW / 2), Math.round(YA - TH / 2), TW, TH);
+  const sv = servoOn(), showE = !sv || (!!SERVO.scope && SERVO.ac === a), showA = showE;   // servo mode: the servoed aircraft shows on both scopes; nothing shows when not servoing
+  if (showE) ctx.fillRect(Math.round(XE - TW / 2), Math.round(YE - TH / 2), TW, TH);
+  if (showA) ctx.fillRect(Math.round(XA - TW / 2), Math.round(YA - TH / 2), TW, TH);
   a.hitE = { x: XE, y: YE, hw: TW / 2, hh: TH / 2 }; a.hitA = { x: XA, y: YA, hw: TW / 2, hh: TH / 2 };
 }
 
@@ -2484,7 +2500,46 @@ function pickAt(px, py) {
   for (const a of G.ac) for (const h of [a.hitE, a.hitA]) { if (!h || a.phase === 'queue') continue; const dx = Math.max(0, Math.abs(h.x - px) - (h.hw || 0)), dy = Math.max(0, Math.abs(h.y - py) - (h.hh || 0)), d = Math.hypot(dx, dy); if (d < bd) { bd = d; best = a; } }   // distance to the tick rectangle (+14 px slop)
   if (best) selectAc(best);
 }
-canvas.addEventListener('pointerdown', e => { Sound.ensure(); const r = canvas.getBoundingClientRect(); pickAt(e.clientX - r.left, e.clientY - r.top); });
+/* ---- servo (mouse / touch). Tap = latch until the next tap on that scope or a tap on the other one; hold = momentary.
+   Servoing the ELEVATION (glidepath) scope reveals the target on the AZIMUTH (course) scope, and vice versa. Display only:
+   grading always uses the painted positions, whether or not the target is visible. */
+const SERVO = { scope: null, ac: null, latched: false, down: null };
+const SERVO_TAP_MS = 300;
+const servoOn = () => S.servo !== false && !!G;
+function servoClear() { SERVO.scope = null; SERVO.ac = null; SERVO.latched = false; SERVO.down = null; }
+function servoPick(scope, px, py) {   // aircraft on PAR whose painted tick on the touched scope is nearest the touch point; ties go to the selected one
+  const list = G.ac.filter(a => alive(a) && PAR_PHASES.includes(a.phase));
+  if (!list.length) return null;
+  let best = null, bd = Infinity;
+  for (const a of list) { const h = scope === 'E' ? a.hitE : a.hitA, x = h ? h.x : xr(paintA(a).r), y = h ? h.y : py;
+    const d = Math.hypot(x - px, (y - py) * 0.5) - (a === G.selected ? 8 : 0); if (d < bd) { bd = d; best = a; } }
+  return best;
+}
+function servoStart(px, py, id) {
+  const scope = py < (L.eBot + L.aTop) / 2 ? 'E' : 'A', a = servoPick(scope, px, py);
+  if (!a) return;
+  const wasSame = SERVO.latched && SERVO.scope === scope && SERVO.ac === a;
+  SERVO.down = { t: performance.now(), id, wasSame, prev: { scope: SERVO.scope, ac: SERVO.ac, latched: SERVO.latched } };
+  SERVO.scope = scope; SERVO.ac = a; SERVO.latched = false;
+  if (G.selected !== a) selectAc(a);
+}
+function servoEnd(id, cancel) {
+  const d = SERVO.down; if (!d || (id != null && d.id != null && id !== d.id)) return;
+  SERVO.down = null;
+  const tap = !cancel && performance.now() - d.t < SERVO_TAP_MS;
+  if (tap) { if (d.wasSame) servoClear(); else SERVO.latched = true; }   // tap: latch (or unlatch if it was already latched there)
+  else if (d.prev.latched && d.prev.ac && alive(d.prev.ac)) Object.assign(SERVO, d.prev);   // hold released: back to the previous latch
+  else servoClear();
+}
+canvas.addEventListener('pointerdown', e => {
+  Sound.ensure(); const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  if (!servoOn()) { pickAt(x, y); return; }
+  e.preventDefault(); try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  servoStart(x, y, e.pointerId);
+});
+canvas.addEventListener('pointerup', e => servoEnd(e.pointerId, false));
+canvas.addEventListener('pointercancel', e => servoEnd(e.pointerId, true));
+canvas.addEventListener('contextmenu', e => { if (servoOn()) e.preventDefault(); });
 inset.addEventListener('pointerdown', e => {
   if (!G) return; const r = inset.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
   let best = null, bd = 22; for (const a of G.ac) if (a.hitI) { const d = Math.hypot(a.hitI.x - x, a.hitI.y - y); if (d < bd) { bd = d; best = a; } }
@@ -2525,6 +2580,8 @@ window.PAR = {
   courseTest(yft) { const g = courseGeom({ yft }); return { cat: courseCatAt(g, g.d), d: +g.d.toFixed(2), h: g.h, b1: g.b1, b2: +g.b2.toFixed(2), b3: g.b3, acc: ['on', 'slightly', 'plain', 'well'].filter(c => courseAccepts({ yft }, c)), ftPerPx: +(YMAX / ((L.ah || 290) / 2)).toFixed(2) }; },
   ac(cs) { const a = G.ac.find(x => x.cs === cs); if (!a) return null; return { cs: a.cs, phase: a.phase, r: +a.r.toFixed(2), yft: Math.round(a.yft), z: Math.round(a.z), gpFt: Math.round(a.z - gpAlt(a.r)), dev: +elevDev(a).toFixed(2), az: +azDeg(a).toFixed(2), hdg: Math.round(a.hdg), vs: Math.round(a.vs), pts: a.pts, gear: a.gear, cleared: a.cleared, limit: a.limit, silent: a.silent, result: a.result }; },
   says() { return sayLog.slice(); },
+  servo(scope, cs, latch) { if (scope === undefined) return { on: servoOn(), scope: SERVO.scope, cs: SERVO.ac && SERVO.ac.cs, latched: SERVO.latched }; if (!scope) { servoClear(); return this.servo(); } SERVO.scope = scope; SERVO.ac = G.ac.find(x => x.cs === cs) || null; SERVO.latched = latch !== false; return this.servo(); },
+  geom() { return Object.assign({}, L); },
   paint(cs) { const a = G && G.ac.find(x => x.cs === cs); return a ? { a: a.pA ? Object.assign({}, a.pA) : null, e: a.pE ? Object.assign({}, a.pE) : null } : null; },
   hit(cs) { const a = G && G.ac.find(x => x.cs === cs); return a ? { e: a.hitE, az: a.hitA } : null; },
   selected() { return G && G.selected ? G.selected.cs : null; },
