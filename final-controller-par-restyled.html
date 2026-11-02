@@ -111,6 +111,7 @@ body.lay-trans #app{flex-direction:row}
 body.lay-trans #scopeWrap{flex:1;height:auto;min-width:0}
 body.lay-trans #panel{width:var(--logw);flex:none;border-left:1px solid var(--gdd);border-top:none;padding:5px;gap:5px;overflow:hidden}
 body.lay-trans #panel > *:not(#micBox):not(#log):not(#cmdForm){display:none}
+body.lay-trans #hint{display:none!important}
 body.lay-trans #log{order:1;flex:1;min-height:0;max-height:none;font-size:10.5px;line-height:1.25}
 body.lay-trans #micBox{order:2;padding:4px}
 body.lay-trans #cmdForm{order:3}
@@ -122,6 +123,17 @@ body.lay-trans #cmdInput{font-size:11px;padding:4px;width:100%;box-sizing:border
 body.lay-trans.touchdev #pttBig{left:auto;right:5px;transform:none;width:calc(var(--logw) - 10px);min-height:46px;font-size:13px;bottom:max(6px,env(safe-area-inset-bottom))}
 body.lay-trans.touchdev #panel{padding-bottom:62px}
 @media (max-width:600px){ body.lay-trans{--logw:max(150px,40vw)} }
+/* phone landscape: scopes fill the full height in every mode; talk button docks at the right edge instead of reserving a bottom strip */
+#app{box-sizing:border-box}
+@media (orientation:landscape) and (max-height:500px){
+  body.touchdev{padding-bottom:0}
+  body.lay-normal #app,body.lay-expand #app{flex-direction:row}
+  body.lay-normal #scopeWrap,body.lay-expand #scopeWrap{flex:1;height:auto}
+  body.lay-normal #panel{width:300px;flex:none;border-top:none;border-left:1px solid var(--gdd)}
+  body.touchdev.lay-normal #app,body.touchdev.lay-expand #app{padding-right:92px}
+  body.touchdev:not(.lay-trans) #pttBig{left:auto;right:5px;bottom:6px;transform:none;width:82px;min-height:0;height:calc(100% - 40px);font-size:13px;white-space:normal}
+  #vStatus{bottom:8px}
+}
 @media (max-width:950px){ body.lay-expand #scopeWrap{flex:1;height:auto} }
 </style>
 </head>
@@ -1126,7 +1138,7 @@ function updatePar(a, dt) {
   if (OUT_PHASES.includes(a.phase)) ts = Math.max(T.vapp + 20, 160 * (!T.helo ? 1 : 0.6));
   if (a.ias !== ts) { const r = 1.5 * dt; a.ias = Math.abs(ts - a.ias) <= r ? ts : a.ias + Math.sign(ts - a.ias) * r; }
   // ---- move
-  const w = windVec(), tas = tasOf(a), h = (headingForTrack(tas, a.hdg) - BRC_OFF) * DEG;   // pilot crabs automatically: a.hdg is held as the ground track
+  const w = windVec(), tas = tasOf(a), h = ((LINK.on ? a.hdg : headingForTrack(tas, a.hdg)) - BRC_OFF) * DEG;   // solo: pilot crabs automatically (a.hdg held as ground track); linked to Approach: plain heading, wind drifts it
   const vx = tas * Math.sin(h) + w.x, vy = tas * Math.cos(h) + w.y;
   a.gs = Math.hypot(vx, vy);
   a.r += vx / 3600 * dt;
@@ -1354,8 +1366,8 @@ const sweepFracE = z => 1 - clamp(z / ZMAX, 0, 1);                          // 0
 function sweepPaint(a) {
   const per = sweepPer(a);
   const kA = Math.floor(G.t / per - sweepFracA(a.yft || 0)), kE = Math.floor(G.t / per - SWEEP_EL_OFFSET - sweepFracE(a.z || 0));
-  if (!a.pA || a.kA !== kA || a.pA.phase !== a.phase) { a.kA = kA; a.pA = { r: a.r, yft: a.yft, z: a.z, px: a.px, py: a.py, alt: a.alt, phase: a.phase, t: G.t }; }
-  if (!a.pE || a.kE !== kE || a.pE.phase !== a.phase) { a.kE = kE; a.pE = { r: a.r, z: a.z, phase: a.phase, t: G.t }; }
+  if (!a.pA || a.kA !== kA || a.pA.phase !== a.phase) { a.kA = kA; a.pA = { r: a.r, yft: a.yft, z: a.z, px: a.px, py: a.py, alt: a.alt, phase: a.phase, t: G.t, gs: a.gs, hdg: a.hdg, tgtHdg: a.tgtHdg }; }
+  if (!a.pE || a.kE !== kE || a.pE.phase !== a.phase) { a.kE = kE; a.pE = { r: a.r, z: a.z, phase: a.phase, t: G.t, vs: a.vs }; }
 }
 const paintA = a => a.pA || a, paintE = a => a.pE || a;   // painted (displayed) azimuth / elevation position
 
@@ -2027,17 +2039,25 @@ function setScale(s) { if (!G) return; G.scale = s; $('bS1').classList.toggle('o
 function setPaused(p) { if (!G) return; G.paused = p; $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p); }
 function selectAc(a) { if (!G) return; G.selected = a; refreshPanel(true); }
 let lastPanel = 0;
+function paintView(a) {   // the aircraft as last painted by the sweep (azimuth scan: range/lateral/gs/hdg; elevation scan: height/vs)
+  if (!S.sweep) return a;
+  const pa = a.pA, pe = a.pE, o = Object.assign({}, a);
+  if (pa) { o.r = pa.r; o.yft = pa.yft; if (pa.gs != null) o.gs = pa.gs; if (pa.hdg != null) o.hdg = pa.hdg; if (pa.tgtHdg != null) o.tgtHdg = pa.tgtHdg; }
+  if (pe) { o.z = pe.z; if (pe.vs != null) o.vs = pe.vs; }
+  return o;
+}
 function readoutText(a) {
   if (!a) return 'No aircraft selected. Tap a target or a strip.';
   const itTxt = isShip() ? (isPrac(a) ? `  PRAC ${a.pracNo}/${a.pracNo + a.pracLeft - 1}` : '  FULL STOP') : '';
   if (a.phase === 'queue') return `${a.cs} ${a.type} "${a.tel}"${itTxt}\nWith feeder: ${a.holding ? 'HOLDING' : a.released ? 'INBOUND TO PAR FINAL' : 'EN ROUTE'}  ALT ${fmtAlt(a.alt)}`;
+  const A = a; a = paintView(a);   // live numbers update only when the sweep paints the target
   const dev = elevDev(a), az = azDeg(a), ft = Math.round(a.z - gpAlt(a.r));
-  const cg = gpCat(a), cc = courseCat(a);
+  const cg = gpCat(A), cc = courseCat(A);
   const tol = a.descT > 5 ? Math.round(100 * a.tolT / a.descT) + '%' : '--';
   return `${a.cs} ${a.type} "${a.tel}"${itTxt}  [${a.phase.toUpperCase()}${a.silent ? ', SILENT' : ''}${a.ng ? `, NO GYRO ${a.ngHalf ? '1.5' : '3'}°/S${a.ngTurn ? ' TURNING ' + (a.ngTurn === 'L' ? 'L' : 'R') : ''}` : ''}${a.asr ? `, ASR · MDA ${a.mda}` : ''}]
 RANGE ${a.r.toFixed(2)} NM   GS ${Math.round(a.gs)} KT   HDG ${hdg3(a.hdg)}${Math.abs(angDiff(a.tgtHdg, a.hdg)) > 0.5 ? '→' + hdg3(a.tgtHdg) : ''}
-ELEV ${ft >= 0 ? '+' : ''}${ft} FT (${dev >= 0 ? '+' : ''}${dev.toFixed(2)}°) ${a.phase === 'final' && ft < 0 ? 'BELOW GP, LEVEL' : gpWords(cg, a).toUpperCase()}
-AZ   ${Math.abs(Math.round(a.yft))} FT ${a.yft >= 0 ? 'R' : 'L'} (${Math.abs(az).toFixed(2)}°) ${courseWords(cc, paintA(a).yft).toUpperCase()}
+ELEV ${ft >= 0 ? '+' : ''}${ft} FT (${dev >= 0 ? '+' : ''}${dev.toFixed(2)}°) ${a.phase === 'final' && ft < 0 ? 'BELOW GP, LEVEL' : gpWords(cg, A).toUpperCase()}
+AZ   ${Math.abs(Math.round(a.yft))} FT ${a.yft >= 0 ? 'R' : 'L'} (${Math.abs(az).toFixed(2)}°) ${courseWords(cc, a.yft).toUpperCase()}
 ALT ${fmtAlt(a.z)}  VS ${a.vs > 0 ? '-' : '+'}${Math.abs(Math.round(a.vs))} FPM (3° ≈ ${Math.round(vsNominal(a))})
 GEAR ${a.gear ? '✓' : '–'}  CLRD ${a.cleared ? '✓' : '–'}  TOL ${tol}  CALLS ${a.accCalls}✓/${a.badCalls}✗  PTS ${a.pts >= 0 ? '+' : ''}${a.pts}`;
 }
@@ -2062,7 +2082,7 @@ function refreshPanel(force) {
   } else hint.style.display = 'none';
   const list = G.ac.slice().sort((p, q) => p.seq - q.seq);
   const status = x => x.phase === 'queue' ? (x.released ? 'INBOUND' : x.holding ? 'HOLD' : 'FEEDER') : x.phase.toUpperCase();
-  const info = x => x.phase === 'queue' ? `${fmtAlt(x.alt)} ft` : `${x.r.toFixed(1)}NM ${fmtAlt(x.z)}`;
+  const info = x => { if (x.phase === 'queue') return `${fmtAlt(x.alt)} ft`; const p = paintView(x); return `${p.r.toFixed(1)}NM ${fmtAlt(p.z)}`; };
   const html = list.map(x => `<div class="strip${x === G.selected ? ' sel' : ''}${x.conflict ? ' conf' : ''}${!alive(x) || OUT_PHASES.includes(x.phase) ? ' done' : ''}" data-uid="${x.uid}"><span>#${x.seq}</span><span>${x.cs} ${x.type}${isShip() ? (isPrac(x) ? ' PRAC' : ' FS') : ''}</span><span>${info(x)}</span><span>${status(x)}</span></div>`).join('')
     + (G.spawned < G.toSpawn ? `<div style="color:var(--dim);font-size:11px">${G.toSpawn - G.spawned} more arrival(s) to come…</div>` : '');
   if (stripsEl.innerHTML !== html) stripsEl.innerHTML = html;
