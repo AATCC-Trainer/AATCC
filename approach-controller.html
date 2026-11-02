@@ -503,9 +503,11 @@ const PATTERNS = [
 ];
 
 // '<cs>, your climbout instructions are ...': the content is parsed but stored, not executed now
+const STINGER_RE_G = /\b(?:stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's)\s*,?\s*approach(?:es|s)?\b\s*,?/gi;
 const STINGER_RE = /\b(?:stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's)\s*,?\s*approach(?:es|s)?\b/i;
 function parseSpeech(raw, known = []) {   // detect 'Stinger Approach' BEFORE it is stripped (grading task 1)
-  const st = STINGER_RE.test(String(raw)), p = parseSpeech1(raw, known); if (p) p.stinger = st; return p;
+  const st = STINGER_RE.test(String(raw)), p0 = parseSpeech0(String(raw).replace(STINGER_RE_G, ' '), known);
+  const p = p0.traffic ? p0 : parseSpeech1(raw, known); if (p) p.stinger = st; return p;
 }
 function parseSpeech1(raw, known = []) {
   // our own station name ('Stinger Approach' and recognizer variants) is ignored wherever it appears
@@ -520,11 +522,14 @@ function parseSpeech1(raw, known = []) {
   for (const c of pre.cmds.filter(keep)) if (!v.some(x => x.k === c.k)) v.push(c);
   pre.cmds = [{ k: 'climbout', v }]; pre.raw = raw; pre.hdgMissing = false; return pre;
 }
+const TRAFFIC_RE = /^[\s,]*(?:traffic|traffics|traffic\s+s|trafic|traffik|traffick|trafficking)\b/;   // first word after the callsign
 function parseSpeech0(raw, known = []) {
   const norm0 = normalizeSpeech(raw);
   let s = norm0.replace(/\bheading\s+(\d{3})(\d+)\b/g, 'heading $1 $2');
   const csr = extractCallsign(s, known);
   s = csr.s;
+  // traffic advisory: "<callsign>, traffic, two o'clock, 5 miles, northbound, angels 3" -> information only, nothing is executed
+  if (TRAFFIC_RE.test(s)) return { raw, norm: norm0.trim(), cs: csr.cs, csUnknown: csr.unknown, cmds: [{ k: 'traffic' }], leftover: '', hdgMissing: false, traffic: true };
   const used = new Array(s.length).fill(false);
   const found = [];
   for (const [re, fn] of PATTERNS) {
@@ -561,6 +566,7 @@ function parseSpeech0(raw, known = []) {
 function cmdStr(c) {
   switch (c.k) {
     case 'hdg': return `hdg ${c.dir || '-'} ${c.v}`;
+    case 'traffic': return 'traffic advisory (no action)';
     case 'sayState': return 'say state';
     case 'sayAngels': return 'say angels';
     case 'sector': return `proceed to sector ${c.v}, report established`;
@@ -1791,7 +1797,9 @@ function handleTranscript(text, src) {
     if (cor.undoPrev && G && !G.over) undoLastTx(cor.cs);
     if (!cor.post.trim()) { setHeard(heard, null); if (src === 'voice') renderTranscript(cor.pre + ' correction', ''); $('parsed').textContent = 'Correction: earlier words disregarded, nothing after it.'; $('parsed').classList.add('bad'); if (G && !G.over) log('sys', `Correction: "${cor.pre.trim()}" disregarded.`); return { cs: cor.cs, cmds: [], str: 'disregarded', norm: '' }; }
   }
-  const p = parseSpeech(text, known);
+  let p = parseSpeech(text, known);
+  // a "correction" inside a traffic call ("traffic two o'clock, correction, ten o'clock, 5 miles") only corrects the traffic details
+  if (cor && !p.traffic && !p.cs) { try { const q = parseSpeech(cor.pre.split(/\bcorrection\b/)[0], known); if (q.traffic) { p = q; p.raw = text; } } catch (e) {} }
   if (cor) { if (!p.cs && cor.cs) { p.cs = cor.cs; p.csUnknown = cor.csUnknown; } p.stinger = p.stinger || cor.stinger; if (cor.pre.trim()) { p.raw = String(p.raw || text); if (G && !G.over) log('sys', `Correction: "${cor.pre.trim()}" disregarded.`); } }
   setHeard(heard, p);
   if (src === 'voice') renderTranscript(text, '');
@@ -2698,6 +2706,13 @@ function appExecute(p, src) {
   if (!a) { log('sys', `Say the callsign (or select a target) first. Heard: "${p.raw}"`); return; }
   if (!p.cmds.length && !p.cs && p.norm.split(/\s+/).filter(w => w.length > 1 && w !== ',').length < 2) { log('sys', `Ignored noise: "${p.raw}"`); return; }
   if (!a.accepted) { log('sys', `${a.cs} not accepted (click its target to accept): no response to "${p.raw.trim()}".`); return; }
+  if (p.traffic) {   // traffic advisory: pilot takes no action, no grading; replies tally-ho once the transmission has ended
+    selectAc(a); a.lastTx = G.t;
+    G.lastTx = { a, t: G.t, snap: snapTx(a), dScore: 0, irreversible: false };   // so a following "correction" undoes this (a no-op), not an older call
+    log('ctl', `${a.cs}${p.cs ? '' : ' (selected)'}: "${p.raw.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  traffic advisory`);
+    pilotSay(a, `${a.tel}, tally-ho.`, `${a.telSay}, tally ho.`, true, false, false);
+    return;
+  }
   if (p.hdgMissing) {   // turn/heading with no valid 3-digit heading: nothing changes, no grading, pilot asks again
     selectAc(a);
     log('ctl', `${a.cs}${p.cs ? '' : ' (selected)'}: "${p.raw.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  heading not understood`);
