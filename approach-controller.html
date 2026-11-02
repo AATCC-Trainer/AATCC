@@ -459,6 +459,10 @@ const PATTERNS = [
   [/\bvectors?\s+(?:for\s+)?(?:the\s+|a\s+|an\s+)?(?:c\s*c\s*a|cca|see\s+see\s+(?:a|eh|ay)|sea\s+sea\s+a|ccas?)(?:\s+approach(?:es)?)?\b/g, () => ({ k: 'cca' })],
   [/\bgo(?:\s+(?:to|too|two))?\s+(?:purple|copper|coppers)(?:\s+buttons?)?\b/g, () => ({ k: 'purple' })],
   [/\bmark\s+(?:your\s+|you\s+|yer\s+)?(?:father|farther|mother|fathers?)\b/g, () => ({ k: 'markFather' })],
+  // radar identification: "vectors for radar identification" (no action of its own) and "radar contact, 5 miles northeast of mother"
+  [/\bvectors?\s+(?:for\s+)?(?:radar\s+)?(?:identification|identify|ident|i\s+d|id)\b/g, () => ({ k: 'rid' })],
+  [/\bradar\s+(?:contacts?|contract|contacted|contact\s+s)\b\s*,?\s*(?:(\d+(?:\.\d+)?)\s+miles?\s*,?\s*(?:(north\s*east|north\s*west|south\s*east|south\s*west|northeast|northwest|southeast|southwest|north|south|east|west)|(?:bearing\s+)?(\d{1,3}))(?:\s+(?:of|from)\s+(?:mother|mothers|the\s+ship|ship|stinger))?|(?:bearing\s+)?(\d{3})\s+(?:for|at)\s+(\d+(?:\.\d+)?)(?:\s+miles?)?(?:\s+(?:of|from)\s+(?:mother|mothers|the\s+ship|ship|stinger))?)/g,
+    m => { const d = m[2] ? DIRBRG[m[2].replace(/\s+/g, '')] : null, b = d != null ? d : m[3] != null ? +m[3] : m[4] != null ? +m[4] : null; return { k: 'radarContact', rng: parseFloat(m[1] ?? m[5]), brg: b, dirTxt: m[2] ? m[2].replace(/\s+/g, '') : String(b).padStart(3, '0') }; }],
   [/\bradar\s+(?:contacts?|contract|contacted|contact\s+s)\b|\bradar\s+context\b/g, () => ({ k: 'radarContact' })],
   [/\blow\s+altitude\s+alerts?\b|\bcheck\s+(?:your\s+)?altitude\s+immediately\b/g, () => ({ k: 'laa' })],
   [/\bhow do you (?:hear|read)(?: me)?\b|\bradio check\b/g, () => ({ k: 'hear' })],
@@ -523,6 +527,7 @@ function parseSpeech1(raw, known = []) {
   pre.cmds = [{ k: 'climbout', v }]; pre.raw = raw; pre.hdgMissing = false; return pre;
 }
 const TRAFFIC_RE = /^[\s,]*(?:traffic|traffics|traffic\s+s|trafic|traffik|traffick|trafficking)\b/;   // first word after the callsign
+const DIRBRG = { north: 360, northeast: 45, east: 90, southeast: 135, south: 180, southwest: 225, west: 270, northwest: 315 };
 function parseSpeech0(raw, known = []) {
   const norm0 = normalizeSpeech(raw);
   let s = norm0.replace(/\bheading\s+(\d{3})(\d+)\b/g, 'heading $1 $2');
@@ -600,7 +605,8 @@ function cmdStr(c) {
     case 'rogerBall': return 'roger ball';
     case 'reportSee': return 'report see me';
     case 'roger': return 'roger';
-    case 'radarContact': return 'radar contact';
+    case 'radarContact': return c.rng != null ? `radar contact ${c.rng} NM ${c.dirTxt}` : 'radar contact';
+    case 'rid': return 'vectors for radar ID';
     case 'purple': return 'go purple (off frequency, autonomous recovery)';
     case 'markFather': return 'mark your father';
     case 'dirty': return 'dirty up';
@@ -1823,7 +1829,7 @@ function splitCorrection(text, known) {
   if (undoPrev && !cs) { try { const q = parseSpeech(post, known); if (q.cs) { cs = q.cs; csUnknown = q.csUnknown; } } catch (e) {} }
   return { pre, post, cs, csUnknown, stinger, undoPrev };
 }
-const UNDO_FIELDS = ['tgtHdg', 'turnDir', 'tgtAlt', 'tgtSpd', 'sector', 'climbout', 'dirty', 'landChk', 'button', 'needAlt', 'rcDone', 'firstTx', 'tasks', 'pts10'];
+const UNDO_FIELDS = ['identified', 'tgtHdg', 'turnDir', 'tgtAlt', 'tgtSpd', 'sector', 'climbout', 'dirty', 'landChk', 'button', 'needAlt', 'rcDone', 'firstTx', 'tasks', 'pts10'];
 function snapTx(a) { const o = {}; for (const k of UNDO_FIELDS) { const v = a[k]; o[k] = v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v; } return o; }
 function undoLastTx(cs) {
   const L = G && G.lastTx; if (!L) return false;
@@ -2285,6 +2291,7 @@ inset.addEventListener('pointerdown', e => {
 /* ===================== APPROACH CONTROL (14 NM plan view) ===================== */
 // Geographic frame: e = NM east of the ship, n = NM north of the ship. Ship (Stinger) at the scope centre, BRC 180,
 // so the final approach course runs inbound from the north (aircraft fly 180 down it to the stern).
+const RID = { rngTol: 2, brgTol: 45, deadline: 90, wrongPen: 5, latePen: 5 };   // radar identification grading
 const APP = true, APP_RANGE = 14, APP_COUNT = { training: 4, normal: 6, gusty: 8 };
 const appWind = () => { const r = (G.wind.dir + 180) * DEG; return { e: G.wind.spd * Math.sin(r), n: G.wind.spd * Math.cos(r) }; };
 const appRng = a => Math.hypot(a.e, a.n), appBrg = a => norm(Math.atan2(a.e, a.n) / DEG);
@@ -2441,7 +2448,7 @@ setTimeout(() => LINK.setOn(LINK.on), 0);
 setInterval(() => { if (LINK.on) LINK.post({ type: 'hello' }); LINK.status(); }, 3000);
 function appCheckIn(a, again) {
   a.tasks = {}; a.firstTx = true; a.cycle = (a.cycle || 0) + 1;   // grading resets every (re-)check-in
-  a.checked = true; a.st = 'ctl'; a.needAlt = true; a.rcDone = false;
+  a.checked = true; a.st = 'ctl'; a.needAlt = true; a.rcDone = false; a.identified = false; a.idLate = false; a.checkInT = G.t;
   a.dirty = false; a.landChk = false;
   a.ias = a.tgtSpd = isHelo(a) ? 200 : Math.round(rand(250, 300));   // helos 200 kt, jets 250-300 kt at check-in   // first altitude after check-in is graded
   const f = (Math.floor(appState(a) * 10) / 10).toFixed(1), [whole, dec] = f.split('.');
@@ -2650,7 +2657,9 @@ function appStep(dt) {
     const ve = tas * Math.sin(h) + w.e, vn = tas * Math.cos(h) + w.n;
     a.gs = Math.hypot(ve, vn); a.e += ve / 3600 * dt; a.n += vn / 3600 * dt;
     a.trailT += dt; if (a.trailT >= 5) { a.trailT = 0; a.trail.push({ e: a.e, n: a.n }); if (a.trail.length > 5) a.trail.shift(); }
-    if (a.st === 'dep' && G.t >= 10) appCheckIn(a, false);   // checks in at launch (never before 10 s of sim time)
+    if (a.st === 'dep' && G.t >= 10) appCheckIn(a, false);
+    if (a.st === 'ctl' && a.checkInT != null && !a.identified && !a.idLate && G.t - a.checkInT > RID.deadline) {   // never radar identified
+      a.idLate = true; G.score -= RID.latePen; log('bad', `−${RID.latePen}: ${a.cs} not radar identified within ${RID.deadline} s of check-in.`); Sound.buzz(); }   // checks in at launch (never before 10 s of sim time)
     const rng = appRng(a);
     if (a.st === 'ctl' && rng > 5) a.armed = true;   // must work back out before another handoff
     // user rule: aircraft never fly on their own until told 'go purple/copper' -> automatic PAR-final handoff (and its
@@ -2775,8 +2784,18 @@ function appExecute(p, src) {
       pilotSay(a, `${a.tel}, ${mB} for ${mR}.`, `${a.telSay}, ${mB.split('').map(x => DIGW[+x]).join(' ')} for ${mRSay}.`);
       marked = true; continue;
     }
+    if (c.k === 'rid') { rb.push('ack'); rbSay.push('ack'); continue; }   // the heading in the same call does the work; callsign-only readback
+    if (c.k === 'radarContact' && c.rng != null) {   // radar identification with a position: graded against the real range/bearing from the ship
+      const r = appRng(a), b = appBrg(a), dR = Math.abs(c.rng - r), dB = Math.abs(angDiff(c.brg % 360, b));
+      if (dR <= RID.rngTol && dB <= RID.brgTol) {
+        a.identified = true; a.rcDone = true;
+        log('good', `Radar identified ${a.cs}: ${c.rng} NM ${c.dirTxt} (actual ${r.toFixed(1)} NM, ${hdg3(Math.round(b))}).`); award(a, 'rc', 'radar contact (ID)');
+      } else { G.score -= RID.wrongPen; log('bad', `−${RID.wrongPen}: incorrect radar ID on ${a.cs}: said ${c.rng} NM ${c.dirTxt}, actual ${r.toFixed(1)} NM bearing ${hdg3(Math.round(b))}.`); Sound.buzz(); }
+      rb.push('roger'); rbSay.push('roger'); continue;
+    }
     if (c.k === 'radarContact') {
-      const r = appRng(a);
+      const r = appRng(a); a.identified = true;
+      if (!a.rcDone && a.idLate) { a.rcDone = true; log('sys', `Radar contact on ${a.cs} (already penalised for late identification).`); }
       if (!a.rcDone) { a.rcDone = true; if (r > 2) { G.score -= 5; log('bad', `−5: radar contact called past 2 miles (${a.cs} at ${r.toFixed(1)} NM).`); Sound.buzz(); } else { log('good', `Radar contact on ${a.cs} at ${r.toFixed(1)} NM.`); award(a, 'rc', 'radar contact'); } }
       rb.push('roger'); rbSay.push('roger'); continue;
     }
@@ -2913,6 +2932,7 @@ function drawApp(now) {
     const bx = Q[0] + 14, by = Q[1] - 22;
     const l1 = a.st === 'purple' ? a.cs + ' PRPL' : a.cs, l2 = `${String(Math.round(a.alt / 100)).padStart(3, '0')} ${String(Math.round(a.gs / 10)).padStart(2, '0')} ${a.code}`;
     ctx.fillStyle = col; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12);
+    if (a.identified) { ctx.globalAlpha = 0.55; ctx.fillText(' ID', bx + ctx.measureText(l1).width, by); ctx.globalAlpha = 1; }   // radar identified (subtle tag)
     const tw = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width);
     a.hitR = appCtl(a) ? { x: Q[0], y: Q[1], bx: bx - 2, by: by - 12, bw: tw + 4, bh: 28 } : null;   // blip or data text selects
   }
