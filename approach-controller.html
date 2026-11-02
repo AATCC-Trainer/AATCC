@@ -106,6 +106,12 @@ html,body{background:#030503}
 #layBar button{min-height:22px;padding:2px 7px;font-size:11px;background:#071209;border-color:#1e3f24}
 #layBar button.on{background:#123f4a;color:var(--cyan);border-color:var(--cyan)}
 @media (max-width:950px){#layBar{display:none}}
+@media (max-width:950px) and (orientation:landscape) and (max-height:520px){   /* phone landscape: panel beside the scope, scope uses the full height */
+  html,body{overflow:hidden;height:100%}
+  #app{flex-direction:row;height:100%;min-height:0}
+  #scopeWrap{flex:1;height:100%}
+  #panel{width:min(320px,40vw);flex:none;height:100%;border-top:none;border-left:1px solid var(--gdd);overflow-y:auto}
+}
 @media (min-width:951px){
 body.lay-expand #panel{display:none}
 body.lay-transcript #panel{width:290px;padding:6px;gap:5px;font-size:11.5px}
@@ -2860,7 +2866,8 @@ function appPanel() {
 const PPI = { G: '120,255,140', sweepT: 4000, lastAng: null, scan: null };
 function ppiCol(a) { return `rgba(${PPI.G},${a})`; }
 function appView(w, h) {   // rectangular scope geometry (CSS px): half-extents and px per NM
-  const M = 2, RX = Math.max(10, w / 2 - M), RY = Math.max(10, h / 2 - M);
+  const M = 2; let RX = Math.max(10, w / 2 - M), RY = Math.max(10, h / 2 - M);
+  RX = Math.min(RX, 2 * RY); RY = Math.min(RY, 2 * RX);   // aspect cap: longer axis shows at most 2x the shorter (28 NM vs 14); rest is plain background, scope centred
   return { RX, RY, sc: Math.min(RX, RY) / APP_RANGE };
 }
 function drawApp(now) {
@@ -2991,7 +2998,7 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   const geo = () => { const w = canvas.clientWidth, h = canvas.clientHeight; const v = appView(w, h); return { w, h, cx: w / 2, cy: h / 2, RX: v.RX, RY: v.RY, sc: v.sc }; };
   const clamp = (el, x, y) => { const w = wrap.clientWidth, h = wrap.clientHeight; return [Math.max(0, Math.min(w - el.offsetWidth, x)), Math.max(0, Math.min(h - el.offsetHeight, y))]; };
   const place = (el, key, def) => { let p = null; try { p = JSON.parse(localStorage.getItem(key)); } catch (e) {} if (!p || !isFinite(p.x) || !isFinite(p.y) || p.x < 0 || p.y < 0 || p.x > wrap.clientWidth || p.y > wrap.clientHeight) p = def(); const [x, y] = clamp(el, p.x, p.y); el.style.left = x + 'px'; el.style.top = y + 'px'; };
-  const defs = { infoBlk: () => ({ x: 10, y: 8 }), tbBlk: () => ({ x: 10, y: wrap.clientHeight - tb.offsetHeight - 8 }) };
+  const defs = { infoBlk: () => ({ x: 10, y: 34 }), tbBlk: () => ({ x: 10, y: wrap.clientHeight - tb.offsetHeight - 34 }) };   // inset below/above the bearing-label bands
   const keys = { infoBlk: 'ac_infoBlockPos', tbBlk: 'ac_trackballBlockPos' };
   for (const el of [ib, tb]) {
     el.addEventListener('pointerdown', e => {
