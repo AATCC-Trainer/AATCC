@@ -711,6 +711,7 @@ function linkSet(on) {
 }
 function linkRecv(m) {
   if (!LINK.on) return;
+  if (m && m.cs && !m.callsign) m.callsign = m.cs; if (m && m.type === 'handoffAccept') m.type = 'handoff_accept';   // accept Approach's cs/handoffAccept variant
   if (m.type === 'hello') { LINK.peer = true; linkPost({ type: 'hello-ack', from: 'final' }); }
   else if (m.type === 'hello-ack') LINK.peer = true;
   else if (m.type === 'brc') { LINK.peer = true; shipLinkBrc(m); }
