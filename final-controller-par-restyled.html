@@ -2161,7 +2161,7 @@ $('sMic').onclick = () => {
 let chosenDiff = 'training';
 document.querySelectorAll('.diff').forEach(el => { el.onclick = () => { chosenDiff = el.dataset.d; document.querySelectorAll('.diff').forEach(x => x.classList.toggle('on', x === el)); }; });
 function startGame(diff, opts) {
-  servoClear();
+  servoClear(); SERVO_LAST.E = SERVO_LAST.A = null;
   Sound.ensure(); startOv.classList.add('hidden'); endOv.classList.add('hidden'); helpOv.classList.add('hidden');
   { const ck = document.getElementById('linkChk'); if (ck && ck.checked !== LINK.on) linkSet(ck.checked); }   // link choice from the start screen applies at run start
   uiPaused = false; newGame(diff, opts || {}); initVoiceStatus();
@@ -2386,6 +2386,7 @@ function draw(now) {
   }
   // targets
   if (G) {
+    servoTick(now);
     const blink = Math.floor(now / 260) % 2 === 0;
     const par = G.ac.filter(a => a.phase !== 'queue' && a.phase !== 'gone' && a.r <= RMAX + 0.2 && a.r >= RMIN - 0.2 && !(a.phase === 'climbout' && (Math.abs(a.yft) > YMAX || a.z > ZMAX)));
     par.sort((p, q) => (p === G.selected) - (q === G.selected));
@@ -2508,9 +2509,19 @@ function pickAt(px, py) {
    other scope can be worked with the same pointer; right-click a scope clears its band, double-click clears both,
    a new session or switching Servo mode off clears all. Display only: grading uses the painted positions. */
 const SERVO_PAD_PX = 8;
-const SERVO = { E: null, A: null };   // per scope: { y (px), ptr (pointerId|null), mouse (bool) }
+const SERVO_SLEW_S = 0.4;   // motor-driven slew: constant rate, one full scope height in 0.4 s
+const SERVO = { E: null, A: null };   // per scope: { y (current, px), ty (commanded, px), ptr (pointerId|null), mouse (bool) }
+const SERVO_LAST = { E: null, A: null };   // where each band was when last cleared: the next press slews from there (scope centre at first / new session)
+let servoT = 0;
+function servoTick(now) {   // advance each band toward its commanded position at the slew rate (real time, also while paused)
+  const dt = servoT ? Math.min(0.1, Math.max(0, (now - servoT) / 1000)) : 0; servoT = now;
+  for (const sc of ['E', 'A']) { const v = SERVO[sc]; if (!v) continue;
+    const rate = (sc === 'E' ? L.eh : L.ah) / SERVO_SLEW_S, d = v.ty - v.y;
+    v.y = Math.abs(d) <= rate * dt ? v.ty : v.y + Math.sign(d) * rate * dt; }
+}
+const servoSlewing = sc => !!SERVO[sc] && Math.abs(SERVO[sc].ty - SERVO[sc].y) > 0.5;
 const servoOn = () => S.servo !== false && !!G;
-function servoClear(sc) { if (sc) SERVO[sc] = null; else { SERVO.E = null; SERVO.A = null; } }
+function servoClear(sc) { for (const k of sc ? [sc] : ['E', 'A']) { if (SERVO[k]) SERVO_LAST[k] = SERVO[k].y; SERVO[k] = null; } }
 const servoHalfPx = () => tickSize().TH / 2 + SERVO_PAD_PX;
 const servoScopeAt = py => py < (L.eBot + L.aTop) / 2 ? 'E' : 'A';
 const servoClampY = (sc, y) => sc === 'E' ? clamp(y, L.eTop, L.eBot) : clamp(y, L.aTop, L.aBot);
@@ -2524,14 +2535,18 @@ canvas.addEventListener('pointerdown', e => {
   const sc = servoScopeAt(p.y), mouse = e.pointerType === 'mouse';
   if (mouse && e.button === 2) { servoClear(sc); return; }   // right-click: clear this scope's parked band
   if (mouse && e.button !== 0) return;
+  const cur = SERVO[sc];
+  if (cur && cur.ptr != null && cur.ptr !== e.pointerId) return;   // another finger already drives this scope
+  if (servoSlewing(sc)) return;                                     // tap lockout: still slewing to the last tapped spot
   try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
-  SERVO[sc] = { y: servoClampY(sc, p.y), ptr: e.pointerId, mouse };
+  const start = cur ? cur.y : SERVO_LAST[sc] != null ? servoClampY(sc, SERVO_LAST[sc]) : (sc === 'E' ? (L.eTop + L.eBot) / 2 : (L.aTop + L.aBot) / 2);
+  SERVO[sc] = { y: start, ty: servoClampY(sc, p.y), ptr: e.pointerId, mouse };
 });
 canvas.addEventListener('pointermove', e => {
   if (!servoOn()) return;
-  for (const sc of ['E', 'A']) { const v = SERVO[sc]; if (v && v.ptr === e.pointerId) v.y = servoClampY(sc, servoLocal(e).y); }
+  for (const sc of ['E', 'A']) { const v = SERVO[sc]; if (v && v.ptr === e.pointerId) v.ty = servoClampY(sc, servoLocal(e).y); }   // drag: the band chases the pointer at the slew rate
 });
-const servoUp = e => { for (const sc of ['E', 'A']) { const v = SERVO[sc]; if (v && v.ptr === e.pointerId) { if (v.mouse) v.ptr = null; else SERVO[sc] = null; } } };   // touch: lift = gone; mouse: stays parked
+const servoUp = e => { for (const sc of ['E', 'A']) { const v = SERVO[sc]; if (v && v.ptr === e.pointerId) { if (v.mouse) v.ptr = null; else servoClear(sc); } } };   // touch: lift = gone; mouse: stays parked
 canvas.addEventListener('pointerup', servoUp);
 canvas.addEventListener('pointercancel', servoUp);
 canvas.addEventListener('dblclick', e => { if (servoOn()) { e.preventDefault(); servoClear(); } });
@@ -2576,7 +2591,7 @@ window.PAR = {
   courseTest(yft) { const g = courseGeom({ yft }); return { cat: courseCatAt(g, g.d), d: +g.d.toFixed(2), h: g.h, b1: g.b1, b2: +g.b2.toFixed(2), b3: g.b3, acc: ['on', 'slightly', 'plain', 'well'].filter(c => courseAccepts({ yft }, c)), ftPerPx: +(YMAX / ((L.ah || 290) / 2)).toFixed(2) }; },
   ac(cs) { const a = G.ac.find(x => x.cs === cs); if (!a) return null; return { cs: a.cs, phase: a.phase, r: +a.r.toFixed(2), yft: Math.round(a.yft), z: Math.round(a.z), gpFt: Math.round(a.z - gpAlt(a.r)), dev: +elevDev(a).toFixed(2), az: +azDeg(a).toFixed(2), hdg: Math.round(a.hdg), vs: Math.round(a.vs), pts: a.pts, gear: a.gear, cleared: a.cleared, limit: a.limit, silent: a.silent, result: a.result }; },
   says() { return sayLog.slice(); },
-  servo() { const o = sc => SERVO[sc] ? { y: +SERVO[sc].y.toFixed(1), active: servoActive(sc), mouse: SERVO[sc].mouse } : null; return { on: servoOn(), halfPx: +servoHalfPx().toFixed(1), E: o('E'), A: o('A') }; },
+  servo() { const o = sc => SERVO[sc] ? { y: +SERVO[sc].y.toFixed(1), ty: +SERVO[sc].ty.toFixed(1), slewing: servoSlewing(sc), active: servoActive(sc), mouse: SERVO[sc].mouse } : null; return { on: servoOn(), halfPx: +servoHalfPx().toFixed(1), E: o('E'), A: o('A') }; },
   geom() { return Object.assign({}, L); },
   paint(cs) { const a = G && G.ac.find(x => x.cs === cs); return a ? { a: a.pA ? Object.assign({}, a.pA) : null, e: a.pE ? Object.assign({}, a.pE) : null } : null; },
   hit(cs) { const a = G && G.ac.find(x => x.cs === cs); return a ? { e: a.hitE, az: a.hitA } : null; },
