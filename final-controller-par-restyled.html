@@ -227,7 +227,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
     <div class="set"><label for="sRate">Pilot speaking rate</label><input type="range" id="sRate" min="0.8" max="1.5" step="0.05"></div>
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
     <div class="set"><label for="sSweep">Radar scan line</label><input type="checkbox" id="sSweep" style="width:22px;height:22px"></div>
-    <div class="set"><label for="sServo" title="Press (or drag) on a scope where the target is to see it there; each scope has its own narrow window. Touch: only while your finger is down. Mouse: the point stays until right-click (that scope) or double-click (both). Off: targets always show.">Servo mode</label><input type="checkbox" id="sServo" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sServo" title="Press (or drag up/down) on a scope at the target's height to see it there; each scope has its own narrow horizontal band. Touch: only while your finger is down. Mouse: the point stays until right-click (that scope) or double-click (both). Off: targets always show.">Servo mode</label><input type="checkbox" id="sServo" style="width:22px;height:22px"></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
     <div id="setInfo" class="note" style="color:var(--dim)"></div>
   </div>
@@ -2392,10 +2392,9 @@ function draw(now) {
     glow(true, 'rgba(120,255,140,0.8)', 6);   // bright target bloom
     for (const a of par) drawTarget(a, blink);
     glow(false);
-    if (servoOn()) for (const sc of ['E', 'A']) if (servoActive(sc)) {   // faint short notches at the servo window edges, just outside the panel (no text, no box)
-      const top = sc === 'E' ? L.eTop : L.aTop, h = sc === 'E' ? L.eh : L.ah, hw = servoHalfPx(), x0 = px5(SERVO[sc].x - hw), x1 = px5(SERVO[sc].x + hw);
-      ctx.strokeStyle = C.gd + '0.35)'; ctx.lineWidth = 1;
-      for (const x of [x0, x1]) { line(x, top - 6, x, top - 1); line(x, top + h + 1, x, top + h + 6); }
+    if (servoOn()) for (const sc of ['E', 'A']) if (servoActive(sc)) {   // faint dashed horizontal servo line at the band centre (no text, no box)
+      ctx.save(); ctx.beginPath(); ctx.rect(L.left, sc === 'E' ? L.eTop : L.aTop, L.plotW, sc === 'E' ? L.eh : L.ah); ctx.clip();
+      ctx.strokeStyle = C.gd + '0.22)'; ctx.lineWidth = 1; ctx.setLineDash([4, 6]); const y = px5(SERVO[sc].y); line(L.left, y, L.left + L.plotW, y); ctx.setLineDash([]); ctx.restore();
     }
     drawHud(now, blink);
   }
@@ -2433,7 +2432,7 @@ function drawTarget(a, blink) {
   const XE = xr(pe.r), XA = xr(pa.r), YE = ez(pe.z), YA = ay(clamp(pa.yft, -YMAX, YMAX)), X = XA;
   ctx.fillStyle = C.tgt;
   const { TW, TH } = tickSize();               // ~3 x 32 px tick at 1280x800, scales with the panel height
-  const sv = servoOn(), showE = !sv || servoShows('E', XE), showA = !sv || servoShows('A', XA);   // servo mode: each scope shows a target only inside its own active servo window
+  const sv = servoOn(), showE = !sv || servoShows('E', YE), showA = !sv || servoShows('A', YA);   // servo mode: each scope shows a target only inside its own active servo band
   if (showE) ctx.fillRect(Math.round(XE - TW / 2), Math.round(YE - TH / 2), TW, TH);
   if (showA) ctx.fillRect(Math.round(XA - TW / 2), Math.round(YA - TH / 2), TW, TH);
   a.hitE = { x: XE, y: YE, hw: TW / 2, hh: TH / 2 }; a.hitA = { x: XA, y: YA, hw: TW / 2, hh: TH / 2 };
@@ -2500,34 +2499,37 @@ function pickAt(px, py) {
   if (best) selectAc(best);
 }
 /* ---- servo (mouse / touch), positional and independent on each scope.
-   Pressing a scope sets a servo window on THAT scope: a range slice SERVO_HALF_NM either side of the press point
-   (full panel height). A target shows on a scope only while that scope's servo is active and the target's painted
-   range is inside its window. Touch/pen: active only while the finger is down (one finger per scope, multi-touch OK);
-   drag to follow the aircraft. Mouse: the point stays parked where last clicked/dragged so the other scope can be
-   worked with the same pointer; right-click a scope clears its point, double-click clears both, a new session clears all.
-   Display only: grading always uses the painted positions, visible or not. */
-const SERVO_HALF_NM = 0.5, SERVO_MIN_HALF_PX = 14;
-const SERVO = { E: null, A: null };   // per scope: { x (px), ptr (pointerId|null), mouse (bool) }
+   Pressing a scope sets a horizontal servo BAND on THAT scope, centred on the press's vertical position and covering
+   the full range width: on the course (azimuth) scope it selects left/right of course, on the glidepath (elevation)
+   scope above/below the glidepath. The band is a fixed pixel height (targets converge near the ship): half-height
+   = half the target tick + SERVO_PAD_PX. A target shows on a scope only while that scope's servo is active and the
+   target's painted tick centre is inside the band. Touch/pen: active only while the finger is down (one finger per
+   scope, multi-touch OK); drag up/down to follow. Mouse: the band stays parked where last clicked/dragged so the
+   other scope can be worked with the same pointer; right-click a scope clears its band, double-click clears both,
+   a new session or switching Servo mode off clears all. Display only: grading uses the painted positions. */
+const SERVO_PAD_PX = 8;
+const SERVO = { E: null, A: null };   // per scope: { y (px), ptr (pointerId|null), mouse (bool) }
 const servoOn = () => S.servo !== false && !!G;
 function servoClear(sc) { if (sc) SERVO[sc] = null; else { SERVO.E = null; SERVO.A = null; } }
-const servoHalfPx = () => Math.max(SERVO_MIN_HALF_PX, SERVO_HALF_NM / (RMAX - RMIN) * L.plotW);
+const servoHalfPx = () => tickSize().TH / 2 + SERVO_PAD_PX;
 const servoScopeAt = py => py < (L.eBot + L.aTop) / 2 ? 'E' : 'A';
+const servoClampY = (sc, y) => sc === 'E' ? clamp(y, L.eTop, L.eBot) : clamp(y, L.aTop, L.aBot);
 const servoActive = sc => !!SERVO[sc] && (SERVO[sc].mouse || SERVO[sc].ptr != null);
-function servoShows(sc, x) { return servoActive(sc) && Math.abs(x - SERVO[sc].x) <= servoHalfPx(); }
+function servoShows(sc, y) { return servoActive(sc) && Math.abs(y - SERVO[sc].y) <= servoHalfPx(); }
 const servoLocal = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
 canvas.addEventListener('pointerdown', e => {
   Sound.ensure(); const p = servoLocal(e);
   if (!servoOn()) { pickAt(p.x, p.y); return; }
   e.preventDefault();
   const sc = servoScopeAt(p.y), mouse = e.pointerType === 'mouse';
-  if (mouse && e.button === 2) { servoClear(sc); return; }   // right-click: clear this scope's parked point
+  if (mouse && e.button === 2) { servoClear(sc); return; }   // right-click: clear this scope's parked band
   if (mouse && e.button !== 0) return;
   try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
-  SERVO[sc] = { x: clamp(p.x, L.left, L.left + L.plotW), ptr: e.pointerId, mouse };
+  SERVO[sc] = { y: servoClampY(sc, p.y), ptr: e.pointerId, mouse };
 });
 canvas.addEventListener('pointermove', e => {
   if (!servoOn()) return;
-  for (const sc of ['E', 'A']) { const v = SERVO[sc]; if (v && v.ptr === e.pointerId) { v.x = clamp(servoLocal(e).x, L.left, L.left + L.plotW); } }
+  for (const sc of ['E', 'A']) { const v = SERVO[sc]; if (v && v.ptr === e.pointerId) v.y = servoClampY(sc, servoLocal(e).y); }
 });
 const servoUp = e => { for (const sc of ['E', 'A']) { const v = SERVO[sc]; if (v && v.ptr === e.pointerId) { if (v.mouse) v.ptr = null; else SERVO[sc] = null; } } };   // touch: lift = gone; mouse: stays parked
 canvas.addEventListener('pointerup', servoUp);
@@ -2574,7 +2576,7 @@ window.PAR = {
   courseTest(yft) { const g = courseGeom({ yft }); return { cat: courseCatAt(g, g.d), d: +g.d.toFixed(2), h: g.h, b1: g.b1, b2: +g.b2.toFixed(2), b3: g.b3, acc: ['on', 'slightly', 'plain', 'well'].filter(c => courseAccepts({ yft }, c)), ftPerPx: +(YMAX / ((L.ah || 290) / 2)).toFixed(2) }; },
   ac(cs) { const a = G.ac.find(x => x.cs === cs); if (!a) return null; return { cs: a.cs, phase: a.phase, r: +a.r.toFixed(2), yft: Math.round(a.yft), z: Math.round(a.z), gpFt: Math.round(a.z - gpAlt(a.r)), dev: +elevDev(a).toFixed(2), az: +azDeg(a).toFixed(2), hdg: Math.round(a.hdg), vs: Math.round(a.vs), pts: a.pts, gear: a.gear, cleared: a.cleared, limit: a.limit, silent: a.silent, result: a.result }; },
   says() { return sayLog.slice(); },
-  servo() { const o = sc => SERVO[sc] ? { x: +SERVO[sc].x.toFixed(1), active: servoActive(sc), mouse: SERVO[sc].mouse } : null; return { on: servoOn(), halfPx: +servoHalfPx().toFixed(1), E: o('E'), A: o('A') }; },
+  servo() { const o = sc => SERVO[sc] ? { y: +SERVO[sc].y.toFixed(1), active: servoActive(sc), mouse: SERVO[sc].mouse } : null; return { on: servoOn(), halfPx: +servoHalfPx().toFixed(1), E: o('E'), A: o('A') }; },
   geom() { return Object.assign({}, L); },
   paint(cs) { const a = G && G.ac.find(x => x.cs === cs); return a ? { a: a.pA ? Object.assign({}, a.pA) : null, e: a.pE ? Object.assign({}, a.pE) : null } : null; },
   hit(cs) { const a = G && G.ac.find(x => x.cs === cs); return a ? { e: a.hitE, az: a.hitA } : null; },
