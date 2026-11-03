@@ -792,7 +792,10 @@ function linkComplete(a) {
    lost-comms clocks are held (no penalties); talking to the aircraft still works. FIN -> APP: typed "<callsign> hndoff"
    flashes "FIN" and sends {type:'handoff', callsign, from:'FIN'} until {type:'handoff_accept', callsign, by:'APP'} arrives
    (solo: a simulated Approach accepts after 3 s). Ownership only: the flight itself is not changed. */
-function hoffStart(a, from) { a.hoff = { from, t: G.t }; if (from === 'APP') a.owner = null; refreshPanel(true); }
+function hoffStart(a, from) {   // no flashing on Final (user request): APP handoffs are taken at once, FIN handoffs go straight to Approach
+  if (from === 'APP') { a.hoff = { from, t: G.t }; a.owner = null; hoffAccept(a); return; }
+  a.hoff = null; a.owner = 'APP'; refreshPanel(true);
+}
 function hoffAccept(a, byTx) {   // Final accepts an APP handoff (click; or implicitly by transmitting to it)
   if (!a || !a.hoff || a.hoff.from !== 'APP') return false;
   a.hoff = null; a.owner = 'FIN'; a.lastTx = Math.max(a.lastTx, G.t); a.lastRealTx = Math.max(a.lastRealTx, G.t);
