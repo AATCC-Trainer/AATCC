@@ -148,7 +148,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
   <button id="mptt" type="button">HOLD<br>TO<br>TALK</button><div id="mStat"></div>
   <div id="panel">
     <div class="box stats">
-      <div><b id="stScore">0</b><span>Score</span></div>
+      <div style="display:none"><b id="stScore">0</b><span>Score</span></div>
       <div><b id="stLanded">0</b><span>Landed</span></div>
       <div><b id="stMissed">0</b><span>Missed/Fail</span></div>
       <div><b id="stAcc">--</b><span>Call accuracy</span></div>
@@ -2041,10 +2041,10 @@ function endGame() {
   const avg = landedRes.length ? Math.round(landedRes.reduce((s, r) => s + r.score, 0) / landedRes.length) : 0;
   $('endTitle').textContent = G.failMsg ? '✖ APPROACH FAILED' : 'Session complete';
   $('endTitle').style.color = G.failMsg ? 'var(--red)' : '';
-  $('endGrade').innerHTML = G.failMsg ? `<span style="color:var(--red)">${esc(G.failMsg)}</span><br><span style="font-size:14px;color:#cfcce6">Watch the lower safety limit line and call "${ph('wave off', 'go around')}" early.</span>` : (landedRes.length ? `Average landed approach: ${gradeOf(avg)} (${avg} pts)` : 'No landings this time. Keep practicing!');
-  const rows = [['Level', G.d.name], ['Total score', G.score], ...(G.appConf != null || G.confPlan ? [[`Conflicts (−${SEP_STANDARDS.penalty} each)`, G.appConf || 0], ...(G.confDetail || []).slice(0, 6).map((t, i) => [`  ${i + 1}.`, t])] : []), ['Landed', G.landed], ...(G.practice ? [['Practice approaches', G.practice]] : []), ['Missed approaches / failures', G.missed], ['Crashes', G.crashes], ...((G.shipTurns || []).length ? [[`Ship turns (+${SHIP_TURN.bonus} per correct 99 call)`, `${G.shipTurns.length} turn(s), bonus +${G.shipBonus || 0}`], ...G.shipTurns.map((r, i) => [`  turn ${i + 1}: ${r.dir} ${r.deg}° → BRC ${h3z(r.to)}`, `turn call ${r.turnCall || 'missed'}, steady call ${r.steadyCall || 'missed'}`])] : []), ['Separation losses', G.sepLoss], ['Call accuracy', tot ? `${Math.round(100 * G.callsGood / tot)}% (${G.callsGood}/${tot})` : '--']];
+  $('endGrade').innerHTML = G.failMsg ? `<span style="color:var(--red)">${esc(G.failMsg)}</span><br><span style="font-size:14px;color:#cfcce6">Watch the lower safety limit line and call "${ph('wave off', 'go around')}" early.</span>` : (landedRes.length ? `${landedRes.length} landed.` : 'No landings this time. Keep practicing!');
+  const rows = [['Level', G.d.name], ...(G.appConf != null || G.confPlan ? [[`Conflicts (−${SEP_STANDARDS.penalty} each)`, G.appConf || 0], ...(G.confDetail || []).slice(0, 6).map((t, i) => [`  ${i + 1}.`, t])] : []), ['Landed', G.landed], ...(G.practice ? [['Practice approaches', G.practice]] : []), ['Missed approaches / failures', G.missed], ['Crashes', G.crashes], ...((G.shipTurns || []).length ? [[`Ship turns (+${SHIP_TURN.bonus} per correct 99 call)`, `${G.shipTurns.length} turn(s), bonus +${G.shipBonus || 0}`], ...G.shipTurns.map((r, i) => [`  turn ${i + 1}: ${r.dir} ${r.deg}° → BRC ${h3z(r.to)}`, `turn call ${r.turnCall || 'missed'}, steady call ${r.steadyCall || 'missed'}`])] : []), ['Separation losses', G.sepLoss], ['Call accuracy', tot ? `${Math.round(100 * G.callsGood / tot)}% (${G.callsGood}/${tot})` : '--']];
   $('endTable').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
-  $('endList').innerHTML = '<table class="st">' + G.results.map(r => `<tr><td>${esc(r.cs)} · ${r.landed ? ph('on deck', 'landed') : r.practice ? 'practice approach' : esc(r.reason)}<br><span style="color:var(--dim);font-size:11px">tolerance ${r.tol}% · ${r.good} good / ${r.bad} bad calls · ${r.gaps} gaps · ${r.missedRange} missed range calls</span></td><td>${r.grade} · ${r.score}</td></tr>`).join('') + '</table>';
+  $('endList').innerHTML = '<table class="st">' + G.results.map(r => `<tr><td>${esc(r.cs)} · ${r.landed ? ph('on deck', 'landed') : r.practice ? 'practice approach' : esc(r.reason)}<br><span style="color:var(--dim);font-size:11px">tolerance ${r.tol}% · ${r.good} good / ${r.bad} bad calls · ${r.gaps} gaps · ${r.missedRange} missed range calls</span></td><td></td></tr>`).join('') + '</table>';
   endOv.classList.remove('hidden');
 }
 
