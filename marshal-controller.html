@@ -174,7 +174,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div id="hint"></div>
     <div class="box" id="readout">Waiting for traffic…</div>
     <div id="linkBox" style="font-size:11.5px;color:#8fd8ff;margin:4px 0"><span id="linkStat"></span></div>
-    <div id="gradeBox" style="font-size:11.5px;line-height:1.4;color:#8fd8ff;white-space:pre;overflow-x:auto"></div>
+    <div id="gradeBox" style="display:none;font-size:11.5px;line-height:1.4;color:#8fd8ff;white-space:pre;overflow-x:auto"></div>
     <div class="box">
       <div style="font-size:11px;color:var(--dim);margin-bottom:4px">TRAFFIC</div>
       <canvas id="inset" style="display:none"></canvas>
@@ -2133,7 +2133,7 @@ TUT.splice(0, TUT.length,
    <li><b>Helicopters</b> (500 ft steps, minimum 1,500; 2,500 when jets are also in marshal): <b>LH-4</b> hold 090 radial 5–7 DME; arc 5 NM at 1,000 to final, FAF 3 DME at 500; missed (0.5 DME): right 90°, climb 1,000, intercept the 5 NM arc, arc right to the final bearing, back to marshal. <b>LH-5</b> marshal 030 radial 5 DME; IAF 2 DME, outbound 210 at 1,000, inbound, FAF 3 DME at 500; missed: straight ahead to 1,000, at 5 DME / 3 min turn right direct to the IAF, back to marshal. <b>Emergency marshal</b>: 045 / 090 / 135 radials, 5 NM 1,500 … 12 NM 5,000 (+500 ft per NM), flown like LH-4.</li>
    <li><b>Scoring</b>: +10 for a correct marshal (radial, distance and altitude fit the approach), −5 if it doesn't fit, −5 for an altitude already used in marshal, −5 for a jet approach given to a helicopter (or the reverse).</li>
    <li>⚙ Voice → "Show marshal / LH approach patterns" draws the patterns in use (on by default here).</li></ul>`],
-  ['2. Arrivals & other calls', `<p>Arrivals appear 10–12 NM out and check in: "Stinger Marshal, Venom two one, 210 for 12, angels 10, state 3.4, request marshal." Click (tap) the target to accept it, then assign a marshal and an approach. Aircraft never fly on their own: they hold their heading and altitude until you assign a marshal (or a heading/altitude, which cancels any procedure).</p><p>Also understood: turn left/right heading ___, climb/descend and maintain ___, say angels, say state, traffic calls, ship-turn calls ("99 mother in a port turn") and "correction". Approach-only calls (sectors, radar ID, go purple, climbout, CCA, handoff) are not used here; use <a href="approach-controller.html" style="color:#8fd8ff">Wasp Approach</a> for those.</p>`],
+  ['2. Arrivals & other calls', `<p>Arrivals appear 10–12 NM out and check in: "Stinger Marshal, Venom two one, 210 for 12, angels 10, state 3.4." Click (tap) the target to accept it, then assign a marshal and an approach. Aircraft never fly on their own: they hold their heading and altitude until you assign a marshal (or a heading/altitude, which cancels any procedure).</p><p>Also understood: turn left/right heading ___, climb/descend and maintain ___, say angels, say state, traffic calls, ship-turn calls ("99 mother in a port turn") and "correction". Approach-only calls (sectors, radar ID, go purple, climbout, CCA, handoff) are not used here; use <a href="approach-controller.html" style="color:#8fd8ff">Wasp Approach</a> for those.</p>`],
   ['3. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>HOLD TO TALK</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
    <ul><li><b>Best in Chrome or Edge on a computer.</b> Firefox has no speech recognition; Safari and iOS vary. You can always <b>type</b> the same words in the box.</li>
    <li>Chrome's speech recognition <b>needs an internet connection</b>, because the audio goes to Google's speech service.</li>
@@ -2574,8 +2574,8 @@ function appCheckIn(a, again) {
   const posit = `${pB} for ${pR} from mother, `, positSay = `${pB.split('').map(d => DIGW[+d]).join(' ')} for ${pRSay} from mother, `;
   a.checkInPosit = { brg: appBrg(a), rng: pR0, text: posit };
   if (MC) { const st = (Math.floor(appState(a) * 10) / 10).toFixed(1), dB = String(Math.round(appBrg(a)) % 360 || 360).padStart(3, '0'), dR = Math.round(appRng(a));
-    pilotSay(a, `${SHIP_NAME} Marshal, ${a.tel}, ${dB} for ${dR}, angels ${appAngels(a.alt)}, state ${st}, ${n} ${sw} on board, request marshal.`,
-      `${SHIP_NAME} Marshal, ${a.telSay}, ${dB.split('').map(d => DIGW[+d]).join(' ')} for ${dR >= 10 ? sayTwo(dR) : NUMW[dR]}, angels ${String(appAngels(a.alt)).split('.').map((x, i) => i ? NUMW[+x] : sayTwo(+x)).join(' point ')}, state ${fSay}, ${NUMW[n]} ${sw} on board, request marshal.`);
+    pilotSay(a, `${SHIP_NAME} Marshal, ${a.tel}, ${dB} for ${dR}, angels ${appAngels(a.alt)}, state ${st}, ${n} ${sw} on board.`,
+      `${SHIP_NAME} Marshal, ${a.telSay}, ${dB.split('').map(d => DIGW[+d]).join(' ')} for ${dR >= 10 ? sayTwo(dR) : NUMW[dR]}, angels ${String(appAngels(a.alt)).split('.').map((x, i) => i ? NUMW[+x] : sayTwo(+x)).join(' point ')}, state ${fSay}, ${NUMW[n]} ${sw} on board.`);
     if (!G.selected) selectAc(a); return; }
   pilotSay(a, `${SHIP_NAME} Approach, ${a.tel}, ${pre}${again ? posit : ""}state ${f}, ${n} ${sw} on board, request practice PAR approach.`,
     `${SHIP_NAME} Approach, ${a.telSay}, ${pre}${again ? positSay : ""}state ${fSay}, ${NUMW[n]} ${sw} on board, request practice P A R approach.`);
