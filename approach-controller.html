@@ -12,11 +12,11 @@ html,body{margin:0;height:100%;background:#120e24;color:var(--g);font-family:Con
 #shipBanner{position:absolute;top:56px;left:50%;transform:translateX(-50%);z-index:6;padding:8px 16px;border:2px solid #ffb347;background:rgba(40,25,0,.88);color:#ffcf70;font:bold 18px ui-monospace,monospace;letter-spacing:.06em;border-radius:6px;pointer-events:none;display:none;white-space:nowrap;text-align:center}
 #shipBanner.turn{border-color:#ff6a4d;color:#ff9a7a;animation:sbFlash .8s steps(2) infinite}#shipBanner.steady{border-color:#6dff8a;color:#9dffb0;background:rgba(0,35,10,.88)}
 @keyframes sbFlash{50%{opacity:.55}}
-.starBlk,#starBlk{position:absolute;display:flex;align-items:center;gap:4px;font:11px Consolas,Menlo,"DejaVu Sans Mono",monospace;color:rgba(120,255,140,.9);cursor:move;user-select:none;-webkit-user-select:none;touch-action:none;z-index:6;padding:2px 3px}
-#starBlk .sm{display:inline-block;width:9px;height:9px;border:1.4px solid rgba(120,255,140,.9);border-radius:50%;position:relative;margin-right:10px}
-#starBlk .sm::after{content:'';position:absolute;left:9px;top:-3px;width:10px;height:1px;background:rgba(120,255,140,.6);transform:rotate(-30deg);transform-origin:left}
+.starBlk,#starBlk{position:absolute;display:flex;align-items:center;gap:4px;font:11px Consolas,Menlo,"DejaVu Sans Mono",monospace;color:#8fd8ff;cursor:move;user-select:none;-webkit-user-select:none;touch-action:none;z-index:6;padding:2px 3px}
+#starBlk .sm{display:inline-block;width:9px;height:9px;border:1.4px solid #8fd8ff;border-radius:50%;position:relative;margin-right:10px}
+#starBlk .sm::after{content:'';position:absolute;left:9px;top:-3px;width:10px;height:1px;background:rgba(143,216,255,.6);transform:rotate(-30deg);transform-origin:left}
 #starBlk .st{font-size:13px;font-weight:bold;padding:0 2px}
-#starIn{display:none;width:170px;background:rgba(0,20,6,.85);border:1px solid rgba(120,255,140,.55);color:rgba(220,255,225,1);font:11px Consolas,Menlo,"DejaVu Sans Mono",monospace;padding:2px 4px;outline:none;text-transform:uppercase;cursor:text}
+#starIn{display:none;width:170px;background:rgba(0,10,20,.85);border:1px solid rgba(143,216,255,.55);color:#8fd8ff;font:11px Consolas,Menlo,"DejaVu Sans Mono",monospace;padding:2px 4px;outline:none;text-transform:uppercase;cursor:text}
 #starBlk.open #starIn{display:inline-block}
 .ib{position:absolute;color:#8fd8ff;font-size:11.5px;line-height:1.35;white-space:pre;cursor:move;user-select:none;-webkit-user-select:none;pointer-events:auto;z-index:5;touch-action:none}
 #scopeWrap{flex:1;position:relative;min-width:0;min-height:0}
