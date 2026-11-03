@@ -49,6 +49,9 @@ body:not(.touchdev) #vStatus{bottom:8px}
 #strips{display:flex;flex-direction:column;gap:2px}
 .strip{display:grid;grid-template-columns:22px 1fr 1fr 70px;gap:4px;padding:3px 5px;border:1px solid var(--gdd);cursor:pointer;font-size:12px}
 .strip.sel{border-color:var(--cyan);color:var(--cyan)}
+.strip.hoff{animation:hoffBlink .5s steps(1) infinite;border-color:var(--amber);color:var(--amber)}
+.strip .hotag{font-weight:bold;letter-spacing:1px}
+@keyframes hoffBlink{50%{background:rgba(255,191,60,.22);border-color:transparent}}
 .strip.conf{border-color:var(--red);color:var(--red)}
 .strip.done{opacity:.45}
 #log{flex:1;min-height:130px;max-height:260px;overflow-y:auto;font-size:12px;line-height:1.35}
@@ -228,6 +231,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
     <div class="set"><label for="sSweep">Radar scan line</label><input type="checkbox" id="sSweep" style="width:22px;height:22px"></div>
     <div class="set"><label for="sServo" title="Press (or drag up/down) on a scope at the target's height to see it there; each scope has its own narrow horizontal band. Touch: only while your finger is down. Mouse: the point stays until right-click (that scope) or double-click (both). Off: targets always show.">Servo mode</label><input type="checkbox" id="sServo" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sSoloHoff" title="Solo: each arrival comes in as a flashing APP handoff on its strip; click the strip to accept">Solo handoffs (APP)</label><input type="checkbox" id="sSoloHoff" checked style="width:22px;height:22px"></div>
     <div class="set"><label for="sServoSpd" title="Seconds for the servo band to slew across the full scope height">Servo speed</label><span style="display:flex;align-items:center;gap:8px"><input type="range" id="sServoSpd" min="0.4" max="2.5" step="0.1" style="flex:1"><span id="sServoSpdV" style="min-width:3.5em"></span></span></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
     <div id="setInfo" class="note" style="color:var(--dim)"></div>
@@ -710,7 +714,8 @@ function linkRecv(m) {
   if (m.type === 'hello') { LINK.peer = true; linkPost({ type: 'hello-ack', from: 'final' }); }
   else if (m.type === 'hello-ack') LINK.peer = true;
   else if (m.type === 'brc') { LINK.peer = true; shipLinkBrc(m); }
-  else if (m.type === 'handoff') { LINK.peer = true; if (G && !G.over) linkHandoff(m); else LINK.pending.push(m); }
+  else if (m.type === 'handoff') { LINK.peer = true; if (String(m.from || 'APP').toUpperCase() !== 'APP') { /* not addressed to Final */ } else if (G && !G.over) linkHandoff(m); else LINK.pending.push(m); }
+  else if (m.type === 'handoff_accept') { LINK.peer = true; if (G && String(m.by || '').toUpperCase() === 'APP') hoffAccepted(String(m.callsign || '').toUpperCase().replace(/\s+/g, '')); }
   linkStatus();
 }
 function linkType(m) {
@@ -745,7 +750,7 @@ function linkHandoff(m) {
     else if (setBRC(fc)) log('sys', `Approach Control: final bearing ${BRC3}${src} (wind ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}).`);
   }
   const cs = String(m.callsign || 'UNKN01').toUpperCase().replace(/\s+/g, '');
-  if (G.ac.some(a => a.cs === cs && a.phase !== 'gone')) return;
+  { const ex = G.ac.find(a => a.cs === cs && a.phase !== 'gone'); if (ex) { if (!ex.hoff) hoffStart(ex, 'APP'); return; } }   // already known: (re)flash as an APP handoff
   const n = +m.approachNum || 3, prac = n < 3;
   const rel = angDiff(+m.bearingFromShip || 0, norm(BRC + 180));   // bearing relative to the reciprocal of the final course
   const rng0 = Math.max(0, +m.rangeNm || 0);
@@ -763,6 +768,7 @@ function linkHandoff(m) {
   a.link = { freq: m.freq, approachNum: n, climbout: m.climbout || null, simTime: m.simTime };
   if (String(m.approachType || '').toLowerCase() === 'asr') { a.asr = true; a.mda = ASR_MDA; a.asrStarted = true; }
   G.ac.push(a);
+  hoffStart(a, 'APP');
   log('sys', `Approach Control handoff: ${cs} (${a.type})${m.freq ? ' on ' + m.freq : ''}, ${rng0.toFixed(1)} NM, ${fmtAlt(a.z)} ft, heading ${hdg3(a.hdg)}, approach ${n}${prac ? ' (practice)' : ' (full stop)'}.`);
   linkCover(a);
 }
@@ -777,6 +783,40 @@ function linkComplete(a) {
   a.linkSent = true;
   const outcome = a.result && a.result.landed ? 'landed' : a.result && a.result.practice ? 'lowapproach' : 'waveoff';
   linkPost({ type: 'complete', callsign: a.cs, outcome });
+}
+
+/* ---- flashing handoffs. The "data block" is the aircraft's side-panel strip (the scope carries no text).
+   APP -> FIN: the strip flashes "APP" until Final clicks it (strip, or the target when Servo mode is off); then Final owns it
+   and {type:'handoff_accept', callsign, by:'FIN'} goes back. While an APP handoff is pending, the 5 s transmission-gap and
+   lost-comms clocks are held (no penalties); talking to the aircraft still works. FIN -> APP: typed "<callsign> hndoff"
+   flashes "FIN" and sends {type:'handoff', callsign, from:'FIN'} until {type:'handoff_accept', callsign, by:'APP'} arrives
+   (solo: a simulated Approach accepts after 3 s). Ownership only: the flight itself is not changed. */
+function hoffStart(a, from) { a.hoff = { from, t: G.t }; if (from === 'APP') a.owner = null; refreshPanel(true); }
+function hoffAccept(a, byTx) {   // Final accepts an APP handoff (click; or implicitly by transmitting to it)
+  if (!a || !a.hoff || a.hoff.from !== 'APP') return false;
+  a.hoff = null; a.owner = 'FIN'; a.lastTx = Math.max(a.lastTx, G.t); a.lastRealTx = Math.max(a.lastRealTx, G.t);
+  log('sys', `Handoff accepted${byTx ? ' (by transmitting)' : ''}: you have ${a.cs}.`);
+  if (G.linked) linkPost({ type: 'handoff_accept', callsign: a.cs, by: 'FIN' });
+  refreshPanel(true); return true;
+}
+function hoffAccepted(cs) {   // Approach accepted our FIN handoff
+  const a = G.ac.find(x => x.cs === cs); if (!a || !a.hoff || a.hoff.from !== 'FIN') return;
+  a.hoff = null; a.owner = 'APP'; log('sys', `Approach accepted the handoff of ${a.cs}.`); refreshPanel(true);
+}
+function hoffInitiate(a) {   // Final hands the aircraft to Approach
+  if (a.hoff && a.hoff.from === 'APP') { log('sys', `${a.cs}: accept the APP handoff first (click its strip).`); return; }
+  hoffStart(a, 'FIN'); log('sys', `Handoff of ${a.cs} to Approach initiated.`);
+  if (G.linked) linkPost({ type: 'handoff', callsign: a.cs, from: 'FIN' });
+  else { const cs = a.cs, g = G; setTimeout(() => { if (G === g) hoffAccepted(cs); }, 3000); }   // solo: simulated Approach accepts
+}
+const HOFF_RE = /^\s*(.+?)[\s,]+(?:hndoff|handoff|hand\s*off|hand-off)[\s.!]*$/i;
+function hoffTyped(text) {   // "<callsign> hndoff" / "handoff" / "hand off": a controller action, never a pilot command
+  const m = String(text).match(HOFF_RE); if (!m || !G) return null;
+  const known = G.ac.filter(alive).map(a => a.cs);
+  const p = parseSpeech(m[1], known);
+  let a = p.cs ? G.ac.find(x => x.cs === p.cs && alive(x)) : null;
+  if (!a) { const k = m[1].toUpperCase().replace(/[\s,]+/g, ''); a = G.ac.find(x => alive(x) && x.cs === k) || null; }
+  return { a, said: m[1].trim() };
 }
 
 /* ===================== ship turns (ship mode only) ===================== */
@@ -988,6 +1028,7 @@ function spawnFinal(spec = {}) {
 
 function onParEntry(a) {
   a.lastTx = a.lastRealTx = G.t;
+  if (!G.linked && S.soloHoff !== false && !a.owner && !a.hoff) hoffStart(a, 'APP');   // solo: arrives as a flashing APP handoff
   const it = isPrac(a) ? (a.pracNo > 1 ? 'practice approach' : 'request multiple practice PARs') : a.afterPrac ? 'this will be a full stop' : 'full stop';
   const itSay = it.replace('PARs', 'P A Rs');
   if (isShip()) pilotSay(a, `${SHIP_NAME} Final, ${a.tel}, ${a.r.toFixed(0)} miles, level ${fmtAlt(a.z)}, heading ${hdg3(a.hdg)}, for the PAR to the ship, ${it}.`,
@@ -1211,7 +1252,7 @@ function updatePar(a, dt) {
     // ---- transmission gap
     const lcLim = (a.phase === 'descent' ? G.d.gap : G.d.gap * 2) * 2.6;   // lost-comms timer: unchanged from the old gap-based value
     const gapLim = TX_GAP_S;
-    if (!a.contacted) a.lastTx = Math.max(a.lastTx, G.t - 0.001);   // not started yet: no gap penalty, clock held at now
+    if (!a.contacted || (a.hoff && a.hoff.from === 'APP')) { a.lastTx = Math.max(a.lastTx, G.t - 0.001); if (a.hoff) a.lastRealTx = Math.max(a.lastRealTx, G.t - 0.001); }   // not started yet / APP handoff not accepted: no gap or lost-comms penalty, clocks held at now
     if (a.contacted && G.t - a.lastTx > gapLim) {
       a.gaps++; a.lastTx = G.t;
       addPts(a, -5, `Transmission gap: ${Math.round(gapLim)} s without a call to ${a.cs}. On PAR final, keep talking!`, 'warn');
@@ -1445,6 +1486,7 @@ function execute(p, src) {
     pilotSay(a, `${a.tel}, say again heading.`, `${a.telSay}, say again heading.`, true, false, false);
     return;
   }
+  if (a.hoff && a.hoff.from === 'APP') hoffAccept(a, true);   // talking to it takes it: closes the "never accept, never penalized" gap
   selectAc(a);
   const silentBefore = a.dna;          // pilots acknowledge every call until "do not acknowledge further transmissions"
   a.lastTx = G.t; a.lastRealTx = G.t;
@@ -1784,7 +1826,7 @@ function suggestCall(a) {
 
 /* ===================== settings & sound ===================== */
 const SETTINGS_KEY = 'fcpar_settings_v1';
-const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', sweep: true, servo: true, servoSlew: 1.2 };
+const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', sweep: true, servo: true, servoSlew: 1.2, soloHoff: true };
 try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) {}
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) {} };
 
@@ -1997,6 +2039,14 @@ function renderTranscript(fin, inter) {
   $('transcript').innerHTML = (fin || inter) ? `${esc(fin)}<span class="interim">${esc(inter)}</span>` : '<span style="color:var(--dim)">…listening…</span>';
 }
 function handleTranscript(text, src) {
+  { const h = G && !G.over ? hoffTyped(text) : null;
+    if (h) {
+      $('parsed').classList.toggle('bad', !h.a);
+      if (!h.a) { $('parsed').textContent = `Handoff: no aircraft "${h.said}"`; log('sys', `Handoff: no aircraft "${h.said}" on frequency.`); return { cs: null, cmds: [], str: 'HANDOFF ?', norm: text }; }
+      $('parsed').textContent = `Handoff → ${h.a.cs} to Approach (FIN)`;
+      hoffInitiate(h.a);
+      return { cs: h.a.cs, cmds: ['handoff'], str: 'HANDOFF ' + h.a.cs, norm: text };
+    } }
   const sc = G && !G.over ? shipCall(afterCorrection(text)) : null;   // "correction": only what follows counts
   if (sc) {
     if (src === 'voice') renderTranscript(afterCorrection(text).trim(), '');
@@ -2063,7 +2113,7 @@ function readoutText(a) {
   const dev = elevDev(a), az = azDeg(a), ft = Math.round(a.z - gpAlt(a.r));
   const cg = gpCat(A), cc = courseCat(A);
   const tol = a.descT > 5 ? Math.round(100 * a.tolT / a.descT) + '%' : '--';
-  return `${a.cs} ${a.type} "${a.tel}"${itTxt}  [${a.phase.toUpperCase()}${a.silent ? ', SILENT' : ''}${a.ng ? `, NO GYRO ${a.ngHalf ? '1.5' : '3'}°/S${a.ngTurn ? ' TURNING ' + (a.ngTurn === 'L' ? 'L' : 'R') : ''}` : ''}${a.asr ? `, ASR · MDA ${a.mda}` : ''}]
+  return `${a.cs} ${a.type} "${a.tel}"${itTxt}${A.hoff ? `  ◆ HANDOFF ${A.hoff.from}${A.hoff.from === 'APP' ? ' (click strip to accept)' : ' (awaiting Approach)'}` : ''}  [${a.phase.toUpperCase()}${a.silent ? ', SILENT' : ''}${a.ng ? `, NO GYRO ${a.ngHalf ? '1.5' : '3'}°/S${a.ngTurn ? ' TURNING ' + (a.ngTurn === 'L' ? 'L' : 'R') : ''}` : ''}${a.asr ? `, ASR · MDA ${a.mda}` : ''}]
 RANGE ${a.r.toFixed(2)} NM   GS ${Math.round(a.gs)} KT   HDG ${hdg3(a.hdg)}${Math.abs(angDiff(a.tgtHdg, a.hdg)) > 0.5 ? '→' + hdg3(a.tgtHdg) : ''}
 ELEV ${ft >= 0 ? '+' : ''}${ft} FT (${dev >= 0 ? '+' : ''}${dev.toFixed(2)}°) ${a.phase === 'final' && ft < 0 ? 'BELOW GP, LEVEL' : gpWords(cg, A).toUpperCase()}
 AZ   ${Math.abs(Math.round(a.yft))} FT ${a.yft >= 0 ? 'R' : 'L'} (${Math.abs(az).toFixed(2)}°) ${courseWords(cc, a.yft).toUpperCase()}
@@ -2092,11 +2142,11 @@ function refreshPanel(force) {
   const list = G.ac.slice().sort((p, q) => p.seq - q.seq);
   const status = x => x.phase === 'queue' ? (x.released ? 'INBOUND' : x.holding ? 'HOLD' : 'FEEDER') : x.phase.toUpperCase();
   const info = x => { if (x.phase === 'queue') return `${fmtAlt(x.alt)} ft`; const p = paintView(x); return `${p.r.toFixed(1)}NM ${fmtAlt(p.z)}`; };
-  const html = list.map(x => `<div class="strip${x === G.selected ? ' sel' : ''}${x.conflict ? ' conf' : ''}${!alive(x) || OUT_PHASES.includes(x.phase) ? ' done' : ''}" data-uid="${x.uid}"><span>#${x.seq}</span><span>${x.cs} ${x.type}${isShip() ? (isPrac(x) ? ' PRAC' : ' FS') : ''}</span><span>${info(x)}</span><span>${status(x)}</span></div>`).join('')
+  const html = list.map(x => `<div class="strip${x === G.selected ? ' sel' : ''}${x.hoff ? ' hoff' : ''}${x.conflict ? ' conf' : ''}${!alive(x) || OUT_PHASES.includes(x.phase) ? ' done' : ''}" data-uid="${x.uid}"><span>#${x.seq}</span><span>${x.cs} ${x.type}${isShip() ? (isPrac(x) ? ' PRAC' : ' FS') : ''}</span><span>${info(x)}</span><span>${x.hoff ? `<b class="hotag">${x.hoff.from}</b> ` : ''}${status(x)}</span></div>`).join('')
     + (G.spawned < G.toSpawn ? `<div style="color:var(--dim);font-size:11px">${G.toSpawn - G.spawned} more arrival(s) to come…</div>` : '');
   if (stripsEl.innerHTML !== html) stripsEl.innerHTML = html;
 }
-stripsEl.addEventListener('click', e => { const s = e.target.closest('.strip'); if (!s || !G) return; const a = G.ac.find(x => x.uid === +s.dataset.uid); if (a) selectAc(a); });
+stripsEl.addEventListener('click', e => { const s = e.target.closest('.strip'); if (!s || !G) return; const a = G.ac.find(x => x.uid === +s.dataset.uid); if (a) { hoffAccept(a); selectAc(a); } });
 
 $('bPause').onclick = () => { setPaused(!G.paused); $('bPause').blur(); };
 $('bS1').onclick = () => { setScale(1); $('bS1').blur(); };
@@ -2132,13 +2182,13 @@ window.addEventListener('blur', () => pttEnd());
 /* ===================== settings overlay ===================== */
 function openSettings() {
   uiPaused = true; setOv.classList.remove('hidden'); loadVoices();
-  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sSweep').checked = S.sweep !== false; $('sServo').checked = S.servo !== false; $('sServoSpd').value = servoSlewS(); $('sServoSpdV').textContent = servoSlewS().toFixed(1) + ' s'; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
+  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sSweep').checked = S.sweep !== false; $('sServo').checked = S.servo !== false; $('sSoloHoff').checked = S.soloHoff !== false; $('sServoSpd').value = servoSlewS(); $('sServoSpdV').textContent = servoSlewS().toFixed(1) + ' s'; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
   $('setInfo').innerHTML = `Speech recognition: ${SR ? 'available' : '<b>not available</b> in this browser'} · Speech output: ${TTS ? voices.length + ' English voice(s)' : 'not available'} · Page: ${esc(location.protocol)}`;
 }
 function closeSettings() { setOv.classList.add('hidden'); uiPaused = !helpOv.classList.contains('hidden'); initVoiceStatus(); }
 $('sServoSpd').addEventListener('input', () => { S.servoSlew = +$('sServoSpd').value; $('sServoSpdV').textContent = servoSlewS().toFixed(1) + ' s'; saveSettings(); });   // live while dragging
-['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice', 'sSweep', 'sServo'].forEach(id => $(id).addEventListener('change', () => {
-  S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.sweep = $('sSweep').checked; S.servo = $('sServo').checked; if (!S.servo) servoClear(); S.voice = $('sVoice').value; saveSettings();
+['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice', 'sSweep', 'sServo', 'sSoloHoff'].forEach(id => $(id).addEventListener('change', () => {
+  S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.sweep = $('sSweep').checked; S.servo = $('sServo').checked; S.soloHoff = $('sSoloHoff').checked; if (!S.servo) servoClear(); S.voice = $('sVoice').value; saveSettings();
 }));
 function setPhr(v) { S.phr = v === 'tower' ? 'tower' : 'ship'; saveSettings(); $('sPhr').value = $('sPhr2').value = S.phr; applyPhrUI(); if (G) refreshPanel(true); }
 function applyPhrUI() {
@@ -2499,7 +2549,7 @@ function pickAt(px, py) {
   if (!G) return;
   let best = null, bd = 14;
   for (const a of G.ac) for (const h of [a.hitE, a.hitA]) { if (!h || a.phase === 'queue') continue; const dx = Math.max(0, Math.abs(h.x - px) - (h.hw || 0)), dy = Math.max(0, Math.abs(h.y - py) - (h.hh || 0)), d = Math.hypot(dx, dy); if (d < bd) { bd = d; best = a; } }   // distance to the tick rectangle (+14 px slop)
-  if (best) selectAc(best);
+  if (best) { hoffAccept(best); selectAc(best); }
 }
 /* ---- servo (mouse / touch), positional and independent on each scope.
    Pressing a scope sets a horizontal servo BAND on THAT scope, centred on the press's vertical position and covering
@@ -2595,6 +2645,8 @@ window.PAR = {
   says() { return sayLog.slice(); },
   servo() { const o = sc => SERVO[sc] ? { y: +SERVO[sc].y.toFixed(1), ty: +SERVO[sc].ty.toFixed(1), slewing: servoSlewing(sc), active: servoActive(sc), mouse: SERVO[sc].mouse } : null; return { on: servoOn(), halfPx: +servoHalfPx().toFixed(1), E: o('E'), A: o('A') }; },
   geom() { return Object.assign({}, L); },
+  hoff(cs) { const a = G && G.ac.find(x => x.cs === cs); return a ? { hoff: a.hoff ? a.hoff.from : null, owner: a.owner || null } : null; },
+  accept(cs) { const a = G && G.ac.find(x => x.cs === cs); return hoffAccept(a); },
   paint(cs) { const a = G && G.ac.find(x => x.cs === cs); return a ? { a: a.pA ? Object.assign({}, a.pA) : null, e: a.pE ? Object.assign({}, a.pE) : null } : null; },
   hit(cs) { const a = G && G.ac.find(x => x.cs === cs); return a ? { e: a.hitE, az: a.hitA } : null; },
   selected() { return G && G.selected ? G.selected.cs : null; },
