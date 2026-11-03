@@ -1487,7 +1487,7 @@ function execute(p, src) {
     pilotSay(a, `${a.tel}, say again heading.`, `${a.telSay}, say again heading.`, true, false, false);
     return;
   }
-  if (a.hoff && a.hoff.from === 'APP') hoffAccept(a, true);   // talking to it takes it: closes the "never accept, never penalized" gap
+  // handoff acceptance is click-only (user request)
   selectAc(a);
   const silentBefore = a.dna;          // pilots acknowledge every call until "do not acknowledge further transmissions"
   a.lastTx = G.t; a.lastRealTx = G.t;
