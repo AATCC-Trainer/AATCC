@@ -228,6 +228,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div class="set"><label for="sVol">Readback volume</label><input type="range" id="sVol" min="0" max="1" step="0.05"></div>
     <div class="set"><label for="sRate">Pilot speaking rate</label><input type="range" id="sRate" min="0.8" max="1.5" step="0.05"></div>
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sPat">Show marshal / LH approach patterns on the scope</label><input type="checkbox" id="sPat" style="width:22px;height:22px"></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
     <div id="setInfo" class="note" style="color:var(--dim)"></div>
   </div>
@@ -1526,7 +1527,7 @@ function suggestCall(a) {
 
 /* ===================== settings & sound ===================== */
 const SETTINGS_KEY = 'fcpar_settings_v1';
-const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship' };
+const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', pat: false };
 try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) {}
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) {} };
 
@@ -1808,6 +1809,23 @@ function handleTranscript(text, src) {
   const known = G ? G.ac.filter(alive).map(a => a.cs) : [];
   const heard = String(text).trim(); text = fixSpeech(text);
   const sc = shipCallParse(heard) || shipCallParse(text);
+  if (G && !G.over && MAR.trigger.test(heard)) {   // marshal / LH approach / commence / missed approach
+    const mp = MAR.parse(heard);
+    if (mp) {
+      const ki = heard.search(MAR.trigger), pre = heard.slice(0, Math.max(0, ki)).replace(/\b(expect(?:ed)?|cleared|execute)\s*$/i, ''), up = pre.toUpperCase().replace(/[\s,]+/g, '');
+      const pp = pre.trim() ? parseSpeech(pre, known) : null, live = G.ac.filter(appCtl);
+      let a = (pp && pp.cs && live.find(x => x.cs === pp.cs)) || (up && live.find(x => up.includes(x.cs))) || null;
+      if (!a && !(pp && pp.cs) && !up) a = G.selected && appCtl(G.selected) ? G.selected : (live.length === 1 ? live[0] : null);
+      if (src === 'voice') renderTranscript(text, '');
+      setHeard(heard, null);
+      if (!a) { log('sys', `Say the callsign (or select a target) first. Heard: "${heard}"`); return { cs: null, cmds: [], str: 'marshal?' }; }
+      if (!a.accepted) { log('sys', `${a.cs} not accepted (click its target to accept): no response to "${heard}".`); return { cs: a.cs, cmds: [], str: 'not accepted' }; }
+      MAR.exec(mp, a, heard, src);
+      $('parsed').textContent = 'Understood → ' + a.cs + ' ' + [mp.type && MAR.T[mp.type].name, mp.marshal && `marshal ${mp.marshal.R}/${mp.marshal.D}/${mp.marshal.alt}${mp.marshal.eat != null ? ' EAT ' + mp.marshal.eat : ''}`, mp.commence && 'commence', mp.missed && 'missed approach'].filter(Boolean).join('; ');
+      $('parsed').classList.remove('bad');
+      return { cs: a.cs, cmds: ['marshal'], str: 'marshal', mar: mp };
+    }
+  }
   if (/\b(hndoff|handoff|hand off|hdoff)\b/i.test(heard) && G && !G.over) {
     const rest = heard.replace(/\b(hndoff|handoff|hand off|hdoff)\b/ig, ' '), pp = parseSpeech(rest, known), up = rest.toUpperCase().replace(/\s+/g, '');
     const a = (pp && pp.cs && G.ac.find(x => x.cs === pp.cs)) || G.ac.find(x => alive(x) && up.includes(x.cs)) || (!rest.trim() && G.selected);
@@ -1849,7 +1867,7 @@ function splitCorrection(text, known) {
   if (undoPrev && !cs) { try { const q = parseSpeech(post, known); if (q.cs) { cs = q.cs; csUnknown = q.csUnknown; } } catch (e) {} }
   return { pre, post, cs, csUnknown, stinger, undoPrev };
 }
-const UNDO_FIELDS = ['identified', 'tgtHdg', 'turnDir', 'tgtAlt', 'tgtSpd', 'sector', 'climbout', 'dirty', 'landChk', 'button', 'needAlt', 'rcDone', 'firstTx', 'tasks', 'pts10'];
+const UNDO_FIELDS = ['mar', 'identified', 'tgtHdg', 'turnDir', 'tgtAlt', 'tgtSpd', 'sector', 'climbout', 'dirty', 'landChk', 'button', 'needAlt', 'rcDone', 'firstTx', 'tasks', 'pts10'];
 function snapTx(a) { const o = {}; for (const k of UNDO_FIELDS) { const v = a[k]; o[k] = v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v; } return o; }
 function undoLastTx(cs) {
   const L = G && G.lastTx; if (!L) return false;
@@ -1969,12 +1987,12 @@ window.addEventListener('blur', () => pttEnd());
 /* ===================== settings overlay ===================== */
 function openSettings() {
   uiPaused = true; setOv.classList.remove('hidden'); loadVoices();
-  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
+  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sPat').checked = !!S.pat; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
   $('setInfo').innerHTML = `Speech recognition: ${SR ? 'available' : '<b>not available</b> in this browser'} · Speech output: ${TTS ? voices.length + ' English voice(s)' : 'not available'} · Page: ${esc(location.protocol)}`;
 }
 function closeSettings() { setOv.classList.add('hidden'); uiPaused = !helpOv.classList.contains('hidden'); initVoiceStatus(); }
-['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice'].forEach(id => $(id).addEventListener('change', () => {
-  S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.voice = $('sVoice').value; saveSettings();
+['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice', 'sPat'].forEach(id => $(id).addEventListener('change', () => {
+  S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.pat = $('sPat').checked; S.voice = $('sVoice').value; saveSettings();
 }));
 function setPhr(v) { S.phr = v === 'tower' ? 'tower' : 'ship'; saveSettings(); $('sPhr').value = $('sPhr2').value = S.phr; applyPhrUI(); if (G) refreshPanel(true); }
 function applyPhrUI() {
@@ -2062,6 +2080,13 @@ const TUT = [
    <li>go around, climb and maintain ___, fly heading ___ · slow down: helos “perform landing checks”, jets “dirty up” · contact tower · say callsign · how do you hear me</li></ul>`],
   ['8. Keys', `<p><span class="kbd">Space</span> hold to talk · <span class="kbd">P</span> pause · <span class="kbd">1</span>/<span class="kbd">2</span> = 1x/2x speed · <span class="kbd">Tab</span> select next aircraft · <span class="kbd">Enter</span> type a command · <span class="kbd">?</span> this help · <span class="kbd">L</span> cycle layout · <span class="kbd">Esc</span> close.</p>
    <p>Tip: start on <b>Training</b>. The amber hint box shows a good next call; just read it out loud.</p>`],
+  ['9. Marshal & LH approaches', `<p>All radials are <b>relative to BRC</b>: the 210 radial is bearing BRC+210 from the ship, so the whole pattern turns with the ship.</p>
+   <ul><li><b>Marshal</b>: "Venom two one, marshal on the zero niner zero radial, five miles, angels one point five, expected approach time one five". The pilot reads back, flies there and holds (left-hand racetrack, 1 min outbound) and reports "established in marshal".</li>
+   <li><b>Approach type</b>: "expect / cleared LH-1 … LH-5 approach" ("L H one", "lima hotel one", "LH1" all work; "emergency approach" for the emergency helo marshal). <b>Commence</b>: "Venom two one, commence". <b>Missed approach</b>: "execute missed approach" (pilots also go missed on their own at the MAP). Any heading, altitude, sector or go-purple call cancels the procedure (radar vectors).</li>
+   <li><b>Jets</b> (whole thousands, 1 NM per 1,000 ft from each IAF): <b>LH-1</b> 210 radial, angels 6+ at angels−2 NM (angels 6 = 4 NM); outbound 210 to 12 NM / 3 min at ⅓ marshal altitude, level left turn, inbound BRC at 1,200, FAF 5 NM. <b>LH-2</b> 030 radial, angels 2+ at angels NM (IAF 2 NM / 2,000); outbound 210 through the ship, level turn inside 8 NM, inbound at 1,200. <b>LH-3</b> 180 radial (straight in), angels 2+ at angels+10 NM (IAF 12 NM), 1,200 from 12 NM. Missed (0.75 NM): climb on BRC to 1,200; no instructions by 4 NM / 2 min: turn downwind, report abeam.</li>
+   <li><b>Helicopters</b> (500 ft steps, minimum 1,500; 2,500 when jets are also in marshal): <b>LH-4</b> hold 090 radial 5–7 DME; arc 5 NM at 1,000 to final, FAF 3 DME at 500; missed (0.5 DME): right 90°, climb 1,000, intercept the 5 NM arc, arc right to the final bearing, back to marshal. <b>LH-5</b> marshal 030 radial 5 DME; IAF 2 DME, outbound 210 at 1,000, inbound, FAF 3 DME at 500; missed: straight ahead to 1,000, at 5 DME / 3 min turn right direct to the IAF, back to marshal. <b>Emergency marshal</b>: 045 / 090 / 135 radials, 5 NM 1,500 … 12 NM 5,000 (+500 ft per NM), flown like LH-4.</li>
+   <li><b>Scoring</b>: +10 for a correct marshal (radial, distance and altitude fit the approach), −5 if it doesn't fit, −5 for an altitude already used in marshal, −5 for a jet approach given to a helicopter (or the reverse).</li>
+   <li>⚙ Voice → "Show marshal / LH approach patterns" draws the patterns in use (off by default).</li></ul>`],
 ];
 const TUT_SHIP = {
   0: ['1. What is shipboard PAR?', `<p><b>Precision Approach Radar (PAR)</b> on an amphibious assault ship (LHA/LHD) lets the ship's <b>final controller</b> (in CATCC/AATCC, callsign "${SHIP_NAME} Final") watch an aircraft on final and <b>talk the pilot down</b> to the deck in bad weather, all the way to <b>short final</b>, about half a mile aft of the ship, where the pilot lands visually.</p>
@@ -2634,6 +2659,247 @@ function sectorGuide(a) {   // fly to the sector's centre radial at the held ran
   a.tgtHdg = Math.round(norm(h)) % 360 || 360;
 }
 window.__sector = { inSector, SECTOR_CTR };
+/* ---------- Marshal + LH-1..LH-5 approaches (all radials RELATIVE to BRC: relative radial R = bearing BRC+R from the ship).
+   Geometry runs in the course frame (toLoc): final inbound from local north on local heading 180, so relative radial R
+   sits on local bearing R+180 and everything re-orients automatically while the ship turns. ---------- */
+const MAR = {
+  T: {   // procedure numbers (no charts): marR/marD = default marshal radial (relative) / distance
+    LH1: { jet: true, name: 'LH-1', marR: 210, faf: 5, map: 0.75 },
+    LH2: { jet: true, name: 'LH-2', marR: 30, faf: 5, map: 0.75 },
+    LH3: { jet: true, name: 'LH-3', marR: 180, faf: 5, map: 0.75 },
+    LH4: { jet: false, name: 'LH-4', marR: 90, faf: 3, map: 0.5 },
+    LH5: { jet: false, name: 'LH-5', marR: 30, faf: 3, map: 0.5 },
+    EMER: { jet: false, name: 'EMER', marR: 90, faf: 3, map: 0.5 },
+  },
+  EMER_R: [45, 90, 135], EMER_ALT: { 5: 1500, 6: 2000, 7: 2500, 8: 3000, 9: 3500, 10: 4000, 11: 4500, 12: 5000 },
+  HELO_MIN: 1500, HELO_MIN_MIXED: 2500, HOLD_LEG: 60, PTS_OK: 10, PEN: 5,
+  pt(R, D) { const r = R * DEG; return [-D * Math.sin(r), -D * Math.cos(r)]; },   // relative radial -> local (e, n)
+  lb(e, n) { return norm(Math.atan2(e, n) / DEG); },
+  loc(a) { return toLoc(a.e, a.n); },
+  hdgL(a) { return norm(a.hdg - BROT()); },
+  setH(a, h, dir) { a.tgtHdg = Math.round(norm(h + BROT())) % 360 || 360; a.turnDir = dir || null; },
+  cl: (v, m) => Math.max(-m, Math.min(m, v)),
+  track(P0, c, p, k = 35) { const r = c * DEG, x = (p[0] - P0[0]) * Math.cos(r) - (p[1] - P0[1]) * Math.sin(r); return c - this.cl(x * k, 45); },
+  along(P0, c, p) { const r = c * DEG; return (p[0] - P0[0]) * Math.sin(r) + (p[1] - P0[1]) * Math.cos(r); },
+  direct(P, p) { return this.lb(P[0] - p[0], P[1] - p[1]); },
+  arcH(p, R) { const b = this.lb(p[0], p[1]), rr = Math.hypot(p[0], p[1]); return b + 90 + this.cl((rr - R) * 40, 40); },   // clockwise arc
+  eatMin() { return Math.floor((36000 + Math.floor(G.t)) / 60) % 60; },
+  infer(a, R) {   // approach type from a marshal radial when none has been assigned
+    const near = (x, y) => Math.abs(angDiff(x, y)) <= 5;
+    if (!isHelo(a)) return near(R, 210) ? 'LH1' : near(R, 30) ? 'LH2' : near(R, 180) ? 'LH3' : null;
+    if (near(R, 30)) return 'LH5';
+    if (near(R, 45) || near(R, 135)) return 'EMER';
+    return near(R, 90) ? 'LH4' : null;
+  },
+  mixed(a) { return G.ac.some(x => x !== a && x.phase === 'app' && x.mar && x.mar.alt && isHelo(x) !== isHelo(a)); },
+  // marshal rules -> list of problems ([] = correct)
+  check(a, type, R, D, alt) {
+    const t = this.T[type], bad = [], near = (x, y, tol = 5) => Math.abs(angDiff(x, y)) <= tol, ang = alt / 1000;
+    if (!t) return ['radial does not fit any LH approach'];
+    if (t.jet !== !isHelo(a)) bad.push(`${t.name} is a ${t.jet ? 'fixed-wing' : 'helicopter'} approach`);
+    if (t.jet) {
+      if (!near(R, t.marR)) bad.push(`${t.name} marshal is on the ${h3z(t.marR)} radial`);
+      if (alt % 1000) bad.push('jet marshal altitudes are whole thousands');
+      const minA = type === 'LH1' ? 6000 : 2000, want = type === 'LH1' ? ang - 2 : type === 'LH2' ? ang : ang + 10;
+      if (alt < minA) bad.push(`${t.name} marshal minimum is angels ${minA / 1000}`);
+      else if (Math.abs(D - want) > 0.5) bad.push(`angels ${appAngels(alt)} on ${t.name} holds at ${want} NM (1 NM per 1,000 ft from the IAF)`);
+    } else {
+      const min = this.mixed(a) ? this.HELO_MIN_MIXED : this.HELO_MIN;
+      if (alt < min) bad.push(`helicopter marshal minimum is ${fmtAlt(min)}${min > this.HELO_MIN ? ' (mixed ops)' : ''}`);
+      if (alt % 500) bad.push('helicopter marshal altitudes are in 500 ft steps');
+      if (type === 'LH4') { if (!near(R, 90)) bad.push('LH-4 holds on the 090 radial'); if (D < 4.5 || D > 7.5) bad.push('LH-4 holds at 5-7 DME'); }
+      if (type === 'LH5') { if (!near(R, 30)) bad.push('LH-5 marshal is on the 030 radial'); if (Math.abs(D - 5) > 0.5) bad.push('LH-5 marshal is at 5 DME'); }
+      if (type === 'EMER') {
+        if (!this.EMER_R.some(r => near(R, r))) bad.push('emergency marshal radials are 045 / 090 / 135');
+        const w = this.EMER_ALT[Math.round(D)];
+        if (!w || Math.abs(D - Math.round(D)) > 0.01) bad.push('emergency marshal distances are 5-12 NM');
+        else if (w !== alt) bad.push(`emergency marshal at ${Math.round(D)} NM is ${fmtAlt(w)}`);
+      }
+    }
+    return bad;
+  },
+  helo90(a, R, D, alt) { return isHelo(a) && Math.abs(angDiff(R, 90)) <= 5 && this.EMER_ALT[Math.round(D)] === alt && Math.round(D) > 5; },
+  parse(raw) {
+    let s = ' ' + String(raw).toLowerCase().replace(/[-_,;:]/g, ' ').replace(/\bl\.\s*h\.?/g, 'lh ') + ' ';
+    const D = { zero: 0, oh: 0, one: 1, won: 1, two: 2, too: 2, three: 3, tree: 3, four: 4, fower: 4, five: 5, fife: 5, six: 6, seven: 7, eight: 8, nine: 9, niner: 9 };
+    const TE = { ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
+    const TN = { twenty: 20, thirty: 30, forty: 40, fifty: 50 };
+    s = s.replace(/\b(twenty|thirty|forty|fifty)\s+(one|two|three|four|five|six|seven|eight|nine)\b/g, (m, x, y) => String(TN[x] + D[y]));
+    s = s.replace(/\b(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen)\b/g, m => String(TE[m]));
+    s = s.replace(/\b(twenty|thirty|forty|fifty)\b/g, m => String(TN[m]));
+    s = s.replace(/\b(zero|oh|one|won|two|too|three|tree|four|fower|five|fife|six|seven|eight|nine|niner)\b/g, m => String(D[m]));
+    s = s.replace(/\bpoint\b/g, ' . ');
+    { const tk = s.trim().split(/\s+/), o = []; let run = false;   // join digit-by-digit numbers: "2 1 0" -> 210
+      for (const w of tk) { if (/^\d$/.test(w) && run) o[o.length - 1] += w; else { o.push(w); run = /^\d$/.test(w); } }
+      s = ' ' + o.join(' ') + ' '; }
+    s = s.replace(/(\d)\s*\.\s*(\d)/g, '$1.$2');
+    s = s.replace(/\blh(\d)\b/g, 'lh $1').replace(/\b(?:lima\s+hotel|l\s+h|el\s+h|elle?\s+h|el\s+age)\s+(?=\d)/g, 'lh ');
+    const out = {};
+    const lh = s.match(/\blh\s+([1-5])\b/); if (lh) out.type = 'LH' + lh[1];
+    if (/\bemergency\s+(?:marshal|approach)/.test(s)) out.type = 'EMER';
+    if (/\b(?:marshal+|martial)\b/.test(s)) {
+      const post = s.slice(s.search(/\b(?:marshal+|martial)\b/));
+      const r = post.match(/(\d{1,3})\s*(?:radial|r\b)/) || post.match(/radial\s*(\d{1,3})/), d = post.match(/(\d+(?:\.\d+)?)\s*(?:miles?|mi|nm|dme)\b/);
+      const an = post.match(/angels?\s*(\d+(?:\.\d+)?)/), ft = post.match(/(\d{4,5})\s*(?:feet|ft)\b/);
+      const e = post.match(/(?:expected|expect)\s+approach\s+time\s*(\d{1,2})\b/) || post.match(/\beat\s*(\d{1,2})\b/);
+      out.marshal = { R: r ? +r[1] % 360 : null, D: d ? +d[1] : null, alt: an ? Math.round(+an[1] * 1000) : ft ? +ft[1] : null, eat: e ? +e[1] : null };
+    }
+    if (/\bcommence\b(?!\s+(?:your\s+)?descen)/.test(s)) out.commence = true;
+    if (/\b(?:execute\s+)?missed\s+approach\b/.test(s) && !out.marshal) out.missed = true;
+    return (out.type || out.marshal || out.commence || out.missed) ? out : null;
+  },
+  trigger: /\b(?:marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
+  say(a, txt, say) { pilotSay(a, `${a.tel}, ${txt}.`, `${a.telSay}, ${say || txt}.`); },
+  dg(v) { return String(v).split('').map(c => c === '.' ? 'point' : DIGW[+c]).join(' '); },
+  exec(m, a, heard, src) {
+    selectAc(a); a.lastTx = G.t;
+    if (a.sector) a.sector = null;
+    const parts = [], says = [];
+    a.mar = a.mar || {};
+    const M = a.mar;
+    if (m.type) {
+      const t = this.T[m.type];
+      if (t.jet === isHelo(a)) { G.score -= this.PEN; log('bad', `−${this.PEN}: ${a.cs} is a ${isHelo(a) ? 'helicopter' : 'jet'}; ${t.name} is a ${t.jet ? 'fixed-wing' : 'helicopter'} approach.`); Sound.buzz(); }
+      else if (M.R != null && !m.marshal) { const bad = this.check(a, m.type, M.R, M.D, M.alt); if (bad.length) { G.score -= this.PEN; log('bad', `−${this.PEN}: ${a.cs} marshal does not fit ${t.name}: ${bad.join('; ')}.`); Sound.buzz(); } }
+      M.type = m.type; const v = /cleared/i.test(heard) ? 'cleared' : 'expect';
+      parts.push(`${v} ${t.name === 'EMER' ? 'emergency' : t.name} approach`); says.push(`${v} ${t.name === 'EMER' ? 'emergency' : 'lima hotel ' + DIGW[+t.name.slice(3)]} approach`);
+    }
+    if (m.marshal) {
+      const k = m.marshal;
+      if (k.R == null || k.D == null || k.alt == null) { this.say(a, 'say again marshal instructions'); log('sys', `${a.cs}: marshal needs radial, distance and angels. Heard: "${heard}"`); return; }
+      let type = M.type || this.infer(a, k.R);
+      if (type === 'LH4' && !M.type && this.helo90(a, k.R, k.D, k.alt)) type = 'EMER';
+      if (type === 'LH4' && M.type === 'LH4' && this.helo90(a, k.R, k.D, k.alt) && this.check(a, 'LH4', k.R, k.D, k.alt).length) type = 'EMER';
+      const bad = this.check(a, type, k.R, k.D, k.alt);
+      const dup = G.ac.find(x => x !== a && x.phase === 'app' && x.mar && x.mar.inMar && x.mar.alt === k.alt);
+      if (dup) { G.score -= this.PEN; log('bad', `−${this.PEN}: ${a.cs} assigned angels ${appAngels(k.alt)}, already used in marshal by ${dup.cs}.`); Sound.buzz(); }
+      if (bad.length) { G.score -= this.PEN; log('bad', `−${this.PEN}: marshal for ${a.cs}${type ? ' (' + this.T[type].name + ')' : ''}: ${bad.join('; ')}.`); Sound.buzz(); }
+      else if (!dup) { award(a, 'mar', `marshal ${h3z(k.R)}/${k.D} angels ${appAngels(k.alt)}${type ? ' (' + this.T[type].name + ')' : ''}`); }
+      Object.assign(M, { R: k.R, D: k.D, alt: k.alt, eat: k.eat, inMar: true, ph: 'toMar', leg: null, est: false, eatSaid: false, typeInf: type });
+      a.tgtAlt = k.alt; a.turnDir = null;
+      parts.push(`marshal ${h3z(k.R)} radial, ${k.D} miles, angels ${appAngels(k.alt)}${k.eat != null ? ', expected approach time ' + String(k.eat).padStart(2, '0') : ''}`);
+      says.push(`marshal ${this.dg(h3z(k.R))} radial, ${k.D >= 10 ? sayTwo(Math.round(k.D)) : this.dg(k.D)} miles, angels ${appAngelsSay(k.alt)}${k.eat != null ? ', expected approach time ' + this.dg(String(k.eat).padStart(2, '0')) : ''}`);
+      log('sys', `${a.cs} proceeding to marshal ${h3z(k.R)}R (bearing ${h3z(BRC + k.R)}) ${k.D} NM, angels ${appAngels(k.alt)}.`);
+    }
+    if (m.commence) {
+      const type = M.type || M.typeInf;
+      if (!type) { this.say(a, 'say approach type'); return; }
+      this.commence(a, type); parts.push('commencing'); says.push('commencing');
+    }
+    if (m.missed) {
+      if (M.ph && /^(out1|iaf2|out2|turnF|final|h4a|arc|h5a|out5)$/.test(M.ph)) { this.missed(a); parts.push('missed approach'); says.push('missed approach'); }
+      else { this.say(a, 'unable, not on the approach'); return; }
+    }
+    log('ctl', `${a.cs}: "${heard.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${parts.join('; ')}`);
+    this.say(a, parts.join(', '), says.join(', '));
+    refreshPanel(true);
+  },
+  commence(a, type) {
+    const M = a.mar; M.run = type; M.inMar = false; M.fafDone = false; M.t0 = G.t;
+    M.ph = { LH1: 'out1', LH2: 'iaf2', LH3: 'turnF', LH4: 'h4a', LH5: 'h5a', EMER: 'h4a' }[type]; M.fDir = type === 'LH3' ? null : type === 'LH1' || type === 'LH2' || type === 'LH5' ? 'L' : 'R';
+    if (M.alt == null) M.alt = Math.round(a.alt / 100) * 100;
+    a.tgtSpd = isHelo(a) ? Math.min(a.tgtSpd, 120) : Math.min(a.tgtSpd, 250);
+    log('sys', `${a.cs} commencing ${this.T[type].name === 'EMER' ? 'emergency (LH-4 profile)' : this.T[type].name} approach.`);
+  },
+  missed(a) {
+    const M = a.mar; M.ph = M.run === 'LH5' ? 'mH5a' : (M.run === 'LH4' || M.run === 'EMER') ? 'mH4a' : 'mJ1'; M.t0 = G.t;
+    log('warn', `${a.cs} missed approach (${this.T[M.run].name}) at ${appRng(a).toFixed(1)} NM.`); G.marMissed = (G.marMissed || 0) + 1;
+  },
+  cancel(a, why) { if (a.mar && a.mar.ph) { log('sys', `${a.cs}: ${this.T[a.mar.run || a.mar.type || a.mar.typeInf] ? (this.T[a.mar.run || a.mar.type || a.mar.typeInf].name + ' ') : ''}procedure cancelled (${why}), radar vectors.`); a.mar.ph = null; a.mar.inMar = false; } },
+  go(a, ph) { a.mar.ph = ph; a.mar.t0 = G.t; },
+  finalAlt(a, r, t) {
+    if (t.jet) return Math.round(Math.min(1200, Math.max(250, r * 240)) / 10) * 10;
+    return Math.round((r > 3 ? Math.min(1000, 500 + (r - 3) * 250) : Math.max(200, 200 + (r - 0.5) * 120)) / 10) * 10;
+  },
+  step(a) {
+    const M = a.mar, p = this.loc(a), r = Math.hypot(p[0], p[1]), b = this.lb(p[0], p[1]), dt = G.t - (M.t0 || 0), O = [0, 0], t = this.T[M.run] || null;
+    switch (M.ph) {
+      case 'toMar': {   // fly to the marshal fix at the marshal altitude
+        const F = this.pt(M.R, M.D), d = Math.hypot(F[0] - p[0], F[1] - p[1]);
+        a.tgtAlt = M.alt; this.setH(a, this.direct(F, p));
+        if (d < 1.0) {
+          M.inMar = true;
+          if (!M.est) { M.est = true; this.say(a, `established in marshal, angels ${appAngels(M.alt)}`, `established in marshal, angels ${appAngelsSay(M.alt)}`); log('sys', `${a.cs} holding in marshal ${h3z(M.R)}R ${M.D} NM, angels ${appAngels(M.alt)}.`); }
+          M.ph = 'hold'; M.leg = this.along(F, M.R, p) >= -0.2 ? 'tOut' : 'in'; M.t0 = G.t;
+        }
+        break;
+      }
+      case 'hold': {   // racetrack: inbound to the fix on the radial, left turns, 1 min outbound (or 2 NM beyond the fix)
+        const F = this.pt(M.R, M.D), cin = M.R, cout = norm(M.R + 180);
+        a.tgtAlt = M.alt;
+        if (M.leg === 'in') { this.setH(a, this.track(F, cin, p)); if (this.along(F, cin, p) >= -0.2) { M.leg = 'tOut'; } }
+        if (M.leg === 'tOut') { this.setH(a, cout, 'L'); if (Math.abs(angDiff(this.hdgL(a), cout)) < 3) { M.leg = 'out'; M.t0 = G.t; } }
+        else if (M.leg === 'out') { this.setH(a, cout); if (G.t - M.t0 >= this.HOLD_LEG || r >= M.D + 2.5) M.leg = 'tIn'; }
+        else if (M.leg === 'tIn') { this.setH(a, cin, 'L'); if (Math.abs(angDiff(this.hdgL(a), cin)) < 3) M.leg = 'in'; }
+        if (M.eat != null && !M.eatSaid && this.eatMin() === M.eat) { M.eatSaid = true; log('sys', `${a.cs}: expected approach time ${String(M.eat).padStart(2, '0')} (say "commence").`); }
+        break;
+      }
+      case 'out1':   // LH-1: outbound on the 210 radial, descend to 1/3 of the marshal altitude, turn left not before 12 NM / 3 min
+        a.tgtAlt = Math.max(1200, Math.round(M.alt / 3 / 100) * 100); this.setH(a, this.track(O, norm(210 + 180), p));
+        if (r >= 12 || dt >= 180) this.go(a, 'turnF');
+        break;
+      case 'iaf2': { const F = this.pt(30, 2); a.tgtAlt = 2000; this.setH(a, this.direct(F, p)); if (Math.hypot(F[0] - p[0], F[1] - p[1]) < 1.2) this.go(a, 'out2'); break; }
+      case 'out2':   // LH-2: outbound 210 through the ship at 1,200, level left turn that stays inside 8 NM
+        a.tgtAlt = 1200; this.setH(a, this.track(O, 30, p)); if (r >= 5.5 && Math.abs(angDiff(b, 30)) < 60) this.go(a, 'turnF'); break;
+      case 'h4a': { const F = this.pt(M.run === 'EMER' ? M.R : 90, 5); a.tgtAlt = 1000;   // to the 5 NM arc on the holding radial
+        if (r > 5.4 && Math.hypot(F[0] - p[0], F[1] - p[1]) > 0.6) this.setH(a, this.direct(F, p)); else this.go(a, 'arc'); break; }
+      case 'arc': a.tgtAlt = 1000; this.setH(a, this.arcH(p, 5)); if (b >= 346 || b <= 8) this.go(a, 'turnF'); break;
+      case 'h5a': { const F = this.pt(30, 2); a.tgtAlt = 1000; this.setH(a, this.direct(F, p)); if (Math.hypot(F[0] - p[0], F[1] - p[1]) < 0.6) this.go(a, 'out5'); break; }
+      case 'out5': a.tgtAlt = 1000; this.setH(a, this.track(O, 30, p)); if ((r >= 5 && Math.abs(angDiff(b, 30)) < 60) || dt >= 180) this.go(a, 'turnF'); break;
+      case 'turnF': {   // turn onto the final bearing (inbound BRC)
+        const h = this.track(O, 180, p), off = Math.abs(angDiff(this.hdgL(a), h));
+        this.setH(a, h, off > 15 ? M.fDir : null);
+        if (t && t.jet) a.tgtAlt = M.run === 'LH3' ? 1200 : Math.max(1200, Math.min(a.tgtAlt, a.alt)); else a.tgtAlt = 1000;
+        if (off <= 15 && p[1] > 0) this.go(a, 'final');
+        break;
+      }
+      case 'final': {
+        this.setH(a, this.track(O, 180, p));
+        if (!t.jet || M.run === 'LH3' || r <= t.faf + 0.3 || a.alt <= 1200) a.tgtAlt = this.finalAlt(a, r, t); else a.tgtAlt = 1200;
+        if (!M.fafDone && r <= t.faf && p[1] > 0) { M.fafDone = true; log('sys', `${a.cs} FAF inbound (${t.faf} NM, ${fmtAlt(Math.round(a.alt / 10) * 10)} ft).`); this.say(a, `FAF`, 'final approach fix'); }
+        if (r <= t.map || p[1] < 0) { this.say(a, 'missed approach'); this.missed(a); }
+        break;
+      }
+      case 'mJ1': a.tgtAlt = 1200; this.setH(a, this.track(O, 180, p)); if ((p[1] < 0 && r >= 4) || dt >= 120) { this.go(a, 'mJ2'); log('sys', `${a.cs} no instructions: turning downwind.`); } break;
+      case 'mJ2': a.tgtAlt = 1200; this.setH(a, 0, Math.abs(angDiff(this.hdgL(a), 0)) > 5 ? 'L' : null);
+        if (Math.abs(angDiff(this.hdgL(a), 0)) < 20 && p[1] >= 0) { this.say(a, 'abeam'); log('sys', `${a.cs} abeam ${SHIP_NAME} downwind, awaiting instructions.`); M.ph = null; M.done = true; }
+        break;
+      case 'mH4a': a.tgtAlt = 1000; this.setH(a, 270, Math.abs(angDiff(this.hdgL(a), 270)) > 5 ? 'R' : null); if (r >= 5) this.go(a, 'mH4b'); break;
+      case 'mH4b': a.tgtAlt = 1000; this.setH(a, this.arcH(p, 5)); if (b >= 350 || b <= 5) this.done(a); break;
+      case 'mH5a': a.tgtAlt = 1000; this.setH(a, this.track(O, 180, p)); if (r >= 5 || dt >= 180) this.go(a, 'mH5b'); break;
+      case 'mH5b': { const F = this.pt(30, 2), h = this.direct(F, p); this.setH(a, h, Math.abs(angDiff(this.hdgL(a), h)) > 10 ? 'R' : null); a.tgtAlt = 1000; if (Math.hypot(F[0] - p[0], F[1] - p[1]) < 0.6) this.done(a); break; }
+    }
+  },
+  done(a) { const M = a.mar; this.say(a, 'missed approach complete, returning to marshal'); log('sys', `${a.cs} missed approach complete (${this.T[M.run].name}), returning to marshal.`); M.ph = 'toMar'; M.est = false; M.inMar = true; },
+  // optional pattern overlay (Settings): subtle lines for the approaches in use
+  draw(P, sc) {
+    if (!G) return;
+    const used = new Set(), holds = [];
+    for (const a of G.ac) if (a.phase === 'app' && a.mar) { const ty = a.mar.run || a.mar.type || a.mar.typeInf; if (ty) used.add(ty); if (a.mar.R != null) holds.push(a.mar); }
+    if (!used.size && !holds.length) return;
+    const L = (le, ln) => P(...fromLoc(le, ln)), R2 = (R, D) => L(...this.pt(R, D));
+    const seg = (A, B) => { ctx.beginPath(); ctx.moveTo(...A); ctx.lineTo(...B); ctx.stroke(); };
+    const fix = (Q, lab) => { ctx.beginPath(); ctx.moveTo(Q[0], Q[1] - 4); ctx.lineTo(Q[0] + 4, Q[1] + 3); ctx.lineTo(Q[0] - 4, Q[1] + 3); ctx.closePath(); ctx.stroke(); if (lab) ctx.fillText(lab, Q[0] + 6, Q[1] + 3); };
+    const arc = (r, b0, b1) => { ctx.beginPath(); for (let i = 0; i <= 30; i++) { const bb = (b0 + (b1 - b0) * i / 30) * DEG, Q = L(r * Math.sin(bb), r * Math.cos(bb)); i ? ctx.lineTo(...Q) : ctx.moveTo(...Q); } ctx.stroke(); };
+    ctx.save(); ctx.strokeStyle = 'rgba(150,200,255,0.28)'; ctx.fillStyle = 'rgba(150,200,255,0.45)'; ctx.lineWidth = 1; ctx.font = FONT(9); ctx.setLineDash([3, 5]);
+    const fin = d => { seg(L(0, 0), L(0, d)); fix(L(0, 5), 'FAF'); };
+    if (used.has('LH1')) { seg(L(0, 0), R2(210, 12)); fin(12); fix(R2(210, 4), 'LH1 IAF'); }
+    if (used.has('LH2')) { seg(R2(30, 2), R2(210, 6.5)); fin(8); fix(R2(30, 2), 'LH2 IAF'); arc(8, 0, 60); }
+    if (used.has('LH3')) { fin(12); fix(R2(180, 12), 'LH3 IAF'); }
+    if (used.has('LH4') || used.has('EMER')) { arc(5, 270, 360); seg(L(0, 0), L(0, 5)); fix(L(0, 3), 'FAF'); seg(R2(90, 5), R2(90, 7)); }
+    if (used.has('EMER')) for (const r of this.EMER_R) seg(R2(r, 5), R2(r, 12));
+    if (used.has('LH5')) { seg(R2(30, 2), R2(210, 5)); seg(L(0, 0), L(0, 5)); fix(L(0, 3), 'FAF'); fix(R2(30, 2), 'LH5 IAF'); }
+    ctx.setLineDash([]);
+    for (const m of holds) {   // marshal fix + racetrack
+      const F = this.pt(m.R, m.D), u = [Math.sin((m.R + 180) * DEG), Math.cos((m.R + 180) * DEG)], rr = isFinite(m.D) ? 0.9 : 0, nx = [u[1], -u[0]];
+      const A = F, B = [F[0] + u[0] * 2, F[1] + u[1] * 2], A2 = [A[0] + nx[0] * 2 * rr, A[1] + nx[1] * 2 * rr], B2 = [B[0] + nx[0] * 2 * rr, B[1] + nx[1] * 2 * rr];
+      ctx.beginPath(); ctx.moveTo(...L(...A)); ctx.lineTo(...L(...B)); ctx.moveTo(...L(...A2)); ctx.lineTo(...L(...B2)); ctx.stroke();
+      fix(L(...F), `M ${appAngels(m.alt)}`);
+    }
+    ctx.restore();
+  },
+};
+window.__MAR = MAR; window.__brc = () => BRC; window.__setBRC = v => setBRC(v); window.__appStep = dt => appStep(dt); window.__appLaunch = q => appLaunch(q);
 function appStep(dt) {
   G.t += dt;
   shipTurnStep();
@@ -2701,6 +2967,7 @@ function appStep(dt) {
       log('sys', `${a.cs} re-checked in after practice PAR ${a.appCount}/${APP_MAX_PARS}; click to accept.`);
     }
     if (a.sector && a.st === 'ctl') sectorGuide(a);
+    if (a.mar && a.mar.ph && a.st === 'ctl') MAR.step(a);
     // heading (standard-rate 3 deg/s, in the commanded direction)
     const diff = angDiff(a.tgtHdg, a.hdg);
     if (Math.abs(diff) < 0.05) { a.hdg = a.tgtHdg; a.turnDir = null; }
@@ -2820,14 +3087,14 @@ function appExecute(p, src) {
       marked = true; continue;
     }
     if (c.k === 'sector') {   // bearings FROM the ship (magnetic): 1 = 360-090, 2 = 090-180, 3 = 180-270, 4 = 270-360
-      a.sector = { n: c.v, c: SECTOR_CTR[c.v], R: SECTOR_PT_NM, est: false }; a.turnDir = null;
+      MAR.cancel(a, 'sector'); a.sector = { n: c.v, c: SECTOR_CTR[c.v], R: SECTOR_PT_NM, est: false }; a.turnDir = null;
       secRb = c.v; continue;
     }
     if (c.k === 'climbout') { if (c.v.length) { a.climbout = c.v.slice(); award(a, 'co', 'climbout instructions'); } rb.push('wilco'); rbSay.push('wilco'); continue; }   // stored for after the low approach
     if (c.k === 'cca') { award(a, 'cca', 'vectors for CCA'); rb.push('wilco'); rbSay.push('wilco'); continue; }
     if (c.k === 'button') { award(a, 'btn', 'expect final button'); a.button = c.v; rb.push('wilco'); rbSay.push('wilco'); continue; }
     if (c.k === 'purple') {   // leaves frequency and recovers on its own (no scoring)
-      a.sector = null;
+      a.sector = null; MAR.cancel(a, 'go purple');
       if (LINK.on && LINK.connected()) { a.st = 'purple'; a.onFinal = false; a.turnDir = null; LINK.pendingHandoff = { a, freq: /copper/i.test(p.raw || p.norm || '') ? 'copper' : 'purple' }; rb.push('wilco'); rbSay.push('wilco'); continue; }
       if (LINK.on) log('warn', `Final Control not detected: ${a.cs} self-recovering.`);
       a.st = 'purple'; a.onFinal = false; a.turnDir = null;
@@ -2863,15 +3130,16 @@ function appExecute(p, src) {
     }
     if (c.k === 'hdg') {
       if (a.sector) { a.sector = null; }   // a new heading cancels the sector
+      MAR.cancel(a, 'heading');
       a.tgtHdg = norm(c.v); a.turnDir = Math.abs(angDiff(a.tgtHdg, a.hdg)) < 0.5 ? null : c.dir;
       const t = c.dir === 'L' ? 'left heading' : c.dir === 'R' ? 'right heading' : 'heading';
       rb.push(`${t} ${hdg3(c.v)}`); rbSay.push(`${t} ${sayDigits(hdg3(c.v))}`);
     } else if (c.k === 'alt' && c.angels) {
       if (c.v < 1000 || c.v > (isHelo(a) ? 12000 : 30000)) { rb.push(`unable angels ${appAngels(c.v)}`); rbSay.push(`unable angels ${appAngelsSay(c.v)}`); continue; }
-      a.tgtAlt = c.v; rb.push(`angels ${appAngels(c.v)}`); rbSay.push(`angels ${appAngelsSay(c.v)}`);
+      MAR.cancel(a, 'altitude'); a.tgtAlt = c.v; rb.push(`angels ${appAngels(c.v)}`); rbSay.push(`angels ${appAngelsSay(c.v)}`);
     } else if (c.k === 'alt') {
       if (c.v < 1000 || c.v > (isHelo(a) ? 12000 : 30000)) { rb.push(`unable ${fmtAlt(c.v)}`); rbSay.push(`unable ${sayAlt(c.v)}`); continue; }
-      const v = c.v > a.alt ? 'climb' : 'descend'; a.tgtAlt = c.v;
+      MAR.cancel(a, 'altitude'); const v = c.v > a.alt ? 'climb' : 'descend'; a.tgtAlt = c.v;
       rb.push(`${v} and maintain ${fmtAlt(c.v)}`); rbSay.push(`${v} and maintain ${sayAlt(c.v)}`);
     } else if (c.k === 'spd') {
       const lo = a.dirty ? 130 : a.landChk ? 100 : a.T.vmin, hi = isHelo(a) ? Math.max(a.T.vmax + APP_SPD_BONUS, 200) : 350 + APP_SPD_BONUS;   // helos check in at 200
@@ -2900,7 +3168,7 @@ function appReadout(a) {
   return `${a.cs} ${a.type} "${a.tel}"
 RANGE ${appRng(a).toFixed(1)} NM  BRG ${hdg3(Math.round(appBrg(a)))} FROM ${SHIP_NAME.toUpperCase()}
 HDG ${hdg3(Math.round(a.hdg))}${Math.abs(angDiff(a.tgtHdg, a.hdg)) > 0.5 ? ' → ' + hdg3(Math.round(a.tgtHdg)) : ''}   ALT ${fmtAlt(Math.round(a.alt))}${tgt(a.alt, a.tgtAlt, fmtAlt)} FT
-IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Math.round(a.gs)} KT`;
+IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Math.round(a.gs)} KT${a.mar && a.mar.R != null ? `\nMARSHAL ${h3z(a.mar.R)}R/${a.mar.D} A${appAngels(a.mar.alt)}${a.mar.eat != null ? ' EAT ' + String(a.mar.eat).padStart(2, '0') : ''} ${(MAR.T[a.mar.run || a.mar.type || a.mar.typeInf] || {}).name || ''} ${a.mar.ph ? a.mar.ph.toUpperCase() : ''}` : ''}`;
 }
 function appPanel() {
   const hint = $('hint');
@@ -2982,6 +3250,7 @@ function drawApp(now) {
     if (d % 30 === 0) { ctx.fillStyle = ppiCol(0.8); ctx.fillText(String(d).padStart(3, '0'), Math.max(cx - RX + 22, Math.min(cx + RX - 22, ex - nx * 24)), Math.max(cy - RY + 22, Math.min(cy + RY - 14, ey - ny * 20 + 4))); }
   }
   if (!G) { ctx.textAlign = 'left'; return; }
+  if (S.pat) MAR.draw(P, sc);   // optional marshal / LH approach overlay (Settings)
   // TPX-42 style beacon data blocks (computer generated: live position, no fade)
   ctx.textAlign = 'left'; ctx.font = FONT(11);
   for (const a of G.ac) {
