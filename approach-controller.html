@@ -1802,6 +1802,14 @@ function handleTranscript(text, src) {
   const known = G ? G.ac.filter(alive).map(a => a.cs) : [];
   const heard = String(text).trim(); text = fixSpeech(text);
   const sc = shipCallParse(heard) || shipCallParse(text);
+  if (/\b(hndoff|handoff|hand off|hdoff)\b/i.test(heard) && G && !G.over) {
+    const rest = heard.replace(/\b(hndoff|handoff|hand off|hdoff)\b/ig, ' '), pp = parseSpeech(rest, known), up = rest.toUpperCase().replace(/\s+/g, '');
+    const a = (pp && pp.cs && G.ac.find(x => x.cs === pp.cs)) || G.ac.find(x => alive(x) && up.includes(x.cs)) || (!rest.trim() && G.selected);
+    if (src === 'voice') renderTranscript(text, '');
+    if (!a) { log('sys', `Handoff: callsign not found in "${heard}".`); return { cs: null, cmds: [], str: 'handoff?' }; }
+    log('ctl', `${a.cs}: "${heard}"${src === 'voice' ? ' 🎙' : ''}  →  handoff`); HOFF.start(a); $('parsed').textContent = 'Understood → handoff ' + a.cs; $('parsed').classList.remove('bad');
+    return { cs: a.cs, cmds: ['handoff'], str: 'handoff' };
+  }
   if (sc) { if (src === 'voice') renderTranscript(text, ''); $('parsed').textContent = 'Understood → ' + (sc.k === 'turn' ? `99 mother in ${sc.dir || '?'} turn` : `99 mother steady, BRC ${sc.brc ?? '?'}`); $('parsed').classList.remove('bad'); if (G && !G.over) shipCallExec(sc, heard, src); return { cs: null, cmds: [sc.k], str: JSON.stringify(sc) }; }
   const cor = splitCorrection(text, known);
   if (cor) {
@@ -2274,7 +2282,7 @@ function drawInset() {
 
 function pickAt(px, py, drop) {
   if (!G) return;
-  if (APP) { let best = null, bd = 20; for (const a of G.ac) if (a.hitR) { const h = a.hitR; let d = Math.hypot(h.x - px, h.y - py); if (h.bw && px >= h.bx && px <= h.bx + h.bw && py >= h.by && py <= h.by + h.bh) d = 0; if (d < bd) { bd = d; best = a; } } if (best) { if (drop) best.accepted = false; else { best.accepted = true; selectAc(best); } } return; }
+  if (APP) { let best = null, bd = 20; for (const a of G.ac) if (a.hitR) { const h = a.hitR; let d = Math.hypot(h.x - px, h.y - py); if (h.bw && px >= h.bx && px <= h.bx + h.bw && py >= h.by && py <= h.by + h.bh) d = 0; if (d < bd) { bd = d; best = a; } } if (best) { if (!drop && HOFF.click(best)) { selectAc(best); return; } if (drop) best.accepted = false; else { best.accepted = true; selectAc(best); } } return; }
   let best = null, bd = 14;
   for (const a of G.ac) for (const h of [a.hitE, a.hitA]) { if (!h || a.phase === 'queue') continue; const dx = Math.max(0, Math.abs(h.x - px) - (h.hw || 0)), dy = Math.max(0, Math.abs(h.y - py) - (h.hh || 0)), d = Math.hypot(dx, dy); if (d < bd) { bd = d; best = a; } }   // distance to the tick rectangle (+14 px slop)
   if (best) selectAc(best);
@@ -2445,11 +2453,47 @@ const LINK = { on: localStorage.getItem('stingerLink') === '1', ch: null, lastAc
   status() { const el = $('linkStat'); if (el) el.textContent = this.on ? 'Linked · Final Control: ' + (this.connected() ? 'connected' : 'not detected') : ''; },
   setOn(v) { this.on = v; localStorage.setItem('stingerLink', v ? '1' : '0');
     if (v && !this.ch && 'BroadcastChannel' in window) { this.ch = new BroadcastChannel('stinger-link');
-      this.ch.onmessage = e => { const m = e.data || {}; if (m.type === 'hello-ack') this.lastAck = Date.now(); else if (m.type === 'hello') this.post({ type: 'hello-ack' }); else if (m.type === 'complete') this.complete(m); this.status(); }; }
+      this.ch.onmessage = e => { const m = e.data || {}; if (m.type === 'hello-ack') this.lastAck = Date.now(); else if (m.type === 'hello') this.post({ type: 'hello-ack' }); else if (m.type === 'complete') this.complete(m); else HOFF.recv(m); this.status(); }; }
     if (!v && this.ch) { this.ch.close(); this.ch = null; this.lastAck = -1e9; }
     if (v) this.post({ type: 'hello' }); this.status(); }
 };
 window.__LINK = LINK;
+/* ---------- Flashing handoff (APP <-> FINAL), id-based, resent every 2 s until accepted ---------- */
+const HOFF = { seen: new Set(),
+  isFin(v) { return v === 'FINAL' || v === 'FIN'; },
+  find(cs) { return G && G.ac.find(x => x.cs === cs || x.tel === cs || x.linkCs === cs); },
+  start(a) {
+    if (a.hoff && a.hoff.dir === 'out') { log('sys', `${a.cs} handoff already in progress.`); return; }
+    const id = a.cs + '-' + Date.now(), solo = !(LINK.on && LINK.ch && LINK.connected());
+    a.hoff = { dir: 'out', id, t0: Date.now(), solo }; a.owner = 'APP';
+    const m = { type: 'handoff', cs: a.cs, from: 'APP', to: 'FINAL', id };
+    LINK.post(m); a.hoff.timer = setInterval(() => { if (a.hoff && a.hoff.id === id) LINK.post(m); }, 2000);
+    a.hoff.solo3 = setTimeout(() => { if (a.hoff && a.hoff.id === id && !a.hoff.acked && !LINK.connected()) a.hoff.solo = true; }, 3000);
+    a.hoff.auto = setTimeout(() => { if (a.hoff && a.hoff.id === id && a.hoff.solo) this.accepted(a, 'auto (solo)'); }, 4000);
+    log('sys', `${a.cs} handoff to Final initiated${solo ? ' (solo: auto-accept in 4 s, or click)' : ''}.`);
+  },
+  clear(a) { if (!a.hoff) return; clearInterval(a.hoff.timer); clearTimeout(a.hoff.auto); clearTimeout(a.hoff.solo3); a.hoff = null; },
+  accepted(a, how) { if (!a.hoff || a.hoff.dir !== 'out') return; this.clear(a); a.owner = 'FINAL'; log('good', `${a.cs} handoff accepted by Final (${how}).`); },
+  click(a) {   // returns true if the click consumed a pending handoff (selection still proceeds)
+    if (!a.hoff) return false;
+    if (a.hoff.dir === 'out') { this.accepted(a, 'clicked'); return true; }
+    const { id } = a.hoff; this.clear(a); a.owner = 'APP';
+    LINK.post({ type: 'handoffAccept', cs: a.cs, id, by: 'APP' }); log('good', `${a.cs} handoff from Final accepted.`); return true;
+  },
+  recv(m) {
+    const t = m.type, cs = m.cs || m.callsign; if (!cs || !G) return;
+    if ((t === 'handoffAccept' || t === 'handoff_accept') && this.isFin(m.by)) {
+      const a = this.find(cs); if (a && a.hoff && a.hoff.dir === 'out' && (!m.id || m.id === a.hoff.id)) this.accepted(a, 'Final Control');
+      LINK.lastAck = Date.now(); return; }
+    if (t === 'handoff' && this.isFin(m.from) && m.to === 'APP' && m.id) {
+      if (this.seen.has(m.id)) return; this.seen.add(m.id);
+      const a = this.find(cs); if (!a) return; this.clear(a);
+      a.hoff = { dir: 'in', id: m.id }; LINK.lastAck = Date.now(); log('sys', `${a.cs} handoff from Final: click the target to accept.`);
+    }
+  }
+};
+window.__HOFF = HOFF;
+
 setTimeout(() => LINK.setOn(LINK.on), 0);
 setInterval(() => { if (LINK.on) LINK.post({ type: 'hello' }); LINK.status(); }, 3000);
 function appCheckIn(a, again) {
@@ -2942,8 +2986,11 @@ function drawApp(now) {
     ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 4.5; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 4.5, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;   // simple target blip (no lines)
     const bx = Q[0] + 14, by = Q[1] - 22;
     const l1 = a.st === 'purple' ? a.cs + ' PRPL' : a.cs, l2 = `${String(Math.round(a.alt / 100)).padStart(3, '0')} ${String(Math.round(a.gs / 10)).padStart(2, '0')} ${a.code}`;
-    ctx.fillStyle = col; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12);
-    if (a.identified) { ctx.globalAlpha = 0.55; ctx.fillText(' ID', bx + ctx.measureText(l1).width, by); ctx.globalAlpha = 1; }   // radar identified (subtle tag)
+    ctx.fillStyle = col; if (a.hoff && !((now / 350 | 0) % 2)) ctx.globalAlpha = 0.3; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12); ctx.globalAlpha = 1;
+    { const tags = (a.identified ? ' ID' : '');   // ownership / handoff tags
+      if (a.hoff) { if ((now / 350 | 0) % 2) { ctx.fillStyle = 'rgba(255,235,120,1)'; ctx.fillText(' ' + (a.hoff.dir === 'out' ? 'APP' : 'FIN') + (a.identified ? ' ID' : ''), bx + ctx.measureText(l1).width, by); ctx.fillStyle = col; } }
+      else if (a.owner === 'FINAL') { ctx.globalAlpha = 0.55; ctx.fillText(' FIN' + tags, bx + ctx.measureText(l1).width, by); ctx.globalAlpha = 1; }
+      else if (a.identified) { ctx.globalAlpha = 0.55; ctx.fillText(' ID', bx + ctx.measureText(l1).width, by); ctx.globalAlpha = 1; } }   // radar identified (subtle tag)
     const tw = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width);
     a.hitR = appCtl(a) ? { x: Q[0], y: Q[1], bx: bx - 2, by: by - 12, bw: tw + 4, bh: 28 } : null;   // blip or data text selects
   }
