@@ -12,6 +12,12 @@ html,body{margin:0;height:100%;background:#120e24;color:var(--g);font-family:Con
 #shipBanner{position:absolute;top:56px;left:50%;transform:translateX(-50%);z-index:6;padding:8px 16px;border:2px solid #ffb347;background:rgba(40,25,0,.88);color:#ffcf70;font:bold 18px ui-monospace,monospace;letter-spacing:.06em;border-radius:6px;pointer-events:none;display:none;white-space:nowrap;text-align:center}
 #shipBanner.turn{border-color:#ff6a4d;color:#ff9a7a;animation:sbFlash .8s steps(2) infinite}#shipBanner.steady{border-color:#6dff8a;color:#9dffb0;background:rgba(0,35,10,.88)}
 @keyframes sbFlash{50%{opacity:.55}}
+.starBlk,#starBlk{position:absolute;display:flex;align-items:center;gap:4px;font:11px Consolas,Menlo,"DejaVu Sans Mono",monospace;color:rgba(120,255,140,.9);cursor:move;user-select:none;-webkit-user-select:none;touch-action:none;z-index:6;padding:2px 3px}
+#starBlk .sm{display:inline-block;width:9px;height:9px;border:1.4px solid rgba(120,255,140,.9);border-radius:50%;position:relative;margin-right:10px}
+#starBlk .sm::after{content:'';position:absolute;left:9px;top:-3px;width:10px;height:1px;background:rgba(120,255,140,.6);transform:rotate(-30deg);transform-origin:left}
+#starBlk .st{font-size:13px;font-weight:bold;padding:0 2px}
+#starIn{display:none;width:170px;background:rgba(0,20,6,.85);border:1px solid rgba(120,255,140,.55);color:rgba(220,255,225,1);font:11px Consolas,Menlo,"DejaVu Sans Mono",monospace;padding:2px 4px;outline:none;text-transform:uppercase;cursor:text}
+#starBlk.open #starIn{display:inline-block}
 .ib{position:absolute;color:#8fd8ff;font-size:11.5px;line-height:1.35;white-space:pre;cursor:move;user-select:none;-webkit-user-select:none;pointer-events:auto;z-index:5;touch-action:none}
 #scopeWrap{flex:1;position:relative;min-width:0;min-height:0}
 #scope{display:block;width:100%;height:100%;touch-action:none}
@@ -135,7 +141,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 <body>
 <div id="layBar" title="Layout (L cycles)"><button type="button" data-l="normal">▣ Normal</button><button type="button" data-l="expand">⤢ Expand scope</button><button type="button" data-l="transcript">☰ Scope + log</button></div>
 <div id="app">
-  <div id="scopeWrap"><canvas id="scope"></canvas><div id="infoBlk" class="ib"></div><div id="tbBlk" class="ib"></div><div id="shipBanner"></div></div>
+  <div id="scopeWrap"><canvas id="scope"></canvas><div id="infoBlk" class="ib"></div><div id="tbBlk" class="ib"></div><div id="starBlk"><span class="sm"></span><span class="st">*</span><input id="starIn" spellcheck="false" autocomplete="off" autocapitalize="characters"></div><div id="shipBanner"></div></div>
   <button id="mptt" type="button">HOLD<br>TO<br>TALK</button><div id="mStat"></div>
   <div id="panel">
     <div class="box stats">
@@ -3079,7 +3085,29 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   const safeTick = () => { try { tick(); } catch (e) { console.error('info block', e); } };
   const loop = () => { safeTick(); requestAnimationFrame(loop); };
   loop(); setInterval(safeTick, 250);   // also ticks when rAF is throttled
-  const init = () => { place(ib, keys.infoBlk, defs.infoBlk); place(tb, keys.tbBlk, defs.tbBlk); };
+  /* '*' scope command entry: drag anywhere, short click opens a data-block style field that submits through #cmdForm */
+  const sb = document.getElementById('starBlk'), si = document.getElementById('starIn');
+  const sDef = () => ({ x: 10, y: wrap.clientHeight - tb.offsetHeight - 34 - 30 });
+  const sOpen = () => { sb.classList.add('open'); place(sb, 'ac_starPos', sDef); setTimeout(() => si.focus(), 0); };
+  const sClose = () => { sb.classList.remove('open'); si.value = ''; };
+  sb.addEventListener('pointerdown', e => {
+    if (e.target === si) { e.stopPropagation(); return; }
+    e.preventDefault(); e.stopPropagation(); try { sb.setPointerCapture(e.pointerId); } catch (_) {}
+    const sx = e.clientX, sy = e.clientY, ox = sx - sb.offsetLeft, oy = sy - sb.offsetTop; let moved = false;
+    const mv = ev => { if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return; moved = true; const [x, y] = clamp(sb, ev.clientX - ox, ev.clientY - oy); sb.style.left = x + 'px'; sb.style.top = y + 'px'; };
+    const up = () => { sb.removeEventListener('pointermove', mv); sb.removeEventListener('pointerup', up); sb.removeEventListener('pointercancel', up);
+      if (moved) { try { localStorage.setItem('ac_starPos', JSON.stringify({ x: sb.offsetLeft, y: sb.offsetTop })); } catch (_) {} }
+      else if (sb.classList.contains('open')) si.focus(); else sOpen(); };
+    sb.addEventListener('pointermove', mv); sb.addEventListener('pointerup', up); sb.addEventListener('pointercancel', up);
+  });
+  sb.addEventListener('click', e => e.stopPropagation());
+  si.addEventListener('keydown', e => { e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); const v = si.value.trim(); if (v) { $('cmdInput').value = v; $('cmdForm').requestSubmit(); } sClose(); si.blur(); }
+    else if (e.key === 'Escape') { e.preventDefault(); sClose(); si.blur(); } });
+  si.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== si) sClose(); }, 0));
+  document.addEventListener('keydown', e => { if (e.key !== '*' || e.ctrlKey || e.metaKey || e.altKey) return; const t = (e.target.tagName || '').toLowerCase(); if (t === 'input' || t === 'select' || t === 'textarea' || e.target.isContentEditable) return; e.preventDefault(); sOpen(); });
+  window.__star = { open: sOpen, close: sClose };
+  const init = () => { place(ib, keys.infoBlk, defs.infoBlk); place(tb, keys.tbBlk, defs.tbBlk); place(sb, 'ac_starPos', sDef); };
   init(); window.addEventListener('resize', init); window.addEventListener('load', init);
 })();
 })();
