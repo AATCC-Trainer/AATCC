@@ -113,6 +113,9 @@ html,body{background:#030503}
 #layBar button.on{background:#123f4a;color:var(--cyan);border-color:var(--cyan)}
 @media (max-width:950px){#layBar{display:none}}
 @media (max-width:950px) and (orientation:landscape) and (max-height:520px){   /* phone landscape: panel beside the scope, scope uses the full height */
+  #mptt{left:auto;right:calc(8px + env(safe-area-inset-right));transform:none;width:64px;height:64px;bottom:calc(8px + env(safe-area-inset-bottom));font-size:10px}   /* docked over the side panel, never over the scope */
+  #mStat{left:auto;right:calc(80px + env(safe-area-inset-right));bottom:calc(8px + env(safe-area-inset-bottom));width:calc(var(--panW, 300px) - 96px);padding:3px 6px;font-size:11px}
+  body.touch #panel{padding-bottom:84px}
   html,body{overflow:hidden;height:100%}
   #app{flex-direction:row;height:100%;min-height:0}
   #scopeWrap{flex:1;height:100%}
@@ -3430,5 +3433,6 @@ document.querySelectorAll('#layBar button').forEach(b=>b.addEventListener('click
 document.addEventListener('keydown',e=>{if((e.key==='l'||e.key==='L')&&!e.ctrlKey&&!e.metaKey&&!e.altKey){const t=(e.target.tagName||'').toLowerCase();if(t==='input'||t==='select'||t==='textarea')return;setLay(M[(M.indexOf(window.__lay)+1)%3]);}});
 let m='normal';try{m=localStorage.getItem(KEY)||'normal'}catch(e){}setLay(m);})();
 </script>
+<script>(function(){const f=()=>{const p=document.getElementById('panel');if(p)document.documentElement.style.setProperty('--panW',p.getBoundingClientRect().width+'px');};addEventListener('resize',f);addEventListener('orientationchange',f);setTimeout(f,0);setInterval(f,2000);})();</script>
 </body>
 </html>
