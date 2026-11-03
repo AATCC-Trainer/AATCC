@@ -228,6 +228,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
     <div class="set"><label for="sSweep">Radar scan line</label><input type="checkbox" id="sSweep" style="width:22px;height:22px"></div>
     <div class="set"><label for="sServo" title="Press (or drag up/down) on a scope at the target's height to see it there; each scope has its own narrow horizontal band. Touch: only while your finger is down. Mouse: the point stays until right-click (that scope) or double-click (both). Off: targets always show.">Servo mode</label><input type="checkbox" id="sServo" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sServoSpd" title="Seconds for the servo band to slew across the full scope height">Servo speed</label><span style="display:flex;align-items:center;gap:8px"><input type="range" id="sServoSpd" min="0.4" max="2.5" step="0.1" style="flex:1"><span id="sServoSpdV" style="min-width:3.5em"></span></span></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
     <div id="setInfo" class="note" style="color:var(--dim)"></div>
   </div>
@@ -1783,7 +1784,7 @@ function suggestCall(a) {
 
 /* ===================== settings & sound ===================== */
 const SETTINGS_KEY = 'fcpar_settings_v1';
-const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', sweep: true, servo: true };
+const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', sweep: true, servo: true, servoSlew: 1.2 };
 try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) {}
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) {} };
 
@@ -2131,10 +2132,11 @@ window.addEventListener('blur', () => pttEnd());
 /* ===================== settings overlay ===================== */
 function openSettings() {
   uiPaused = true; setOv.classList.remove('hidden'); loadVoices();
-  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sSweep').checked = S.sweep !== false; $('sServo').checked = S.servo !== false; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
+  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sSweep').checked = S.sweep !== false; $('sServo').checked = S.servo !== false; $('sServoSpd').value = servoSlewS(); $('sServoSpdV').textContent = servoSlewS().toFixed(1) + ' s'; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
   $('setInfo').innerHTML = `Speech recognition: ${SR ? 'available' : '<b>not available</b> in this browser'} · Speech output: ${TTS ? voices.length + ' English voice(s)' : 'not available'} · Page: ${esc(location.protocol)}`;
 }
 function closeSettings() { setOv.classList.add('hidden'); uiPaused = !helpOv.classList.contains('hidden'); initVoiceStatus(); }
+$('sServoSpd').addEventListener('input', () => { S.servoSlew = +$('sServoSpd').value; $('sServoSpdV').textContent = servoSlewS().toFixed(1) + ' s'; saveSettings(); });   // live while dragging
 ['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice', 'sSweep', 'sServo'].forEach(id => $(id).addEventListener('change', () => {
   S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.sweep = $('sSweep').checked; S.servo = $('sServo').checked; if (!S.servo) servoClear(); S.voice = $('sVoice').value; saveSettings();
 }));
@@ -2509,14 +2511,14 @@ function pickAt(px, py) {
    other scope can be worked with the same pointer; right-click a scope clears its band, double-click clears both,
    a new session or switching Servo mode off clears all. Display only: grading uses the painted positions. */
 const SERVO_PAD_PX = 8;
-const SERVO_SLEW_S = 0.4;   // motor-driven slew: constant rate, one full scope height in 0.4 s
+const servoSlewS = () => clamp(+S.servoSlew || 1.2, 0.4, 2.5);   // motor-driven slew: constant rate, one full scope height in S.servoSlew s (Settings: Servo speed, default 1.2)
 const SERVO = { E: null, A: null };   // per scope: { y (current, px), ty (commanded, px), ptr (pointerId|null), mouse (bool) }
 const SERVO_LAST = { E: null, A: null };   // where each band was when last cleared: the next press slews from there (scope centre at first / new session)
 let servoT = 0;
 function servoTick(now) {   // advance each band toward its commanded position at the slew rate (real time, also while paused)
   const dt = servoT ? Math.min(0.1, Math.max(0, (now - servoT) / 1000)) : 0; servoT = now;
   for (const sc of ['E', 'A']) { const v = SERVO[sc]; if (!v) continue;
-    const rate = (sc === 'E' ? L.eh : L.ah) / SERVO_SLEW_S, d = v.ty - v.y;
+    const rate = (sc === 'E' ? L.eh : L.ah) / servoSlewS(), d = v.ty - v.y;
     v.y = Math.abs(d) <= rate * dt ? v.ty : v.y + Math.sign(d) * rate * dt; }
 }
 const servoSlewing = sc => !!SERVO[sc] && Math.abs(SERVO[sc].ty - SERVO[sc].y) > 0.5;
