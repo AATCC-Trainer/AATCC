@@ -653,7 +653,7 @@ let RWY_NUM = String(Math.round(BRC / 10) || 36).padStart(2, '0'), RWY_SAY = say
 const h3z = v => String(Math.round(norm(v)) % 360 || 360).padStart(3, '0');   // 3 digits, 360 instead of 000
 let nextBRC = null, TBRC = 180;   // TBRC = ship's TRUE course; internal BRC (all geometry, magnetic) = FB = TBRC - MV
 const randBRC = () => 5 * (1 + Math.floor(Math.random() * 72));   // 005..360 in 5 deg steps
-function prepBRC() { nextBRC = TBRC = randBRC(); MV = randMV(); setBRC(norm(TBRC - MV)); makeLand((Math.random() * 2 ** 31) >>> 0); try { applyPhrUI(); } catch (e) {} }   // picked when the start screen is shown
+function prepBRC() { nextBRC = TBRC = 360; MV = 0; setBRC(360); /* fixed magnetic BRC 360 for now (was random) */ makeLand((Math.random() * 2 ** 31) >>> 0); try { applyPhrUI(); } catch (e) {} }   // picked when the start screen is shown
 /* ---------- random land on the outer scope only (visual only; ship and traffic areas stay over water), seeded, generated with the BRC ---------- */
 let LAND = null;
 let MV = 7;   // magnetic variation, deg: true = magnetic + MV (scope is magnetic-up)
