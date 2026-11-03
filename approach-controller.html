@@ -231,6 +231,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div class="set"><label for="sVol">Readback volume</label><input type="range" id="sVol" min="0" max="1" step="0.05"></div>
     <div class="set"><label for="sRate">Pilot speaking rate</label><input type="range" id="sRate" min="0.8" max="1.5" step="0.05"></div>
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sRing">Range ring spacing</label><select id="sRing"><option value="1">1 NM</option><option value="2">2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option></select></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
     <div id="setInfo" class="note" style="color:var(--dim)"></div>
   </div>
@@ -1529,7 +1530,7 @@ function suggestCall(a) {
 
 /* ===================== settings & sound ===================== */
 const SETTINGS_KEY = 'fcpar_settings_v1';
-const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship' };
+const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', ringNm: 2 };
 try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) {}
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) {} };
 
@@ -1978,10 +1979,11 @@ window.addEventListener('blur', () => pttEnd());
 /* ===================== settings overlay ===================== */
 function openSettings() {
   uiPaused = true; setOv.classList.remove('hidden'); loadVoices();
-  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
+  $('sRing').value = String(S.ringNm || 2); $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
   $('setInfo').innerHTML = `Speech recognition: ${SR ? 'available' : '<b>not available</b> in this browser'} · Speech output: ${TTS ? voices.length + ' English voice(s)' : 'not available'} · Page: ${esc(location.protocol)}`;
 }
 function closeSettings() { setOv.classList.add('hidden'); uiPaused = !helpOv.classList.contains('hidden'); initVoiceStatus(); }
+$('sRing').value = String(S.ringNm || 2); $('sRing').addEventListener('change', () => { S.ringNm = +$('sRing').value; saveSettings(); });
 ['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice'].forEach(id => $(id).addEventListener('change', () => {
   S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.voice = $('sVoice').value; saveSettings();
 }));
@@ -2949,9 +2951,11 @@ function drawApp(now) {
   }
   // range rings every 2 NM (10/20 brighter, labelled)
   ctx.lineWidth = 1; ctx.font = FONT(11); ctx.textAlign = 'center';
-  for (let r = 2; r * sc <= RD; r += 2) {   // circles clipped to the square, out into the corners
-    const major = r % 10 === 0 || r === APP_RANGE;   // 10 and the outer ring slightly brighter; no numeric labels
+  const RS = [1, 2, 5, 10].includes(+S.ringNm) ? +S.ringNm : 2, lblEvery = RS === 1 ? 5 : 1;   // Settings: ring spacing
+  for (let r = RS, i = 1; r * sc <= RD; r += RS, i++) {   // circles clipped to the square, out into the corners
+    const major = r % 10 === 0 || r === APP_RANGE;   // 10 and the outer ring slightly brighter
     ctx.strokeStyle = ppiCol(major ? 0.32 : 0.13); ctx.beginPath(); ctx.arc(cx, cy, r * sc, 0, Math.PI * 2); ctx.stroke();
+    if (i % lblEvery === 0) { const lx = cx + r * sc * 0.7071, ly = cy + r * sc * 0.7071; if (lx < cx + RX - 14 && ly < cy + RY - 8) { ctx.fillStyle = ppiCol(0.4); ctx.fillText(String(r), lx, ly - 3); } }   // range label on the SE diagonal
   }
   // final course: faint dashed reciprocal of BRC with 2 NM ticks
   const rec = (BRC + 180) * DEG, EDGE = Math.min(RX / Math.max(Math.abs(Math.sin(rec)), 1e-9), RY / Math.max(Math.abs(Math.cos(rec)), 1e-9)) / sc, E = P(Math.sin(rec) * EDGE, Math.cos(rec) * EDGE);
