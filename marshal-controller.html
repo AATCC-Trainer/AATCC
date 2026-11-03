@@ -231,6 +231,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div class="set"><label for="sRate">Pilot speaking rate</label><input type="range" id="sRate" min="0.8" max="1.5" step="0.05"></div>
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
     <div class="set"><label for="sPat">Show marshal / LH approach patterns on the scope</label><input type="checkbox" id="sPat" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sRing">Range ring spacing</label><select id="sRing"><option value="1">1 NM</option><option value="2">2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option></select></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
     <div id="setInfo" class="note" style="color:var(--dim)"></div>
   </div>
@@ -1530,7 +1531,7 @@ function suggestCall(a) {
 
 /* ===================== settings & sound ===================== */
 const SETTINGS_KEY = 'mc_settings_v1';
-const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', pat: true };
+const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', pat: true, ring: 2 };
 try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) {}
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) {} };
 
@@ -1990,12 +1991,12 @@ window.addEventListener('blur', () => pttEnd());
 /* ===================== settings overlay ===================== */
 function openSettings() {
   uiPaused = true; setOv.classList.remove('hidden'); loadVoices();
-  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sPat').checked = !!S.pat; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
+  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sPat').checked = !!S.pat; $('sRing').value = String(S.ring || 2); $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
   $('setInfo').innerHTML = `Speech recognition: ${SR ? 'available' : '<b>not available</b> in this browser'} · Speech output: ${TTS ? voices.length + ' English voice(s)' : 'not available'} · Page: ${esc(location.protocol)}`;
 }
 function closeSettings() { setOv.classList.add('hidden'); uiPaused = !helpOv.classList.contains('hidden'); initVoiceStatus(); }
-['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice', 'sPat'].forEach(id => $(id).addEventListener('change', () => {
-  S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.pat = $('sPat').checked; S.voice = $('sVoice').value; saveSettings();
+['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice', 'sPat', 'sRing'].forEach(id => $(id).addEventListener('change', () => {
+  S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.pat = $('sPat').checked; S.ring = +$('sRing').value || 2; S.voice = $('sVoice').value; saveSettings();
 }));
 function setPhr(v) { S.phr = v === 'tower' ? 'tower' : 'ship'; saveSettings(); $('sPhr').value = $('sPhr2').value = S.phr; applyPhrUI(); if (G) refreshPanel(true); }
 function applyPhrUI() {
@@ -3250,7 +3251,7 @@ function drawApp(now) {
   }
   // range rings every 2 NM (10/20 brighter, labelled)
   ctx.lineWidth = 1; ctx.font = FONT(11); ctx.textAlign = 'center';
-  for (let r = 2; r * sc <= RD; r += 2) {   // circles clipped to the square, out into the corners
+  for (let RS = [1, 2, 5, 10].includes(+S.ring) ? +S.ring : 2, r = RS; r * sc <= RD; r += RS) {   // circles clipped to the square, out into the corners
     const major = r % 10 === 0 || r === APP_RANGE;   // 10 and the outer ring slightly brighter; no numeric labels
     ctx.strokeStyle = ppiCol(major ? 0.32 : 0.13); ctx.beginPath(); ctx.arc(cx, cy, r * sc, 0, Math.PI * 2); ctx.stroke();
   }
