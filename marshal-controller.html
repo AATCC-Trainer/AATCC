@@ -659,6 +659,7 @@ const randBRC = () => 5 * (1 + Math.floor(Math.random() * 72));   // 005..360 in
 function prepBRC() { nextBRC = TBRC = 360; MV = 0; setBRC(360); /* fixed magnetic BRC 360 for now (was random) */ makeLand((Math.random() * 2 ** 31) >>> 0); try { applyPhrUI(); } catch (e) {} }   // picked when the start screen is shown
 /* ---------- random land on the outer scope only (visual only; ship and traffic areas stay over water), seeded, generated with the BRC ---------- */
 let LAND = null;
+const MC_LAND_ON = false;   // false: open water only (land still seeded so stats/seed stay valid, but no coast polygons are kept or drawn)
 let MV = 7;   // magnetic variation, deg: true = magnetic + MV (scope is magnetic-up)
 const randMV = () => (Math.random() < 0.5 ? -1 : 1) * (1 + Math.floor(Math.random() * 15));   // +/-1..15, never 0
 const fmtMV = () => 'MV' + (MV < 0 ? '-' : '+') + String(Math.abs(MV)).padStart(2, '0');
@@ -720,12 +721,13 @@ function makeLand(seed) {
     if (!best || st.frac > best.st.frac) best = { polys, placed, st }; if (st.frac >= LAND_MIN_FRAC) break;
   }
   if (!best) best = { polys: [], placed: 0, st: { frac: 0, minR: 99, brg: 0, bad: false } };
-  LAND = { seed: seed >>> 0, mv: MV, polys: best.polys, coasts: best.placed, islands: best.polys.length - best.placed, stats: best.st, key: '' };
+  LAND = MC_LAND_ON ? { seed: seed >>> 0, mv: MV, polys: best.polys, coasts: best.placed, islands: best.polys.length - best.placed, stats: best.st, key: '' }
+    : { seed: seed >>> 0, mv: MV, polys: [], coasts: 0, islands: 0, stats: { frac: 0, minR: 99, brg: 0, bad: false }, key: '' };
   if (typeof G !== 'undefined' && G) G.landSeed = LAND.seed;
   return LAND;
 }
 function landLayer(cx, cy, RX, RY, sc) {   // offscreen pre-render, rebuilt only when the land or the scope size changes
-  if (!LAND) return null;
+  if (!LAND || !LAND.polys.length) return null;
   const key = `${LAND.seed}|${Math.round(RX)}x${Math.round(RY)}|${sc.toFixed(3)}|${BRC}|${MV}`; if (LAND.key === key && LAND.cv) return LAND.cv;
   const SW = Math.ceil(2 * RX), SH = Math.ceil(2 * RY), cv = LAND.cv || document.createElement('canvas'); cv.width = SW; cv.height = SH;
   const c = cv.getContext('2d'), P = (e, n) => [RX + e * sc, RY - n * sc], PT = (e, n) => P(...t2m(e, n));
