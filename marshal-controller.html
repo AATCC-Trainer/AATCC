@@ -820,7 +820,7 @@ function newGame(diffKey, opts = {}) {
   G.gateAt = rand(FIRST_GAP[0], FIRST_GAP[1]);
   logEl.innerHTML = '';
   setScale(1); setPaused(false);
-  log('sys', `${d.name}: ${'Marshal, ' + SHIP_NAME + ', BRC ' + BRC3}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? 'Arrivals check in for marshal every 1.5–3 min; press End to finish.' : G.toSpawn + ' arrivals.'}`);
+  log('sys', `${d.name}: ${'Marshal, ' + SHIP_NAME + ', BRC ' + BRC3}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? 'Arrivals check in for marshal every 4–5 min; press End to finish.' : G.toSpawn + ' arrivals.'}`);
   if (d.hints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
   selectAc(null);
   refreshPanel(true);
@@ -2599,18 +2599,18 @@ window.__HOFF = HOFF;
 
 setTimeout(() => LINK.setOn(LINK.on), 0);
 setInterval(() => { if (LINK.on) LINK.post({ type: 'hello' }); LINK.status(); }, 3000);
-function mcArrivals(want) {   // arriving aircraft check in for marshal, one every 1.5-3 min, up to the difficulty's count
+function mcArrivals(want) {   // arriving aircraft check in for marshal, one every 4-5 min, up to the difficulty's count
   if (G.nextArr == null) {   // start of run: exactly 2 jets check in (for now) after 10 s of sim time, then the normal flow
     if (G.t < 10) return;
     const JETS = AIRLINES.filter(x => x.types.some(t => TYPES[t] && !TYPES[t].helo));
     const al = pick(JETS), n1 = randi(11, 68), nums = [n1, n1 + 1];   // both start jets share one callsign word, different numbers
     for (let i = 0; i < 2; i++) { const cs = al.icao + nums[i];
       const ld = i ? G.ac.find(x => x.cs === al.icao + nums[0]) : null;
-      mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: 240, rng: i ? G.flightRng + 0.5 : (G.flightRng = rand(25, 29.5)), lead: ld ? ld.uid : null, flight: i ? null : 2 }); }   // one flight: leader checks in for both
-    G.nextArr = G.t + rand(120, 180);
+      mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: 240, rng: i ? G.flightRng + 0.5 : (G.flightRng = rand(25, 29.5)), lead: ld ? ld.uid : null, flight: i ? null : 2, wing: i ? null : al.icao + nums[1] }); }   // one flight: leader checks in for both
+    G.nextArr = G.t + rand(240, 300);   // next arrival 4-5 min after the start flight
   }
   const live = G.ac.filter(a => a.phase === 'app').length;
-  if (G.t >= G.nextArr && live < Math.min(want, 6)) { mcArrive(); G.nextArr = G.t + rand(90, 180); }
+  if (G.t >= G.nextArr && live < Math.min(want, 6)) { mcArrive(); G.nextArr = G.t + rand(240, 300); }   // 4-5 min between arrivals
 }
 function mcArrive(spec = {}) {
   const used = G.ac.map(a => a.cs);
@@ -2624,7 +2624,7 @@ function mcArrive(spec = {}) {
   a.alt = a.tgtAlt = alt; a.ias = a.tgtSpd = helo ? 120 : 250; a.trail = []; a.trailT = 0; a.lastTx = G.t;
   { const f = appFuelSpec(a); a.fuel0 = f[0] * rand(0.45, 0.7); a.launchT = G.t; a.souls = Math.round(rand(f[2], f[3])); }
   if (spec.lead) { a.lead = spec.lead; a.inForm = true; a.sq = false; }   // wingman: no squawk, flies formation on the leader
-  if (spec.flight) a.flight = spec.flight;
+  if (spec.flight) { a.flight = spec.flight; a.wingCs = spec.wing || null; }
   G.ac.push(a); appCheckIn(a, false); a.needAlt = false; a.identified = true; a.rcDone = true;
   return a;
 }
@@ -2644,7 +2644,7 @@ function appCheckIn(a, again) {
   a.checkInPosit = { brg: appBrg(a), rng: pR0, text: posit };
   if (MC && a.lead) return;   // wingman: the leader checks in for the flight
   if (MC) { const st = (Math.floor(appState(a) * 10) / 10).toFixed(1), dB = String(Math.round(appBrg(a)) % 360 || 360).padStart(3, '0'), dR = Math.round(appRng(a));
-    const fl = a.flight ? `flight of ${a.flight}, ` : '', flS = a.flight ? `flight of ${NUMW[a.flight]}, ` : '';
+    const wt = a.wingCs ? telephony(a.wingCs) : null, fl = a.flight ? `flight of ${a.flight}, ${wt ? wt.text + ', ' : ''}` : '', flS = a.flight ? `flight of ${NUMW[a.flight]}, ${wt ? wt.say + ', ' : ''}` : '';
     pilotSay(a, `${SHIP_NAME} Marshal, ${a.tel}, ${fl}${dB} for ${dR}, angels ${appAngels(a.alt)}, state ${st}, ${n} ${sw} on board.`,
       `${SHIP_NAME} Marshal, ${a.telSay}, ${flS}${dB.split('').map(d => DIGW[+d]).join(' ')} for ${dR >= 10 ? sayTwo(dR) : NUMW[dR]}, angels ${String(appAngels(a.alt)).split('.').map((x, i) => i ? NUMW[+x] : sayTwo(+x)).join(' point ')}, state ${fSay}, ${NUMW[n]} ${sw} on board.`);
     if (!G.selected) selectAc(a); return; }
@@ -2969,7 +2969,6 @@ const MAR = {
         a.tgtAlt = M.alt; this.setH(a, this.direct(F, p));
         if (d < 1.0) {
           M.inMar = true;
-          if (!M.est) { M.est = true; this.say(a, `established in marshal, angels ${appAngels(M.alt)}`, `established in marshal, angels ${appAngelsSay(M.alt)}`); log('sys', `${a.cs} holding in marshal ${h3z(M.R)}R ${M.D} NM, angels ${appAngels(M.alt)}.`); }
           M.ph = 'hold'; M.leg = this.along(F, M.R, p) >= -0.2 ? 'tOut' : 'in'; M.t0 = G.t;
           if (M.cleared && (M.type || M.typeInf) && d < 0.5) { this.commence(a, M.type || M.typeInf); this.say(a, 'commencing'); }
         }
@@ -2978,6 +2977,7 @@ const MAR = {
       case 'hold': {   // racetrack: inbound to the fix on the radial, left turns, 1 min outbound (or 2 NM beyond the fix)
         const F = this.pt(M.R, M.D), cin = M.R, cout = norm(M.R + 180);
         a.tgtAlt = M.alt;
+        if (!M.est && Math.abs(a.alt - M.alt) <= 100) { M.est = true; this.say(a, `established in marshal, angels ${appAngels(M.alt)}`, `established in marshal, angels ${appAngelsSay(M.alt)}`); log('sys', `${a.cs} established in marshal ${h3z(M.R)}R ${M.D} NM, angels ${appAngels(M.alt)} (${fmtAlt(Math.round(a.alt))} ft).`); }   // only once in the hold AND at the assigned altitude
         if (M.leg === 'in') { this.setH(a, this.track(F, cin, p)); if (this.along(F, cin, p) >= -0.2) { M.leg = 'tOut';
           if (M.cleared && (M.type || M.typeInf)) { this.commence(a, M.type || M.typeInf); this.say(a, 'commencing'); break; } } }
         if (M.leg === 'tOut') { this.setH(a, cout, 'L'); if (Math.abs(angDiff(this.hdgL(a), cout)) < 3) { M.leg = 'out'; M.t0 = G.t; } }
