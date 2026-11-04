@@ -2955,7 +2955,8 @@ function drawApp(now) {
   for (let r = RS, i = 1; r * sc <= RD; r += RS, i++) {   // circles clipped to the square, out into the corners
     const major = r % 10 === 0 || r === APP_RANGE;   // 10 and the outer ring slightly brighter
     ctx.strokeStyle = ppiCol(major ? 0.32 : 0.13); ctx.beginPath(); ctx.arc(cx, cy, r * sc, 0, Math.PI * 2); ctx.stroke();
-    if (i % lblEvery === 0) { const lx = cx + r * sc * 0.7071, ly = cy + r * sc * 0.7071; if (lx < cx + RX - 14 && ly < cy + RY - 8) { ctx.fillStyle = ppiCol(0.4); ctx.fillText(String(r), lx, ly - 3); } }   // range label on the SE diagonal
+    // range labels removed per user
+    if (false && i % lblEvery === 0) { const lx = cx + r * sc * 0.7071, ly = cy + r * sc * 0.7071; if (lx < cx + RX - 14 && ly < cy + RY - 8) { ctx.fillStyle = ppiCol(0.4); ctx.fillText(String(r), lx, ly - 3); } }   // range label on the SE diagonal
   }
   // final course: faint dashed reciprocal of BRC with 2 NM ticks
   const rec = (BRC + 180) * DEG, EDGE = Math.min(RX / Math.max(Math.abs(Math.sin(rec)), 1e-9), RY / Math.max(Math.abs(Math.cos(rec)), 1e-9)) / sc, E = P(Math.sin(rec) * EDGE, Math.cos(rec) * EDGE);
