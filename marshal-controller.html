@@ -3046,8 +3046,13 @@ const MAR = {
     ctx.setLineDash([]);
     for (const m of holds) {   // marshal fix + racetrack
       const F = this.pt(m.R, m.D), u = [Math.sin((m.R + 180) * DEG), Math.cos((m.R + 180) * DEG)], rr = isFinite(m.D) ? 0.9 : 0, nx = [u[1], -u[0]];
-      const A = F, B = [F[0] + u[0] * 2, F[1] + u[1] * 2], A2 = [A[0] + nx[0] * 2 * rr, A[1] + nx[1] * 2 * rr], B2 = [B[0] + nx[0] * 2 * rr, B[1] + nx[1] * 2 * rr];
+      // plate (LH-2): inbound toward the ship on the radial, LEFT turns, outbound leg on the left of the inbound course; drawn as a closed racetrack
+      const A = F, B = [F[0] + u[0] * 2.5, F[1] + u[1] * 2.5], A2 = [A[0] + nx[0] * 2 * rr, A[1] + nx[1] * 2 * rr], B2 = [B[0] + nx[0] * 2 * rr, B[1] + nx[1] * 2 * rr];
       ctx.beginPath(); ctx.moveTo(...L(...A)); ctx.lineTo(...L(...B)); ctx.moveTo(...L(...A2)); ctx.lineTo(...L(...B2)); ctx.stroke();
+      if (rr) { const sa = L(...A), sa2 = L(...A2), sb = L(...B), sb2 = L(...B2), ca = [(sa[0] + sa2[0]) / 2, (sa[1] + sa2[1]) / 2], cb = [(sb[0] + sb2[0]) / 2, (sb[1] + sb2[1]) / 2], rad = Math.hypot(sa[0] - sa2[0], sa[1] - sa2[1]) / 2;
+        const t = Math.atan2(sb[1] - cb[1], sb[0] - cb[0]), ta = Math.atan2(sa[1] - ca[1], sa[0] - ca[0]);
+        ctx.beginPath(); ctx.arc(cb[0], cb[1], rad, t, t + Math.PI, (((sb[0]-sa[0])*(sb2[1]-sb[1]) - (sb[1]-sa[1])*(sb2[0]-sb[0])) < 0)); ctx.stroke();
+        ctx.beginPath(); ctx.arc(ca[0], ca[1], rad, ta, ta + Math.PI, (((sb[0]-sa[0])*(sb2[1]-sb[1]) - (sb[1]-sa[1])*(sb2[0]-sb[0])) > 0)); ctx.stroke(); }
       fix(L(...F), `M ${appAngels(m.alt)}`);
     }
     ctx.restore();
