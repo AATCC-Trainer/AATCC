@@ -156,7 +156,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div class="row">
       <button id="bPause" title="Pause (P)">❚❚ Pause</button>
       <button id="bS1" class="on" title="1x (key 1)">1x</button>
-      <button id="bS2" title="2x (key 2)">2x</button>
+      <button id="bS2" title="3x sim speed (key 3)">3x</button>
       <button id="bSet" title="Voice settings">⚙ Voice</button>
       <button id="bHelp" title="Help (?)">? Help</button><a href="marshal-controller.html" id="xLink" style="align-self:center;color:#8fd8ff;font-size:12px;text-decoration:none;padding:0 6px">Marshal →</a>
       <button id="bEnd" title="End session">End</button>
@@ -519,6 +519,7 @@ const PATTERNS = [
   [/\broger\b/g, () => ({ k: 'roger' })],
   [/\bsay\s+(?:your\s+|again\s+)?callsign\b|\bverify\s+(?:your\s+)?callsign\b/g, () => ({ k: 'sayCs' })],
   [/\b(?:on\s+(?:the\s+)?|you\s+are\s+|now\s+)?(upwind|up\s+wind|crosswind|cross\s+wind|downwind|down\s+wind|abeam|a\s+beam|dog\s*leg|base(?!\s+recovery)(?:\s+leg)?)\b/g, m => { const w = m[1].replace(/\s+/g, ''); return { k: 'pos', v: w === 'abeam' ? 'abeam' : w.startsWith('dog') ? 'dogleg' : w.startsWith('base') ? 'base' : w }; }],
+  [/\b(?:(?:signal|signals|single|sigma)\s+)?(?:buster|busters|buster's|busta)\b/g, () => ({ k: 'buster' })],   // 'signal buster': accelerate to 500 kt
   [/\b(?:reduce|increase|maintain|slow)(?:\s+(?:your\s+)?speed)?(?:\s+to)?\s+(\d{2,3})(?:\s+knots)?\b|\bspeed\s+(\d{2,3})(?:\s+knots)?\b|\b(\d{2,3})\s+knots\b/g, m => ({ k: 'spd', v: +(m[1] || m[2] || m[3]) })],
 ];
 
@@ -623,6 +624,7 @@ function cmdStr(c) {
     case 'roger': return 'roger';
     case 'radarContact': return c.rng != null ? `radar contact ${c.rng} NM ${c.dirTxt}` : 'radar contact';
     case 'rid': return 'vectors for radar ID';
+    case 'buster': return 'signal buster (500 kt)';
     case 'purple': return 'go purple (off frequency, autonomous recovery)';
     case 'markFather': return 'mark your father';
     case 'dirty': return 'dirty up';
@@ -817,7 +819,7 @@ function newGame(diffKey, opts = {}) {
   };
   G.gateAt = rand(FIRST_GAP[0], FIRST_GAP[1]);
   logEl.innerHTML = '';
-  setScale(1); setPaused(false);
+  setScale(savedScale()); setPaused(false);
   log('sys', `${d.name}: ${ph('PAR to ' + SHIP_NAME + ', BRC ' + BRC3, 'PAR runway ' + RWY_NUM)}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? 'Launches every 4–6 min; press End to finish.' : G.toSpawn + ' arrivals.'}`);
   if (d.hints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
   selectAc(null);
@@ -1895,7 +1897,8 @@ $('cmdForm').addEventListener('submit', e => { e.preventDefault(); const v = $('
 $('cmdInput').addEventListener('keydown', e => { if (e.key === 'Escape') $('cmdInput').blur(); });
 
 /* ===================== panel ===================== */
-function setScale(s) { if (!G) return; G.scale = s; $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 2); }
+function setScale(s) { s = s === 3 ? 3 : 1; try { localStorage.setItem('ac_simSpeed', String(s)); } catch (e) {} if (!G) return; G.scale = s; $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 3); }
+const savedScale = () => { try { return localStorage.getItem('ac_simSpeed') === '3' ? 3 : 1; } catch (e) { return 1; } };
 function setPaused(p) { if (!G) return; G.paused = p; $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p); }
 function selectAc(a) { if (!G) return; G.selected = a; refreshPanel(true); }
 let lastPanel = 0;
@@ -1947,7 +1950,7 @@ stripsEl.addEventListener('click', e => { const s = e.target.closest('.strip'); 
 
 $('bPause').onclick = () => { setPaused(!G.paused); $('bPause').blur(); };
 $('bS1').onclick = () => { setScale(1); $('bS1').blur(); };
-$('bS2').onclick = () => { setScale(2); $('bS2').blur(); };
+$('bS2').onclick = () => { setScale(3); $('bS2').blur(); };
 $('bHelp').onclick = () => openTutorial(0);
 $('bSet').onclick = $('bSet2').onclick = () => openSettings();
 $('bEnd').onclick = () => { if (G && !G.over && confirm('End this session now?')) endGame(); };
@@ -1962,11 +1965,15 @@ document.addEventListener('keydown', e => {
   let used = true;
   switch (e.key) {
     case 'p': case 'P': setPaused(!G.paused); break;
-    case '1': setScale(1); break; case '2': setScale(2); break;
+    case '1': setScale(1); break; case '2': case '3': setScale(3); break;
     case 'Tab': { const l = G.ac.filter(alive); if (l.length) { const i = l.indexOf(G.selected); selectAc(l[(i + 1) % l.length]); } break; }
     case 'Enter': case '/': $('cmdInput').focus(); break;
     case '?': case 'F1': openTutorial(0); break;
     case 'Escape': selectAc(null); break;
+    case 'ArrowUp': case 'ArrowDown': case 'ArrowLeft': case 'ArrowRight': {   // move the selected aircraft's data block around its target
+      const a = G.selected; if (!a) { used = false; break; } const o = a.dbo || { x: 14, y: -22 }, st = 12;
+      if (e.key === 'ArrowUp') o.y = Math.max(-80, o.y - st); else if (e.key === 'ArrowDown') o.y = Math.min(70, o.y + st); else if (e.key === 'ArrowLeft') o.x = Math.max(-110, o.x - st); else o.x = Math.min(90, o.x + st);
+      a.dbo = o; break; }
     default: used = false;
   }
   if (used) e.preventDefault();
@@ -2486,7 +2493,7 @@ const HOFF = { seen: new Set(),
     const m = { type: 'handoff', cs: a.cs, from: 'APP', to: 'FINAL', id };
     LINK.post(m); a.hoff.timer = setInterval(() => { if (a.hoff && a.hoff.id === id) LINK.post(m); }, 2000);
     a.hoff.solo3 = setTimeout(() => { if (a.hoff && a.hoff.id === id && !a.hoff.acked && !LINK.connected()) a.hoff.solo = true; }, 3000);
-    a.hoff.auto = setTimeout(() => { if (a.hoff && a.hoff.id === id && a.hoff.solo) this.accepted(a, 'auto (solo)'); }, 4000);
+    a.hoff.auto = setTimeout(() => { if (a.hoff && a.hoff.id === id && a.hoff.solo) this.accepted(a, 'auto (solo)'); }, 4000 / ((G && G.scale) || 1));
     log('sys', `${a.cs} handoff to Final initiated${solo ? ' (solo: auto-accept in 4 s, or click)' : ''}.`);
   },
   clear(a) { if (!a.hoff) return; clearInterval(a.hoff.timer); clearTimeout(a.hoff.auto); clearTimeout(a.hoff.solo3); a.hoff = null; },
@@ -2622,7 +2629,7 @@ function shipCallExec(sc, heard, src) {
     else { r.steadyCall = 'wrong'; log('bad', `Wrong steady call: new BRC is ${h3z(want)}${got != null ? `, not ${String(got).padStart(3, '0')}` : ' (BRC not heard)'}.`); Sound.buzz(); }
   }
   refreshPanel(true);
-  if (!r.ack && rand(0, 1) < 0.6) { const a = G.ac.find(x => x.phase === 'app' && x.st === 'ctl'); if (a) { r.ack = true; const g0 = G; setTimeout(() => { if (G !== g0 || G.over || !G.ac.includes(a)) return; try { pilotSay(a, `${a.tel}, roger.`, `${a.telSay}, roger.`); } catch (e) {} }, 700); } }
+  if (!r.ack && rand(0, 1) < 0.6) { const a = G.ac.find(x => x.phase === 'app' && x.st === 'ctl'); if (a) { r.ack = true; const g0 = G; setTimeout(() => { if (G !== g0 || G.over || !G.ac.includes(a)) return; try { pilotSay(a, `${a.tel}, roger.`, `${a.telSay}, roger.`); } catch (e) {} }, 700 / (G.scale || 1)); } }
 }
 window.__shipTurn = (dir, deg, inSec) => shipTurnSchedule(dir, deg, inSec);
 window.__shipCallParse = shipCallParse;
@@ -2884,6 +2891,7 @@ function appExecute(p, src) {
       if (c.v < 1000 || c.v > (isHelo(a) ? 12000 : 30000)) { rb.push(`unable ${fmtAlt(c.v)}`); rbSay.push(`unable ${sayAlt(c.v)}`); continue; }
       const v = c.v > a.alt ? 'climb' : 'descend'; a.tgtAlt = c.v;
       rb.push(`${v} and maintain ${fmtAlt(c.v)}`); rbSay.push(`${v} and maintain ${sayAlt(c.v)}`);
+    } else if (c.k === 'buster') { a.tgtSpd = 500; rb.push('ack'); rbSay.push('ack');   // max speed, callsign-only readback
     } else if (c.k === 'spd') {
       const lo = a.dirty ? 130 : a.landChk ? 100 : a.T.vmin, hi = isHelo(a) ? Math.max(a.T.vmax + APP_SPD_BONUS, 200) : 350 + APP_SPD_BONUS;   // helos check in at 200
       if (c.v < lo || c.v > hi) { rb.push(`unable speed ${c.v}`); rbSay.push(`unable speed ${sayDigits(c.v)}`); continue; }
@@ -3004,7 +3012,9 @@ function drawApp(now) {
     const sel = a === G.selected, fin = a.st === 'final' || a.st === 'purple' || a.st === 'lowout', Q = P(a.e, a.n);
     const col = a.conflict ? ((now / 400 | 0) % 2 ? 'rgba(255,90,70,1)' : 'rgba(255,190,60,1)') : sel ? 'rgba(220,255,225,1)' : fin ? ppiCol(0.4) : ppiCol(0.9);
     ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 4.5; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 4.5, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;   // simple target blip (no lines)
-    const bx = Q[0] + 14, by = Q[1] - 22;
+    const dbo = a.dbo || { x: 14, y: -22 }, bx = Q[0] + dbo.x, by = Q[1] + dbo.y;
+    if (a.dbo) { ctx.save(); ctx.globalAlpha = 0.5; ctx.lineWidth = 1; line(Q[0], Q[1], bx + (dbo.x < 0 ? 40 : -2), by + (dbo.y < -6 ? 16 : -10)); ctx.restore(); }   // leader line when moved
+    if (sel) { ctx.save(); ctx.strokeStyle = 'rgba(220,255,225,0.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(Q[0], Q[1], 10, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }   // subtle selection ring
     const l1 = a.st === 'purple' ? a.cs + ' PRPL' : a.cs, l2 = `${String(Math.round(a.alt / 100)).padStart(3, '0')} ${String(Math.round(a.gs / 10)).padStart(2, '0')} ${a.code}`;
     ctx.fillStyle = col; if (a.hoff && !((now / 350 | 0) % 2)) ctx.globalAlpha = 0.3; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12); ctx.globalAlpha = 1;
     { const tags = (a.identified ? ' ID' : '');   // ownership / handoff tags
