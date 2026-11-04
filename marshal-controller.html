@@ -256,7 +256,8 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 'use strict';
 /* ===================== helpers ===================== */
 const DEG = Math.PI / 180;
-const MC = true;   // Wasp Marshal: marshal-only build (no launches, radar ID, sectors, handoff or vectors to final)
+const MC = true;
+const MC_MORE_ARRIVALS = false;   // false: only the start flight (leader + wingman) checks in; true: further arrivals every 4-5 min   // Wasp Marshal: marshal-only build (no launches, radar ID, sectors, handoff or vectors to final)
 const norm = h => ((h % 360) + 360) % 360;
 const angDiff = (a, b) => { let d = norm(a - b); return d > 180 ? d - 360 : d; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -820,7 +821,7 @@ function newGame(diffKey, opts = {}) {
   G.gateAt = rand(FIRST_GAP[0], FIRST_GAP[1]);
   logEl.innerHTML = '';
   setScale(1); setPaused(false);
-  log('sys', `${d.name}: ${'Marshal, ' + SHIP_NAME + ', BRC ' + BRC3}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? 'Arrivals check in for marshal every 4–5 min; press End to finish.' : G.toSpawn + ' arrivals.'}`);
+  log('sys', `${d.name}: ${'Marshal, ' + SHIP_NAME + ', BRC ' + BRC3}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? (MC_MORE_ARRIVALS ? 'Arrivals check in for marshal every 4–5 min;' : 'One flight of two checks in for marshal;') + ' press End to finish.' : G.toSpawn + ' arrivals.'}`);
   if (d.hints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
   selectAc(null);
   refreshPanel(true);
@@ -1810,7 +1811,32 @@ function pickBestAlt(alts) {
 function setHeard(text, p) { const h = $('heard'); if (!h) return;
   h.textContent = text ? 'Heard: ' + text + (p ? ' → ' + (p.cmds.length ? p.cmds.map(c => cmdStr(c).toUpperCase()).join('; ') + (p.cs ? ` (${(G && G.ac.find(a => a.cs === p.cs) || {}).tel || p.cs}${p.csUnknown ? '?' : ''})` : '') : 'NOT UNDERSTOOD') : ' …') : ''; }
 window.__recTest = { fixSpeech, pickBestAlt, scoreAlt, lev, phon };
+function mcFixSpeech(t) {   // forgiving marshal-flow wording: common speech-to-text mishearings -> canonical phrases
+  let s = ' ' + String(t) + ' ';
+  const NW = { zero: 0, oh: 0, one: 1, won: 1, two: 2, to: 2, too: 2, three: 3, tree: 3, four: 4, for: 4, fore: 4, five: 5, fife: 5, six: 6, seven: 7, eight: 8, ate: 8, nine: 9, niner: 9 };
+  const NWR = 'zero|oh|one|won|two|to|too|three|tree|four|for|fore|five|fife|six|seven|eight|ate|nine|niner';
+  s = s.replace(/\b(?:l|el|elle|ell|al|ehl)[\s.\-]*(?:h|aitch|age|each|edge|8)[\s.\-]*(?:approach\s+)?([1-5]|one|won|two|to|too|three|tree|four|for|five)\b/gi, (m, n) => ' LH' + (isNaN(+n) ? NW[n.toLowerCase()] : n) + ' ');   // L H 2, elle h two, lh to, l8 2
+  s = s.replace(/\bl(?:h|8)\s*-?\s*([1-5])\b/gi, ' LH$1 ').replace(/\blima\s+hotel\s*([1-5])\b/gi, ' LH$1 ').replace(/\b(?:lh|l8)(to|too|two)\b/gi, ' LH2 ').replace(/\bl82\b/gi, ' LH2 ');
+  s = s.replace(/\b(?:angel|angles|angle|ankles|angela|angeles)\b/gi, 'angels');
+  s = s.replace(/\bout[\s\-]+bound\b|\boutbond\b|\boutbounds\b|\bout\s+found\b/gi, 'outbound');
+  s = s.replace(/\b(?:commence(?:d|s)?|commencin|commensing|commencement|comments\s+ing|come\s+and\s+sing)\b/gi, 'commencing');
+  s = s.replace(/\b(?:squak|squad|squawks|squaw|squalk|sqawk|squark|squat|squawked|squawking|squaw\s+k)\b/gi, 'squawk').replace(/\bsquawk\s+(?:normally|norma|nor\s*mal|formal)\b/gi, 'squawk normal');
+  s = s.replace(/\b(?:goal|gold|gul|ghost|go\s+to|goes|grow|glow|go\s+on)\s+(blue|blew|red|read|bread)\b/gi, 'go $1').replace(/\bgo\s+blew\b/gi, 'go blue').replace(/\bgo\s+(?:read|bread)\b/gi, 'go red');
+  s = s.replace(/\b(?:martial|marshall|marshals|marshalls|martian)\b/gi, 'marshal').replace(/\bradar\s+(?:contract|contacts|context|comtact)\b/gi, 'radar contact');
+  s = s.replace(/\bcleared\s+(?:four|for|to|2)\s+(?=LH|approach)/gi, 'cleared for ').replace(/\bclear\s+for\b/gi, 'cleared for');
+  s = s.replace(/\b(?:three|tree|3)\s*(?:mile|miles|mi|nm)\b/gi, '3 miles').replace(/\b(?:redial|radio|radiol)\b/gi, 'radial');
+  // callsign digits split: "Eagle 3 4" / "eagle three four" -> "Eagle 34" (only after a live aircraft's callsign word)
+  const words = (typeof G !== 'undefined' && G ? G.ac : []).map(a => String(a.tel || '').split(/\s+/)[0]).filter(Boolean);
+  for (const w of [...new Set(words)]) {
+    const re = new RegExp('\\b(' + w.replace(/[^a-z]/gi, '') + ')\\s+(\\b(?:\\d|' + NWR + ')[\\s,-]+(?:\\d|' + NWR + '))(?=\\s|,|$)', 'gi');   // exactly two single digits
+    s = s.replace(re, (m, nm, ds) => { const parts = ds.trim().split(/[\s,-]+/); const dig = parts.map(x => /^\d+$/.test(x) ? x : NW[x.toLowerCase()]); if (dig.some(x => x == null)) return m;
+      return nm + ' ' + dig.join('') + ' '; });
+  }
+  return s.replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
+}
+window.__mcFix = t => mcFixSpeech(t);
 function handleTranscript(text, src) {
+  if (MC) { const raw = String(text).trim(), fx = mcFixSpeech(raw); if (G && !G.over && src === 'voice') log('sys', `🎙 Recognized: "${raw}"${fx !== raw ? `  →  read as "${fx}"` : ''}`); text = fx; }
   const known = G ? G.ac.filter(alive).map(a => a.cs) : [];
   const heard = String(text).trim(); text = fixSpeech(text);
   const sc = shipCallParse(heard) || shipCallParse(text);
@@ -2148,7 +2174,7 @@ TUT.splice(0, TUT.length,
    <li><b>Helicopters only</b> (500 ft steps, minimum 1,500; 2,500 when jets are also in marshal): <b>LH-4</b> 090 radial at 7 DME; arc 5 NM at 1,000 to final, FAF 3 DME. <b>LH-5</b> 030 at 2 DME; outbound at 1,000, inbound, FAF 3 DME. <b>Emergency marshal</b>: 045 / 090 / 135 radials, 5 NM 1,500 … 12 NM 5,000, flown like LH-4.</li>
    <li>Wrong radial/DME for the type, a jet approach for a helo (or the reverse), a wrong or missing outbound bearing, a wrong BRC, or an angels already in use are flagged in the log.</li>
    <li><b>Sequence</b>: after the marshal call the flight holds at the marshal fix until cleared. "Eagle one six, cleared for LH-2 approach, report commencing" → commences at the fix ("commencing"). "Radar contact, report 3 miles outbound bearing" → "established in outbound bearing". "&lt;callsign&gt;, go blue" / "&lt;callsign&gt;, go red" (red/blue = Final frequency; "go blue for final" and "contact final controller" also work) → callsign only, leaves Marshal.</li>
-   <li><b>Flights</b>: the first two jets check in as a flight of two (one call by the leader). Instructions to the leader apply to the flight; calling the wingman by its callsign gives it its own instructions. Only the leader squawks; the wingman shows as a raw return until you tell it "squawk normal".</li>
+   <li><b>Flights</b>: for now only one flight checks in: two jets as a flight of two (one call by the leader). Instructions to the leader apply to the flight; calling the wingman by its callsign gives it its own instructions. Only the leader squawks; the wingman shows as a raw return until you tell it "squawk normal".</li>
    <li><b>Geopoints</b>: double-click (double-tap) the scope to drop a geopoint (GPn with radial/DME from the ship); double-click it again to delete; ⚙ Settings → Clear geopoints.</li>
    <li>⚙ Voice → "Show marshal / LH approach patterns" draws the patterns in use (on by default here).</li></ul>`],
   ['2. Arrivals & other calls', `<p>Arrivals appear 25–30 NM out and check in: "Stinger Marshal, Venom two one, 210 for 27, angels 10, state 3.4." Click (tap) the target to accept it, then assign a marshal and an approach. Aircraft never fly on their own: they hold their heading and altitude until you assign a marshal (or a heading/altitude, which cancels any procedure).</p><p>Also understood: turn left/right heading ___, climb/descend and maintain ___, say angels, say state, traffic calls and "correction". Approach-only calls (sectors, radar ID, go purple, climbout, CCA, handoff) are not used here; use <a href="approach-controller.html" style="color:#8fd8ff">Wasp Approach</a> for those.</p>`],
@@ -2609,6 +2635,7 @@ function mcArrivals(want) {   // arriving aircraft check in for marshal, one eve
       mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: 240, rng: i ? G.flightRng + 0.5 : (G.flightRng = rand(25, 29.5)), lead: ld ? ld.uid : null, flight: i ? null : 2, wing: i ? null : al.icao + nums[1] }); }   // one flight: leader checks in for both
     G.nextArr = G.t + rand(240, 300);   // next arrival 4-5 min after the start flight
   }
+  if (!MC_MORE_ARRIVALS) { if (!G.allRecSaid && G.t > 30 && !G.ac.length) { G.allRecSaid = true; log('sys', 'All aircraft recovered. No further arrivals (single-flight mode); press End to finish.'); } return; }
   const live = G.ac.filter(a => a.phase === 'app').length;
   if (G.t >= G.nextArr && live < Math.min(want, 6)) { mcArrive(); G.nextArr = G.t + rand(240, 300); }   // 4-5 min between arrivals
 }
@@ -3340,7 +3367,7 @@ IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Ma
 function appPanel() {
   const hint = $('hint');
   hint.style.display = G.d.hints ? 'block' : 'none';
-  if (G.d.hints && MC) hint.innerHTML = `💡 Arrivals check in for marshal. Click a target to accept it, assign a marshal ("<b>${G.selected ? G.selected.tel : 'Venom two one'}</b>, Case three recovery, LH2 approach with CCA final, marshal 030 at 2, angels 2, BRC ${BRC3}, outbound bearing ${h3z(MAR.outbound())}"). The pilot answers with the callsign only, then "<b>commence</b>" at the EAT. Jets: LH-1 030/4, LH-2 030/2, LH-3 180/angels+15; helos: LH-4 090/7, LH-5 030/2 (radials = BRC + value). Outbound bearing = DWH + 30. See ? Help.`;
+  if (G.d.hints && MC) hint.innerHTML = `💡 A flight of two checks in for marshal. Click a target to accept it, assign a marshal ("<b>${G.selected ? G.selected.tel : 'Venom two one'}</b>, Case three recovery, LH2 approach with CCA final, marshal 030 at 2, angels 2, BRC ${BRC3}, outbound bearing ${h3z(MAR.outbound())}"). The pilot answers with the callsign only, then "<b>commence</b>" at the EAT. Jets: LH-1 030/4, LH-2 030/2, LH-3 180/angels+15; helos: LH-4 090/7, LH-5 030/2 (radials = BRC + value). Outbound bearing = DWH + 30. See ? Help.`;
   else if (G.d.hints) hint.innerHTML = `💡 Vector your launches onto the final approach course (FB ${BRC3}, inbound from ${hdg3(norm(BRC + 180))}) and descend them to 3,000 ft or below inside 3 NM to hand them to ${SHIP_NAME} Final. Aircraft launch from ${SHIP_NAME} one at a time (every 4–6 min), fly up to ${APP_MAX_PARS} practice PARs (low approach, then back to you) and recover full stop on the last. After each check-in, your first altitude must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets (−5 if not). Call <b>radar contact</b> within 2 NM of the ship (−5 if later). To slow down: ${G.selected && G.selected.phase === 'app' ? (isHelo(G.selected) ? `${G.selected.tel} (helo): "<b>perform landing checks</b>"` : `${G.selected.tel} (jet): "<b>dirty up</b>"`) : 'helos "<b>perform landing checks</b>", jets "<b>dirty up</b>"'}.`;
   $('scopeStatus').textContent = `${MC ? 'MARSHAL' : 'APPROACH'} · ${SHIP_NAME.toUpperCase()} · FB ${BRC3} · ${APP_RANGE} NM · WIND ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   $('stLanded').textContent = G.landed; $('stLanded').nextElementSibling.textContent = MC ? 'Approaches' : 'Handed off';
