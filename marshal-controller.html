@@ -188,7 +188,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
   <div class="card">
     <h1>WASP MARSHAL</h1>
     <div style="color:var(--dim)" id="subTitle">Marshal, holding and LH-1 to LH-5 approaches</div>
-    <p id="introP">You\'re <b>Stinger Marshal</b>. Arriving aircraft check in 10–12 miles out. Assign each one a <b>marshal</b> (radial, distance, angels, expected approach time) and an <b>LH approach</b>, keep the altitudes apart, and clear them to <b>commence</b>. Patterns are drawn on the scope.</p>
+    <p id="introP">You\'re <b>Stinger Marshal</b>. Arriving aircraft check in 25–30 miles out. Assign each one a <b>marshal</b> (radial, distance, angels, expected approach time) and an <b>LH approach</b>, keep the altitudes apart, and clear them to <b>commence</b>. Patterns are drawn on the scope.</p>
     <div class="diffs">
       <div class="diff on" data-d="training"><b>Training</b><span>Up to 4 arrivals, a hint that shows your suggested next call.</span></div>
       <div class="diff" data-d="normal"><b>Normal</b><span>Up to 6 arrivals, firmer pilots. No hints.</span></div>
@@ -2151,7 +2151,7 @@ TUT.splice(0, TUT.length,
    <li><b>Flights</b>: the first two jets check in as a flight of two (one call by the leader). Instructions to the leader apply to the flight; calling the wingman by its callsign gives it its own instructions. Only the leader squawks; the wingman shows as a raw return until you tell it "squawk normal".</li>
    <li><b>Geopoints</b>: double-click (double-tap) the scope to drop a geopoint (GPn with radial/DME from the ship); double-click it again to delete; ⚙ Settings → Clear geopoints.</li>
    <li>⚙ Voice → "Show marshal / LH approach patterns" draws the patterns in use (on by default here).</li></ul>`],
-  ['2. Arrivals & other calls', `<p>Arrivals appear 10–12 NM out and check in: "Stinger Marshal, Venom two one, 210 for 12, angels 10, state 3.4." Click (tap) the target to accept it, then assign a marshal and an approach. Aircraft never fly on their own: they hold their heading and altitude until you assign a marshal (or a heading/altitude, which cancels any procedure).</p><p>Also understood: turn left/right heading ___, climb/descend and maintain ___, say angels, say state, traffic calls and "correction". Approach-only calls (sectors, radar ID, go purple, climbout, CCA, handoff) are not used here; use <a href="approach-controller.html" style="color:#8fd8ff">Wasp Approach</a> for those.</p>`],
+  ['2. Arrivals & other calls', `<p>Arrivals appear 25–30 NM out and check in: "Stinger Marshal, Venom two one, 210 for 27, angels 10, state 3.4." Click (tap) the target to accept it, then assign a marshal and an approach. Aircraft never fly on their own: they hold their heading and altitude until you assign a marshal (or a heading/altitude, which cancels any procedure).</p><p>Also understood: turn left/right heading ___, climb/descend and maintain ___, say angels, say state, traffic calls and "correction". Approach-only calls (sectors, radar ID, go purple, climbout, CCA, handoff) are not used here; use <a href="approach-controller.html" style="color:#8fd8ff">Wasp Approach</a> for those.</p>`],
   ['3. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>HOLD TO TALK</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
    <ul><li><b>Best in Chrome or Edge on a computer.</b> Firefox has no speech recognition; Safari and iOS vary. You can always <b>type</b> the same words in the box.</li>
    <li>Chrome's speech recognition <b>needs an internet connection</b>, because the audio goes to Google's speech service.</li>
@@ -2606,7 +2606,7 @@ function mcArrivals(want) {   // arriving aircraft check in for marshal, one eve
     const al = pick(JETS), n1 = randi(11, 68), nums = [n1, n1 + 1];   // both start jets share one callsign word, different numbers
     for (let i = 0; i < 2; i++) { const cs = al.icao + nums[i];
       const ld = i ? G.ac.find(x => x.cs === al.icao + nums[0]) : null;
-      mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: 240, rng: i ? 12.5 : 12, lead: ld ? ld.uid : null, flight: i ? null : 2 }); }   // one flight: leader checks in for both
+      mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: 240, rng: i ? G.flightRng + 0.5 : (G.flightRng = rand(25, 29.5)), lead: ld ? ld.uid : null, flight: i ? null : 2 }); }   // one flight: leader checks in for both
     G.nextArr = G.t + rand(120, 180);
   }
   const live = G.ac.filter(a => a.phase === 'app').length;
@@ -2615,7 +2615,7 @@ function mcArrivals(want) {   // arriving aircraft check in for marshal, one eve
 function mcArrive(spec = {}) {
   const used = G.ac.map(a => a.cs);
   let a; for (let i = 0; i < 20; i++) { a = makeAc(spec); if (!used.includes(a.cs)) break; }
-  const helo = isHelo(a), rel = spec.rel != null ? spec.rel : (helo ? rand(40, 140) : rand(150, 260)) , R = spec.rng || rand(10, 12);
+  const helo = isHelo(a), rel = spec.rel != null ? spec.rel : (helo ? rand(40, 140) : rand(150, 260)) , R = spec.rng || rand(25, 30);   // check in 25-30 NM out
   const b = norm(BRC + rel); a.e = R * Math.sin(b * DEG); a.n = R * Math.cos(b * DEG);
   a.phase = 'app'; a.pars = 0; a.armed = false; a.turnDir = null;
   a.hdg = a.tgtHdg = Math.round(norm(b + 180 + rand(-20, 20)));   // inbound, roughly toward mother
