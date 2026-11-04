@@ -2147,7 +2147,7 @@ TUT.splice(0, TUT.length,
    <li><b>Jets only</b> (whole thousands, minimum angels 2): <b>LH-1</b> 030 radial at 4 DME; <b>LH-2</b> 030 at 2; <b>LH-3</b> 180 at (angels + 15) DME. Missed (0.75 NM): climb on BRC to 1,200; no instructions by 4 NM / 2 min: turn downwind, report abeam.</li>
    <li><b>Helicopters only</b> (500 ft steps, minimum 1,500; 2,500 when jets are also in marshal): <b>LH-4</b> 090 radial at 7 DME; arc 5 NM at 1,000 to final, FAF 3 DME. <b>LH-5</b> 030 at 2 DME; outbound at 1,000, inbound, FAF 3 DME. <b>Emergency marshal</b>: 045 / 090 / 135 radials, 5 NM 1,500 … 12 NM 5,000, flown like LH-4.</li>
    <li>Wrong radial/DME for the type, a jet approach for a helo (or the reverse), a wrong or missing outbound bearing, a wrong BRC, or an angels already in use are flagged in the log.</li>
-   <li><b>Sequence</b>: after the marshal call the flight holds at the marshal fix until cleared. "Eagle one six, cleared for LH-2 approach, report commencing" → commences at the fix ("commencing"). "Radar contact, report 3 miles outbound bearing" → "established in outbound bearing". "Contact final controller" → callsign only, leaves Marshal.</li>
+   <li><b>Sequence</b>: after the marshal call the flight holds at the marshal fix until cleared. "Eagle one six, cleared for LH-2 approach, report commencing" → commences at the fix ("commencing"). "Radar contact, report 3 miles outbound bearing" → "established in outbound bearing". "Go red for final" / "go blue for final" (red/blue = Final frequency; "contact final controller" also works) → callsign only, leaves Marshal.</li>
    <li><b>Flights</b>: the first two jets check in as a flight of two (one call by the leader). Instructions to the leader apply to the flight; calling the wingman by its callsign gives it its own instructions. Only the leader squawks; the wingman shows as a raw return until you tell it "squawk normal".</li>
    <li><b>Geopoints</b>: double-click (double-tap) the scope to drop a geopoint (GPn with radial/DME from the ship); double-click it again to delete; ⚙ Settings → Clear geopoints.</li>
    <li>⚙ Voice → "Show marshal / LH approach patterns" draws the patterns in use (on by default here).</li></ul>`],
@@ -2865,11 +2865,12 @@ const MAR = {
     if (out.type && /\bcleared\b/.test(s)) out.cleared = true;   // "cleared for LH-2 approach, report commencing": commence at the marshal fix
     if (/\breport\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound/.test(s)) out.rpt3 = true;
     if (/\b(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?final(?:\s+controller)?\b/.test(s)) out.hoFinal = true;
+    { const g = s.match(/\bgo\s+(red|blue)\s+(?:for\s+|to\s+)?final\b/); if (g) { out.hoFinal = true; out.hoFreq = g[1]; } }
     if (/\b(?:execute\s+)?missed\s+approach\b/.test(s) && !out.marshal) out.missed = true;
     if (out.marshal && out.marshal.R != null) out.marshal.R = norm(out.marshal.R - BRC) % 360;   // spoken radial is BRC + relative value
     return (out.type || out.marshal || out.commence || out.missed || out.rpt3 || out.hoFinal) ? out : null;
   },
-  trigger: /\b(?:report\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound|(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?final|case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery|marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
+  trigger: /\b(?:go\s+(?:red|blue)\s+(?:for\s+|to\s+)?final|report\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound|(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?final|case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery|marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
   say(a, txt, say) { if (a.st === 'mfinal') return; pilotSay(a, `${a.tel}, ${txt}.`, `${a.telSay}, ${say || txt}.`); },
   dg(v) { return String(v).split('').map(c => c === '.' ? 'point' : DIGW[+c]).join(' '); },
   exec(m, a, heard, src) {
@@ -2923,7 +2924,7 @@ const MAR = {
     if (m.hoFinal) {
       if (!M.run) { this.say(a, 'unable, not on the approach'); log('sys', `${a.cs}: hand off to Final only after commencing.`); return; }
       for (const x of [a, ...G.ac.filter(w => w.inForm && w.lead === a.uid)]) { x.st = 'mfinal'; x.inForm = false; if (x !== a) { x.mar = JSON.parse(JSON.stringify(M)); } }
-      log('sys', `${a.cs} switched to Final (${this.T[M.run].name}); off Marshal frequency.`); parts.push('switching final');
+      log('sys', `${a.cs} switched to Final${m.hoFreq ? ' (' + m.hoFreq + ')' : ''} (${this.T[M.run].name}); off Marshal frequency.`); parts.push(m.hoFreq ? `go ${m.hoFreq} for final` : 'switching final');
       if (G.selected === a) G.selected = null;
     }
     if (m.commence) {
