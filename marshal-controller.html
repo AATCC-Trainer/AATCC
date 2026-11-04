@@ -1837,6 +1837,10 @@ function mcFixSpeech(t) {   // forgiving marshal-flow wording: common speech-to-
   return s.replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
 }
 window.__mcFix = t => mcFixSpeech(t);
+function csByDigits(pre, live) {   // first choice: the callsign number ("... 42") picks the one live aircraft whose callsign ends in it
+  const m = String(pre || '').match(/\b(\d{2,3})\b/); if (!m) return null;
+  const c = live.filter(x => x.cs.endsWith(m[1])); return c.length === 1 ? c[0] : null;
+}
 function handleTranscript(text, src) {
   if (MC) { const raw = String(text).trim(), fx = mcFixSpeech(raw); if (G && !G.over && src === 'voice') log('sys', `🎙 Recognized: "${raw}"${fx !== raw ? `  →  read as "${fx}"` : ''}`); text = fx; }
   const known = G ? G.ac.filter(alive).map(a => a.cs) : [];
@@ -1845,7 +1849,7 @@ function handleTranscript(text, src) {
   const sqm = /\bsq(?:u|w)?a+w?c?k?s?\s*,?\s*normal\b/i.exec(heard);
   if (G && !G.over && sqm) {   // "squawk normal": a wingman with no squawk starts squawking (data block appears)
     const pre = heard.slice(0, sqm.index), pp = pre.trim() ? parseSpeech(pre, known) : null, live = G.ac.filter(appCtl), up = pre.toUpperCase().replace(/[\s,]+/g, '');
-    let a = (pp && pp.cs && live.find(x => x.cs === pp.cs)) || (up && live.find(x => up.includes(x.cs))) || (!pre.trim() && G.selected && appCtl(G.selected) ? G.selected : null);
+    let a = csByDigits(pre, live) || (pp && pp.cs && live.find(x => x.cs === pp.cs)) || (up && live.find(x => up.includes(x.cs))) || (!pre.trim() && G.selected && appCtl(G.selected) ? G.selected : null);
     setHeard(heard, null); if (src === 'voice') renderTranscript(text, '');
     if (!a) { log('sys', `Squawk normal: say the callsign. Heard: "${heard}"`); return { cs: null, cmds: [], str: 'squawk?' }; }
     a.sq = true; a.lastTx = G.t; selectAc(a);
@@ -1859,7 +1863,7 @@ function handleTranscript(text, src) {
     if (mp) {
       const ki = heard.search(MAR.trigger), pre = heard.slice(0, Math.max(0, ki)).replace(/\b(expect(?:ed)?|cleared|execute)\s*$/i, ''), up = pre.toUpperCase().replace(/[\s,]+/g, '');
       const pp = pre.trim() ? parseSpeech(pre, known) : null, live = G.ac.filter(appCtl);
-      let a = (pp && pp.cs && live.find(x => x.cs === pp.cs)) || (up && live.find(x => up.includes(x.cs))) || null;
+      let a = csByDigits(pre, live) || (pp && pp.cs && live.find(x => x.cs === pp.cs)) || (up && live.find(x => up.includes(x.cs))) || null;
       if (!a && !(pp && pp.cs) && !up) a = G.selected && appCtl(G.selected) ? G.selected : (live.length === 1 ? live[0] : null);
       if (src === 'voice') renderTranscript(text, '');
       setHeard(heard, null);
@@ -2650,6 +2654,7 @@ function mcArrive(spec = {}) {
   a.hdg = a.tgtHdg = Math.round(norm(b + 180 + rand(-20, 20)));   // inbound, roughly toward mother
   const usedAlt = new Set(G.ac.map(x => Math.round(x.alt / 500)));
   let alt; for (let i = 0; i < 20; i++) { alt = helo ? 500 * Math.round(rand(4, 7)) : 1000 * Math.round(rand(8, 14)); if (!usedAlt.has(alt / 500)) break; }
+  if (MC) alt = 5000;   // Marshal: every arrival checks in at angels 5
   a.alt = a.tgtAlt = alt; a.ias = a.tgtSpd = helo ? 120 : 250; a.trail = []; a.trailT = 0; a.lastTx = G.t;
   { const f = appFuelSpec(a); a.fuel0 = f[0] * rand(0.45, 0.7); a.launchT = G.t; a.souls = Math.round(rand(f[2], f[3])); }
   if (spec.lead) { a.lead = spec.lead; a.inForm = true; a.sq = false; }   // wingman: no squawk, flies formation on the leader
