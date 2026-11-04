@@ -1,7 +1,7 @@
 {
   "id": "./approach-controller.html",
-  "name": "Wasp Approach",
-  "short_name": "Wasp Approach",
+  "name": "AATCC Training Simulation Prototype – Approach",
+  "short_name": "AATCC Approach",
   "start_url": "./approach-controller.html",
   "scope": "./",
   "display": "standalone",
