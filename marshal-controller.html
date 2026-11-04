@@ -156,7 +156,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div class="row">
       <button id="bPause" title="Pause (P)">❚❚ Pause</button>
       <button id="bS1" class="on" title="1x (key 1)">1x</button>
-      <button id="bS2" title="2x (key 2)">2x</button>
+      <button id="bS2" title="3x (key 3): whole sim runs 3x faster">3x</button>
       <button id="bSet" title="Voice settings">⚙ Voice</button>
       <button id="bHelp" title="Help (?)">? Help</button><a href="approach-controller.html" id="xLink" style="align-self:center;color:#8fd8ff;font-size:12px;text-decoration:none;padding:0 6px">← Approach</a>
       <button id="bEnd" title="End session">End</button>
@@ -1858,6 +1858,19 @@ function handleTranscript(text, src) {
     $('parsed').textContent = 'Understood → ' + a.cs + ' squawk normal'; $('parsed').classList.remove('bad');
     return { cs: a.cs, cmds: ['squawk'], str: 'squawk normal' };
   }
+  const bst = /\b(?:signal|single|signals|cigna|sig)?\s*bust(?:er|ers|ed|a|ah|in)\b/i.exec(heard);
+  if (G && !G.over && MC && bst) {   // "<callsign>, signal buster": accelerate to 500 kt, callsign-only readback
+    const pre = heard.slice(0, bst.index), pp = pre.trim() ? parseSpeech(pre, known) : null, live = G.ac.filter(appCtl), up = pre.toUpperCase().replace(/[\s,]+/g, '');
+    let a = csByDigits(pre, live) || (pp && pp.cs && live.find(x => x.cs === pp.cs)) || (up && live.find(x => up.includes(x.cs))) || (!pre.trim() && G.selected && appCtl(G.selected) ? G.selected : null);
+    setHeard(heard, null); if (src === 'voice') renderTranscript(text, '');
+    if (!a) { log('sys', `Signal buster: say the callsign. Heard: "${heard}"`); return { cs: null, cmds: [], str: 'buster?' }; }
+    if (a.inForm) { a.inForm = false; log('sys', `${a.cs} detached from the flight (own instructions).`); }
+    a.buster = true; a.tgtSpd = 500; a.lastTx = G.t; selectAc(a);
+    log('ctl', `${a.cs}: "${heard.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  signal buster (500 kt)`);
+    pilotSay(a, `${a.tel}.`, `${a.telSay}.`);
+    $('parsed').textContent = 'Understood → ' + a.cs + ' signal buster'; $('parsed').classList.remove('bad');
+    return { cs: a.cs, cmds: ['buster'], str: 'signal buster' };
+  }
   if (G && !G.over && MAR.trigger.test(heard)) {   // marshal / LH approach / commence / missed approach
     const mp = MAR.parse(heard);
     if (mp) {
@@ -1952,7 +1965,7 @@ $('cmdForm').addEventListener('submit', e => { e.preventDefault(); const v = $('
 $('cmdInput').addEventListener('keydown', e => { if (e.key === 'Escape') $('cmdInput').blur(); });
 
 /* ===================== panel ===================== */
-function setScale(s) { if (!G) return; G.scale = s; $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 2); }
+function setScale(s) { if (!G) return; G.scale = s; $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 3); }
 function setPaused(p) { if (!G) return; G.paused = p; $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p); }
 function selectAc(a) { if (!G) return; G.selected = a; refreshPanel(true); }
 let lastPanel = 0;
@@ -2004,7 +2017,7 @@ stripsEl.addEventListener('click', e => { const s = e.target.closest('.strip'); 
 
 $('bPause').onclick = () => { setPaused(!G.paused); $('bPause').blur(); };
 $('bS1').onclick = () => { setScale(1); $('bS1').blur(); };
-$('bS2').onclick = () => { setScale(2); $('bS2').blur(); };
+$('bS2').onclick = () => { setScale(G && G.scale === 3 ? 1 : 3); $('bS2').blur(); };
 $('bHelp').onclick = () => openTutorial(0);
 $('bSet').onclick = $('bSet2').onclick = () => openSettings();
 $('bEnd').onclick = () => { if (G && !G.over && confirm('End this session now?')) endGame(); };
@@ -2019,7 +2032,10 @@ document.addEventListener('keydown', e => {
   let used = true;
   switch (e.key) {
     case 'p': case 'P': setPaused(!G.paused); break;
-    case '1': setScale(1); break; case '2': setScale(2); break;
+    case '1': setScale(1); break; case '2': case '3': setScale(3); break;
+    case 'ArrowUp': case 'ArrowDown': case 'ArrowLeft': case 'ArrowRight': { const a = G.selected; if (!a) { used = false; break; }   // move the selected aircraft's data block
+      const st = 12; a.dbx = (a.dbx || 0) + (e.key === 'ArrowLeft' ? -st : e.key === 'ArrowRight' ? st : 0); a.dby = (a.dby || 0) + (e.key === 'ArrowUp' ? -st : e.key === 'ArrowDown' ? st : 0);
+      a.dbx = Math.max(-140, Math.min(140, a.dbx)); a.dby = Math.max(-100, Math.min(100, a.dby)); break; }
     case 'Tab': { const l = G.ac.filter(alive); if (l.length) { const i = l.indexOf(G.selected); selectAc(l[(i + 1) % l.length]); } break; }
     case 'Enter': case '/': $('cmdInput').focus(); break;
     case '?': case 'F1': openTutorial(0); break;
@@ -3467,7 +3483,8 @@ function drawApp(now) {
       a.hitR = appCtl(a) ? { x: Q[0], y: Q[1] } : null; continue; }
     const col = a.conflict ? ((now / 400 | 0) % 2 ? 'rgba(255,90,70,1)' : 'rgba(255,190,60,1)') : sel ? 'rgba(220,255,225,1)' : fin ? ppiCol(0.4) : ppiCol(0.9);
     ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 4.5; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 4.5, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;   // simple target blip (no lines)
-    const bx = Q[0] + 14, by = Q[1] - 22;
+    const bx = Q[0] + 14 + (a.dbx || 0), by = Q[1] - 22 + (a.dby || 0);
+    if (a.dbx || a.dby) { ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(Q[0], Q[1]); ctx.lineTo(bx - 2, by + 4); ctx.stroke(); ctx.globalAlpha = 1; }   // leader line to a moved data block
     const l1 = a.st === 'purple' ? a.cs + ' PRPL' : a.cs, l2 = `${String(Math.round(a.alt / 100)).padStart(3, '0')} ${String(Math.round(a.gs / 10)).padStart(2, '0')} ${a.code}`;
     ctx.fillStyle = col; if (a.hoff && !((now / 350 | 0) % 2)) ctx.globalAlpha = 0.3; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12); ctx.globalAlpha = 1;
     { const tags = (a.identified ? ' ID' : '');   // ownership / handoff tags
