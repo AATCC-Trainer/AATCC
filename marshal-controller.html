@@ -2147,6 +2147,7 @@ TUT.splice(0, TUT.length,
    <li><b>Jets only</b> (whole thousands, minimum angels 2): <b>LH-1</b> 030 radial at 4 DME; <b>LH-2</b> 030 at 2; <b>LH-3</b> 180 at (angels + 15) DME. Missed (0.75 NM): climb on BRC to 1,200; no instructions by 4 NM / 2 min: turn downwind, report abeam.</li>
    <li><b>Helicopters only</b> (500 ft steps, minimum 1,500; 2,500 when jets are also in marshal): <b>LH-4</b> 090 radial at 7 DME; arc 5 NM at 1,000 to final, FAF 3 DME. <b>LH-5</b> 030 at 2 DME; outbound at 1,000, inbound, FAF 3 DME. <b>Emergency marshal</b>: 045 / 090 / 135 radials, 5 NM 1,500 … 12 NM 5,000, flown like LH-4.</li>
    <li>Wrong radial/DME for the type, a jet approach for a helo (or the reverse), a wrong or missing outbound bearing, a wrong BRC, or an angels already in use are flagged in the log.</li>
+   <li><b>Sequence</b>: after the marshal call the flight holds at the marshal fix until cleared. "Eagle one six, cleared for LH-2 approach, report commencing" → commences at the fix ("commencing"). "Radar contact, report 3 miles outbound bearing" → "established in outbound bearing". "Contact final controller" → callsign only, leaves Marshal.</li>
    <li><b>Flights</b>: the first two jets check in as a flight of two (one call by the leader). Instructions to the leader apply to the flight; calling the wingman by its callsign gives it its own instructions. Only the leader squawks; the wingman shows as a raw return until you tell it "squawk normal".</li>
    <li><b>Geopoints</b>: double-click (double-tap) the scope to drop a geopoint (GPn with radial/DME from the ship); double-click it again to delete; ⚙ Settings → Clear geopoints.</li>
    <li>⚙ Voice → "Show marshal / LH approach patterns" draws the patterns in use (on by default here).</li></ul>`],
@@ -2859,12 +2860,15 @@ const MAR = {
       out.marshal = { R: r ? +r[1] % 360 : null, Rabs: r ? +r[1] % 360 : null, D: d ? +d[1] : null, alt: an ? Math.round(+an[1] * 1000) : ft ? +ft[1] : null, eat: e ? +e[1] : null };
     }
     if (/\bcommence\b(?!\s+(?:your\s+)?descen)/.test(s)) out.commence = true;
+    if (out.type && /\bcleared\b/.test(s)) out.cleared = true;   // "cleared for LH-2 approach, report commencing": commence at the marshal fix
+    if (/\breport\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound/.test(s)) out.rpt3 = true;
+    if (/\b(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?final(?:\s+controller)?\b/.test(s)) out.hoFinal = true;
     if (/\b(?:execute\s+)?missed\s+approach\b/.test(s) && !out.marshal) out.missed = true;
     if (out.marshal && out.marshal.R != null) out.marshal.R = norm(out.marshal.R - BRC) % 360;   // spoken radial is BRC + relative value
-    return (out.type || out.marshal || out.commence || out.missed) ? out : null;
+    return (out.type || out.marshal || out.commence || out.missed || out.rpt3 || out.hoFinal) ? out : null;
   },
-  trigger: /\b(?:case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery|marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
-  say(a, txt, say) { pilotSay(a, `${a.tel}, ${txt}.`, `${a.telSay}, ${say || txt}.`); },
+  trigger: /\b(?:report\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound|(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?final|case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery|marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
+  say(a, txt, say) { if (a.st === 'mfinal') return; pilotSay(a, `${a.tel}, ${txt}.`, `${a.telSay}, ${say || txt}.`); },
   dg(v) { return String(v).split('').map(c => c === '.' ? 'point' : DIGW[+c]).join(' '); },
   exec(m, a, heard, src) {
     selectAc(a); a.lastTx = G.t;
@@ -2904,6 +2908,22 @@ const MAR = {
       parts.push(`outbound ${h3z(m.outbound)}`); }
     if (m.brc != null && Math.abs(angDiff(m.brc, BRC)) > 2) { G.score -= this.PEN; log('bad', `−${this.PEN}: BRC given to ${a.cs} as ${h3z(m.brc)}; BRC is ${BRC3}.`); Sound.buzz(); }
     if (m.caseN != null && m.caseN !== 3) log('warn', `${a.cs}: marshal ops here are Case III (heard Case ${m.caseN}).`);
+    if (m.cleared) {
+      if (M.R == null) { this.say(a, 'say marshal instructions'); return; }
+      M.cleared = true; parts.push('cleared, report commencing');
+      if (M.ph !== 'hold' && M.ph !== 'toMar') log('sys', `${a.cs} cleared for ${this.T[M.type].name}; not in marshal yet.`);
+      else log('sys', `${a.cs} cleared for ${this.T[M.type].name}: will commence at the marshal fix.`);
+    }
+    if (m.rpt3) {
+      if (!M.run) log('sys', `${a.cs}: not commenced yet; will report 3 miles outbound after commencing.`);
+      M.rpt3 = true; M.rpt3Done = false; parts.push('report 3 miles outbound');
+    }
+    if (m.hoFinal) {
+      if (!M.run) { this.say(a, 'unable, not on the approach'); log('sys', `${a.cs}: hand off to Final only after commencing.`); return; }
+      for (const x of [a, ...G.ac.filter(w => w.inForm && w.lead === a.uid)]) { x.st = 'mfinal'; x.inForm = false; if (x !== a) { x.mar = JSON.parse(JSON.stringify(M)); } }
+      log('sys', `${a.cs} switched to Final (${this.T[M.run].name}); off Marshal frequency.`); parts.push('switching final');
+      if (G.selected === a) G.selected = null;
+    }
     if (m.commence) {
       const type = M.type || M.typeInf;
       if (!type) { this.say(a, 'say approach type'); return; }
@@ -2915,6 +2935,7 @@ const MAR = {
     }
     log('ctl', `${a.cs}: "${heard.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${parts.join('; ')}`);
     pilotSay(a, `${a.tel}.`, `${a.telSay}.`);   // readback is the callsign only
+    if (a.st === 'mfinal') return;
     refreshPanel(true);
   },
   commence(a, type) {
@@ -2936,6 +2957,9 @@ const MAR = {
   },
   step(a) {
     const M = a.mar, p = this.loc(a), r = Math.hypot(p[0], p[1]), b = this.lb(p[0], p[1]), dt = G.t - (M.t0 || 0), O = [0, 0], t = this.T[M.run] || null;
+    if (M.run && M.rpt3 && !M.rpt3Done && r >= 3 && Math.abs(angDiff(b, 30)) <= 30 && /^(out1|out2|out5)$/.test(M.ph || '')) {   // local bearing 30 = relative radial 210 (outbound bearing side)
+      M.rpt3Done = true; if (a.st === 'ctl') { this.say(a, 'established in outbound bearing'); log('sys', `${a.cs} 3 NM outbound bearing ${h3z(this.outbound())}.`); } }
+    if (a.st === 'mfinal' && M.ph === 'final' && t && (r <= t.map || p[1] < 0)) { a.phase = 'gone'; a.removeAt = G.t; M.ph = null; log('good', `${a.cs} recovered aboard ${SHIP_NAME} (${t.name}, Final).`); return; }
     switch (M.ph) {
       case 'toMar': {   // fly to the marshal fix at the marshal altitude
         const F = this.pt(M.R, M.D), d = Math.hypot(F[0] - p[0], F[1] - p[1]);
@@ -2944,16 +2968,19 @@ const MAR = {
           M.inMar = true;
           if (!M.est) { M.est = true; this.say(a, `established in marshal, angels ${appAngels(M.alt)}`, `established in marshal, angels ${appAngelsSay(M.alt)}`); log('sys', `${a.cs} holding in marshal ${h3z(M.R)}R ${M.D} NM, angels ${appAngels(M.alt)}.`); }
           M.ph = 'hold'; M.leg = this.along(F, M.R, p) >= -0.2 ? 'tOut' : 'in'; M.t0 = G.t;
+          if (M.cleared && (M.type || M.typeInf) && d < 0.5) { this.commence(a, M.type || M.typeInf); this.say(a, 'commencing'); }
         }
         break;
       }
       case 'hold': {   // racetrack: inbound to the fix on the radial, left turns, 1 min outbound (or 2 NM beyond the fix)
         const F = this.pt(M.R, M.D), cin = M.R, cout = norm(M.R + 180);
         a.tgtAlt = M.alt;
-        if (M.leg === 'in') { this.setH(a, this.track(F, cin, p)); if (this.along(F, cin, p) >= -0.2) { M.leg = 'tOut'; } }
+        if (M.leg === 'in') { this.setH(a, this.track(F, cin, p)); if (this.along(F, cin, p) >= -0.2) { M.leg = 'tOut';
+          if (M.cleared && (M.type || M.typeInf)) { this.commence(a, M.type || M.typeInf); this.say(a, 'commencing'); break; } } }
         if (M.leg === 'tOut') { this.setH(a, cout, 'L'); if (Math.abs(angDiff(this.hdgL(a), cout)) < 3) { M.leg = 'out'; M.t0 = G.t; } }
         else if (M.leg === 'out') { this.setH(a, cout); if (G.t - M.t0 >= this.HOLD_LEG || r >= M.D + 2.5) M.leg = 'tIn'; }
         else if (M.leg === 'tIn') { this.setH(a, cin, 'L'); if (Math.abs(angDiff(this.hdgL(a), cin)) < 3) M.leg = 'in'; }
+        if (M.cleared && M.leg !== 'in' && M.leg != null && Math.hypot(F[0] - p[0], F[1] - p[1]) < 0.3 && (M.type || M.typeInf)) { this.commence(a, M.type || M.typeInf); this.say(a, 'commencing'); break; }
         if (M.eat != null && !M.eatSaid && this.eatMin() === M.eat) { M.eatSaid = true; log('sys', `${a.cs}: expected approach time ${String(M.eat).padStart(2, '0')} (say "commence").`); }
         break;
       }
@@ -3095,7 +3122,8 @@ function appStep(dt) {
       log('sys', `${a.cs} re-checked in after practice PAR ${a.appCount}/${APP_MAX_PARS}; click to accept.`);
     }
     if (a.sector && a.st === 'ctl') sectorGuide(a);
-    if (a.mar && a.mar.ph && a.st === 'ctl') MAR.step(a);
+    if (a.mar && a.mar.ph && (a.st === 'ctl' || a.st === 'mfinal')) MAR.step(a);
+    if (a.st === 'mfinal' && a.phase === 'app' && !(a.mar && a.mar.ph)) { a.phase = 'gone'; a.removeAt = G.t; log('sys', `${a.cs} left the Final frequency.`); }
     // heading (standard-rate 3 deg/s, in the commanded direction)
     const diff = angDiff(a.tgtHdg, a.hdg);
     if (Math.abs(diff) < 0.05) { a.hdg = a.tgtHdg; a.turnDir = null; }
@@ -3389,7 +3417,7 @@ function drawApp(now) {
   for (const a of G.ac) {
     if (a.phase !== 'app' || a.st === 'dep') continue;   // not shown until checked in
     if (!a.code) a.code = '4' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 8)).join('');   // octal Mode 3/A code
-    const sel = a === G.selected, fin = a.st === 'final' || a.st === 'purple' || a.st === 'lowout', Q = P(a.e, a.n);
+    const sel = a === G.selected, fin = a.st === 'final' || a.st === 'mfinal' || a.st === 'purple' || a.st === 'lowout', Q = P(a.e, a.n);
     if (a.sq === false) {   // no squawk: primary (raw) return only, no data block
       ctx.fillStyle = sel ? 'rgba(220,255,225,0.95)' : ppiCol(0.75); ctx.fillRect(Q[0] - 2.5, Q[1] - 1.5, 5, 3);
       if (sel) { ctx.strokeStyle = 'rgba(220,255,225,0.8)'; ctx.strokeRect(Q[0] - 6, Q[1] - 5, 12, 10); }
