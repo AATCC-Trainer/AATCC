@@ -1851,7 +1851,7 @@ function handleTranscript(text, src) {
     log('ctl', `${a.cs}: "${heard}"${src === 'voice' ? ' 🎙' : ''}  →  handoff`); HOFF.start(a); $('parsed').textContent = 'Understood → handoff ' + a.cs; $('parsed').classList.remove('bad');
     return { cs: a.cs, cmds: ['handoff'], str: 'handoff' };
   }
-  if (sc) { if (src === 'voice') renderTranscript(text, ''); $('parsed').textContent = 'Understood → ' + (sc.k === 'turn' ? `99 mother in ${sc.dir || '?'} turn` : `99 mother steady, BRC ${sc.brc ?? '?'}`); $('parsed').classList.remove('bad'); if (G && !G.over) shipCallExec(sc, heard, src); return { cs: null, cmds: [sc.k], str: JSON.stringify(sc) }; }
+  if (sc && SHIP_TURNS_ON) { if (src === 'voice') renderTranscript(text, ''); $('parsed').textContent = 'Understood → ' + (sc.k === 'turn' ? `99 mother in ${sc.dir || '?'} turn` : `99 mother steady, BRC ${sc.brc ?? '?'}`); $('parsed').classList.remove('bad'); if (G && !G.over) shipCallExec(sc, heard, src); return { cs: null, cmds: [sc.k], str: JSON.stringify(sc) }; }
   const cor = splitCorrection(text, known);
   if (cor) {
     text = cor.post;
@@ -2151,7 +2151,7 @@ TUT.splice(0, TUT.length,
    <li><b>Flights</b>: the first two jets check in as a flight of two (one call by the leader). Instructions to the leader apply to the flight; calling the wingman by its callsign gives it its own instructions. Only the leader squawks; the wingman shows as a raw return until you tell it "squawk normal".</li>
    <li><b>Geopoints</b>: double-click (double-tap) the scope to drop a geopoint (GPn with radial/DME from the ship); double-click it again to delete; ⚙ Settings → Clear geopoints.</li>
    <li>⚙ Voice → "Show marshal / LH approach patterns" draws the patterns in use (on by default here).</li></ul>`],
-  ['2. Arrivals & other calls', `<p>Arrivals appear 10–12 NM out and check in: "Stinger Marshal, Venom two one, 210 for 12, angels 10, state 3.4." Click (tap) the target to accept it, then assign a marshal and an approach. Aircraft never fly on their own: they hold their heading and altitude until you assign a marshal (or a heading/altitude, which cancels any procedure).</p><p>Also understood: turn left/right heading ___, climb/descend and maintain ___, say angels, say state, traffic calls, ship-turn calls ("99 mother in a port turn") and "correction". Approach-only calls (sectors, radar ID, go purple, climbout, CCA, handoff) are not used here; use <a href="approach-controller.html" style="color:#8fd8ff">Wasp Approach</a> for those.</p>`],
+  ['2. Arrivals & other calls', `<p>Arrivals appear 10–12 NM out and check in: "Stinger Marshal, Venom two one, 210 for 12, angels 10, state 3.4." Click (tap) the target to accept it, then assign a marshal and an approach. Aircraft never fly on their own: they hold their heading and altitude until you assign a marshal (or a heading/altitude, which cancels any procedure).</p><p>Also understood: turn left/right heading ___, climb/descend and maintain ___, say angels, say state, traffic calls and "correction". Approach-only calls (sectors, radar ID, go purple, climbout, CCA, handoff) are not used here; use <a href="approach-controller.html" style="color:#8fd8ff">Wasp Approach</a> for those.</p>`],
   ['3. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>HOLD TO TALK</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
    <ul><li><b>Best in Chrome or Edge on a computer.</b> Firefox has no speech recognition; Safari and iOS vary. You can always <b>type</b> the same words in the box.</li>
    <li>Chrome's speech recognition <b>needs an internet connection</b>, because the audio goes to Google's speech service.</li>
@@ -2653,6 +2653,7 @@ function appCheckIn(a, again) {
   if (!G.selected) selectAc(a);
 }
 /* ---------- ship turns: random 1-15 deg port/starboard, 5 s warning, ~1 deg/s ---------- */
+const SHIP_TURNS_ON = false;   // ship turns disabled for now (BRC fixed 360); set true to re-enable turns + 99 calls
 const SHIP_TURN = { firstAfter: 120, every: [240, 480], warn: 5, rate: 1, minDeg: 1, maxDeg: 15, turnCallGrace: 15, steadyCallWin: 30, bonus: 10, steadyBanner: 8 };
 function shipBanner(cls, txt) { const b = $('shipBanner'); if (!b) return; b.className = cls || ''; b.textContent = txt || ''; b.style.display = txt ? 'block' : 'none'; }
 function shipLinkPost(turning) { if (!LINK.on) return; const n3 = v => { v = Math.round(((v % 360) + 360) % 360); return v || 360; };
@@ -2663,6 +2664,7 @@ function shipTurnSchedule(dir, deg, inSec) {
   log('warn', `Ship turn in ${Math.round(G.ship.at - G.t)} s: mother will turn ${G.ship.dir} about ${G.ship.deg}°.`); try { Sound.chirp(); } catch (e) {}
 }
 function shipTurnStep() {
+  if (!SHIP_TURNS_ON) return;
   if (G.shipNext == null) G.shipNext = Math.max(SHIP_TURN.firstAfter, rand(...SHIP_TURN.every));
   G.shipTurns = G.shipTurns || [];
   const S = G.ship;
