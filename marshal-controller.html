@@ -2596,7 +2596,7 @@ const LINK = { on: false, ch: null, lastAck: -1e9, pendingHandoff: null,
     a.appCount = (a.appCount || 0) + 1;
     if (m.outcome === 'landed') { a.phase = 'gone'; a.removeAt = G.t; log('good', `${a.cs} landed aboard ${SHIP_NAME} (Final Control).`); return; }
     a.phase = 'app'; a.st = 'lowout'; a.recheckAt = G.t + 20; a.onFinal = false; a.turnDir = null; [a.e, a.n] = fromLoc(0, -0.3); a.hdg = BRC;
-    a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = isHelo(a) ? 200 : Math.round(rand(250, 300));
+    a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = isHelo(a) ? 200 : MC ? 250 : Math.round(rand(250, 300));
     for (const c of (a.climbout || [])) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = c.v; }
     a.climbout = null;
     log('sys', `${a.cs} ${m.outcome === 'waveoff' ? 'waved off' : 'low approach'} (Final Control, PAR ${a.appCount}/${APP_MAX_PARS}), flying climbout: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}.`);
@@ -2683,7 +2683,7 @@ function appCheckIn(a, again) {
   a.tasks = {}; a.firstTx = true; a.cycle = (a.cycle || 0) + 1;   // grading resets every (re-)check-in
   a.checked = true; a.st = 'ctl'; a.needAlt = true; a.rcDone = false; a.identified = false; a.idLate = false; a.checkInT = G.t;
   a.dirty = false; a.landChk = false;
-  a.ias = a.tgtSpd = isHelo(a) ? 200 : Math.round(rand(250, 300));   // helos 200 kt, jets 250-300 kt at check-in   // first altitude after check-in is graded
+  a.ias = a.tgtSpd = isHelo(a) ? 200 : MC ? 250 : Math.round(rand(250, 300));   // helos 200 kt, jets 250-300 kt at check-in   // first altitude after check-in is graded
   const f = (Math.floor(appState(a) * 10) / 10).toFixed(1), [whole, dec] = f.split('.');
   const fSay = (+whole >= 10 ? sayTwo(+whole) : NUMW[+whole]) + ' point ' + NUMW[+dec];
   const n = a.souls, sw = n === 1 ? 'soul' : 'souls';
@@ -3163,7 +3163,7 @@ function appStep(dt) {
           if (a.appCount >= APP_MAX_PARS) { a.phase = 'gone'; a.removeAt = G.t; log('good', `${a.cs} ${isHelo(a) ? 'landed aboard' : 'recovered aboard'} ${SHIP_NAME} (practice PAR ${a.appCount}/${APP_MAX_PARS}, full stop).`); continue; }
           // practice PAR 1-2: low approach, then the stored climbout (or default: BRC, angels 1 / 1.2, check-in speed)
           a.st = 'lowout'; a.recheckAt = G.t + 20; a.onFinal = false; a.turnDir = null; a.coSpd = null;
-          a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = isHelo(a) ? 200 : Math.round(rand(250, 300));
+          a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = isHelo(a) ? 200 : MC ? 250 : Math.round(rand(250, 300));
           let what = `climbing out on ${BRC3} to ${fmtAlt(a.tgtAlt)}`;
           if (a.climbout && a.climbout.length) {
             for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = a.coSpd = c.v; }
@@ -3190,9 +3190,10 @@ function appStep(dt) {
     // altitude 1,500 fpm (initial departure climb 3,000 fpm), speed 2 kt/s
     if (a.alt !== a.tgtAlt) { const r = (a.st === 'dep' || a.st === 'final' ? (a.T.feed >= 140 ? 6000 : 3000) : 1500) / 60 * dt; a.alt = Math.abs(a.tgtAlt - a.alt) <= r ? a.tgtAlt : a.alt + Math.sign(a.tgtAlt - a.alt) * r; }
     if (a.ias !== a.tgtSpd) { const r = 2 * dt; a.ias = Math.abs(a.tgtSpd - a.ias) <= r ? a.tgtSpd : a.ias + Math.sign(a.tgtSpd - a.ias) * r; }
-    const tas = a.ias * (1 + a.alt / 1000 * 0.02), h = a.hdg * DEG;
+    const mcJet = MC && !isHelo(a);   // Marshal jets: TAS = IAS, and 250 kt covers 4 NM per minute (ground scale 0.96)
+    const tas = mcJet ? a.ias : a.ias * (1 + a.alt / 1000 * 0.02), h = a.hdg * DEG, gk = mcJet ? 0.96 : 1;
     const ve = tas * Math.sin(h) + w.e, vn = tas * Math.cos(h) + w.n;
-    a.gs = Math.hypot(ve, vn); a.e += ve / 3600 * dt; a.n += vn / 3600 * dt;
+    a.gs = Math.hypot(ve, vn); a.e += ve * gk / 3600 * dt; a.n += vn * gk / 3600 * dt;
     a.trailT += dt; if (a.trailT >= 5) { a.trailT = 0; a.trail.push({ e: a.e, n: a.n }); if (a.trail.length > 5) a.trail.shift(); }
     if (a.st === 'dep' && G.t >= 10) appCheckIn(a, false);
     if (!MC && a.st === 'ctl' && a.checkInT != null && !a.identified && !a.idLate && G.t - a.checkInT > RID.deadline) {   // never radar identified
