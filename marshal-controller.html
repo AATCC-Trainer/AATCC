@@ -2575,9 +2575,11 @@ window.__HOFF = HOFF;
 setTimeout(() => LINK.setOn(LINK.on), 0);
 setInterval(() => { if (LINK.on) LINK.post({ type: 'hello' }); LINK.status(); }, 3000);
 function mcArrivals(want) {   // arriving aircraft check in for marshal, one every 1.5-3 min, up to the difficulty's count
-  if (G.nextArr == null) {   // start of run: exactly 2 jets check in (for now), then the normal flow
+  if (G.nextArr == null) {   // start of run: exactly 2 jets check in (for now) after 10 s of sim time, then the normal flow
+    if (G.t < 10) return;
     const JETS = AIRLINES.filter(x => x.types.some(t => TYPES[t] && !TYPES[t].helo));
-    for (let i = 0; i < 2; i++) { const al = JETS[i % JETS.length]; let cs; for (let k = 0; k < 40; k++) { cs = al.icao + randi(11, 69); if (!G.ac.some(x => x.cs === cs)) break; }
+    const al = pick(JETS), n1 = randi(11, 68), nums = [n1, n1 + 1];   // both start jets share one callsign word, different numbers
+    for (let i = 0; i < 2; i++) { const cs = al.icao + nums[i];
       mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: i ? 170 : 240, rng: i ? 11 : 12 }); }
     G.nextArr = G.t + rand(120, 180);
   }
