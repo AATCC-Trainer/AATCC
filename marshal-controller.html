@@ -230,7 +230,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div class="set"><label for="sVol">Readback volume</label><input type="range" id="sVol" min="0" max="1" step="0.05"></div>
     <div class="set"><label for="sRate">Pilot speaking rate</label><input type="range" id="sRate" min="0.8" max="1.5" step="0.05"></div>
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
-    <div class="set"><label for="sPat">Show marshal / LH approach patterns on the scope</label><input type="checkbox" id="sPat" style="width:22px;height:22px"></div>
+    <div class="set" style="display:none"><label for="sPat">Show marshal / LH approach patterns on the scope</label><input type="checkbox" id="sPat" style="width:22px;height:22px"></div>
     <div class="set"><label>Geopoints (double-click the scope to add, double-click one to delete)</label><button id="sGpClr" type="button">Clear geopoints</button></div>
     <div class="set"><label for="sRing">Range ring spacing</label><select id="sRing"><option value="1">1 NM</option><option value="2">2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option></select></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
@@ -2176,7 +2176,7 @@ TUT.splice(0, TUT.length,
    <li><b>Sequence</b>: after the marshal call the flight holds at the marshal fix until cleared. "Eagle one six, cleared for LH-2 approach, report commencing" → commences at the fix ("commencing"). "Radar contact, report 3 miles outbound bearing" → "established in outbound bearing". "&lt;callsign&gt;, go blue" / "&lt;callsign&gt;, go red" (red/blue = Final frequency; "go blue for final" and "contact final controller" also work) → callsign only, leaves Marshal.</li>
    <li><b>Flights</b>: for now only one flight checks in: two jets as a flight of two (one call by the leader). Instructions to the leader apply to the flight; calling the wingman by its callsign gives it its own instructions. Only the leader squawks; the wingman shows as a raw return until you tell it "squawk normal".</li>
    <li><b>Geopoints</b>: double-click (double-tap) the scope to drop a geopoint (GPn with radial/DME from the ship); double-click it again to delete; ⚙ Settings → Clear geopoints.</li>
-   <li>⚙ Voice → "Show marshal / LH approach patterns" draws the patterns in use (on by default here).</li></ul>`],
+</ul>`],
   ['2. Arrivals & other calls', `<p>Arrivals appear 25–30 NM out and check in: "Stinger Marshal, Venom two one, 210 for 27, angels 10, state 3.4." Click (tap) the target to accept it, then assign a marshal and an approach. Aircraft never fly on their own: they hold their heading and altitude until you assign a marshal (or a heading/altitude, which cancels any procedure).</p><p>Also understood: turn left/right heading ___, climb/descend and maintain ___, say angels, say state, traffic calls and "correction". Approach-only calls (sectors, radar ID, go purple, climbout, CCA, handoff) are not used here; use <a href="approach-controller.html" style="color:#8fd8ff">Wasp Approach</a> for those.</p>`],
   ['3. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>HOLD TO TALK</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
    <ul><li><b>Best in Chrome or Edge on a computer.</b> Firefox has no speech recognition; Safari and iOS vary. You can always <b>type</b> the same words in the box.</li>
@@ -3446,7 +3446,8 @@ function drawApp(now) {
   }
   if (!G) { ctx.textAlign = 'left'; return; }
   GP.draw(P);
-  if (S.pat) MAR.draw(P, sc);   // optional marshal / LH approach overlay (Settings)
+  const MC_PATTERN_OVERLAY = false;   // LH / marshal pattern overlay removed from the scope (set true + Settings box to bring it back)
+  if (MC_PATTERN_OVERLAY && S.pat) MAR.draw(P, sc);
   // TPX-42 style beacon data blocks (computer generated: live position, no fade)
   ctx.textAlign = 'left'; ctx.font = FONT(11);
   for (const a of G.ac) {
