@@ -663,7 +663,7 @@ const randMV = () => (Math.random() < 0.5 ? -1 : 1) * (1 + Math.floor(Math.rando
 const fmtMV = () => 'MV' + (MV < 0 ? '-' : '+') + String(Math.abs(MV)).padStart(2, '0');
 const rotB = (e, n, a) => { const r = a * DEG, c = Math.cos(r), s = Math.sin(r); return [e * c + n * s, -e * s + n * c]; };   // rotate a position's bearing by +a deg
 const t2m = (e, n) => rotB(e, n, -MV);   // true -> magnetic (drawn) frame
-const LAND_CLEAR_NM = 7.5, LAND_MAX_FRAC = 0.4, LAND_MIN_FRAC = 0.17, LAND_MAX_BRG = 0.5, LAND_HOLD_NM = 12.5;   // land only in the outer ring of the 14 NM scope (ship is at sea)
+const LAND_CLEAR_NM = 7.5, LAND_MAX_FRAC = 0.4, LAND_MIN_FRAC = 0.17, LAND_MAX_BRG = 0.5, LAND_HOLD_NM = 12.5;   // land clear of the ship and the marshal stack (ship is at sea)
 function landForbidden(e, n) {   // magnetic frame: inner water ring, final + upwind corridors to the scope edge, the four sector hold points
   if (Math.hypot(e, n) < LAND_CLEAR_NM) return true;
   const [le, ln] = toLoc(e, n); if (Math.abs(le) < 2.2) return true;
@@ -680,7 +680,7 @@ function landStats(polys) {   // grid sample inside the scope (true frame): area
   }
   return { frac: land / tot, minR, brg: bins.reduce((s, v) => s + v, 0) / 72, bad };
 }
-const APP_RANGE_L = 14;   // scope half-width (square scope, edges at 14 NM; corners ~19.8 NM)
+const APP_RANGE_L = 30;   // scope half-width (edges at 30 NM)
 function makeLand(seed) {
   const r = mulberry32(seed >>> 0), U = (a, b) => a + (b - a) * r();
   const ok = pts => pts.every(([e, n]) => !landForbidden(...t2m(e, n)) || Math.max(Math.abs(e), Math.abs(n)) > APP_RANGE_L + 0.5);
@@ -1814,6 +1814,18 @@ function handleTranscript(text, src) {
   const known = G ? G.ac.filter(alive).map(a => a.cs) : [];
   const heard = String(text).trim(); text = fixSpeech(text);
   const sc = shipCallParse(heard) || shipCallParse(text);
+  const sqm = /\bsq(?:u|w)?a+w?c?k?s?\s*,?\s*normal\b/i.exec(heard);
+  if (G && !G.over && sqm) {   // "squawk normal": a wingman with no squawk starts squawking (data block appears)
+    const pre = heard.slice(0, sqm.index), pp = pre.trim() ? parseSpeech(pre, known) : null, live = G.ac.filter(appCtl), up = pre.toUpperCase().replace(/[\s,]+/g, '');
+    let a = (pp && pp.cs && live.find(x => x.cs === pp.cs)) || (up && live.find(x => up.includes(x.cs))) || (!pre.trim() && G.selected && appCtl(G.selected) ? G.selected : null);
+    setHeard(heard, null); if (src === 'voice') renderTranscript(text, '');
+    if (!a) { log('sys', `Squawk normal: say the callsign. Heard: "${heard}"`); return { cs: null, cmds: [], str: 'squawk?' }; }
+    a.sq = true; a.lastTx = G.t; selectAc(a);
+    log('ctl', `${a.cs}: "${heard.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  squawk normal`);
+    pilotSay(a, `${a.tel}.`, `${a.telSay}.`);
+    $('parsed').textContent = 'Understood → ' + a.cs + ' squawk normal'; $('parsed').classList.remove('bad');
+    return { cs: a.cs, cmds: ['squawk'], str: 'squawk normal' };
+  }
   if (G && !G.over && MAR.trigger.test(heard)) {   // marshal / LH approach / commence / missed approach
     const mp = MAR.parse(heard);
     if (mp) {
@@ -2135,6 +2147,7 @@ TUT.splice(0, TUT.length,
    <li><b>Jets only</b> (whole thousands, minimum angels 2): <b>LH-1</b> 030 radial at 4 DME; <b>LH-2</b> 030 at 2; <b>LH-3</b> 180 at (angels + 15) DME. Missed (0.75 NM): climb on BRC to 1,200; no instructions by 4 NM / 2 min: turn downwind, report abeam.</li>
    <li><b>Helicopters only</b> (500 ft steps, minimum 1,500; 2,500 when jets are also in marshal): <b>LH-4</b> 090 radial at 7 DME; arc 5 NM at 1,000 to final, FAF 3 DME. <b>LH-5</b> 030 at 2 DME; outbound at 1,000, inbound, FAF 3 DME. <b>Emergency marshal</b>: 045 / 090 / 135 radials, 5 NM 1,500 … 12 NM 5,000, flown like LH-4.</li>
    <li>Wrong radial/DME for the type, a jet approach for a helo (or the reverse), a wrong or missing outbound bearing, a wrong BRC, or an angels already in use are flagged in the log.</li>
+   <li><b>Flights</b>: the first two jets check in as a flight of two (one call by the leader). Instructions to the leader apply to the flight; calling the wingman by its callsign gives it its own instructions. Only the leader squawks; the wingman shows as a raw return until you tell it "squawk normal".</li>
    <li><b>Geopoints</b>: double-click (double-tap) the scope to drop a geopoint (GPn with radial/DME from the ship); double-click it again to delete; ⚙ Settings → Clear geopoints.</li>
    <li>⚙ Voice → "Show marshal / LH approach patterns" draws the patterns in use (on by default here).</li></ul>`],
   ['2. Arrivals & other calls', `<p>Arrivals appear 10–12 NM out and check in: "Stinger Marshal, Venom two one, 210 for 12, angels 10, state 3.4." Click (tap) the target to accept it, then assign a marshal and an approach. Aircraft never fly on their own: they hold their heading and altitude until you assign a marshal (or a heading/altitude, which cancels any procedure).</p><p>Also understood: turn left/right heading ___, climb/descend and maintain ___, say angels, say state, traffic calls, ship-turn calls ("99 mother in a port turn") and "correction". Approach-only calls (sectors, radar ID, go purple, climbout, CCA, handoff) are not used here; use <a href="approach-controller.html" style="color:#8fd8ff">Wasp Approach</a> for those.</p>`],
@@ -2380,11 +2393,11 @@ inset.addEventListener('pointerdown', e => {
   if (best) selectAc(best);
 });
 
-/* ===================== APPROACH CONTROL (14 NM plan view) ===================== */
+/* ===================== APPROACH CONTROL (30 NM plan view) ===================== */
 // Geographic frame: e = NM east of the ship, n = NM north of the ship. Ship (Stinger) at the scope centre, BRC 180,
 // so the final approach course runs inbound from the north (aircraft fly 180 down it to the stern).
 const RID = { rngTol: 2, brgTol: 45, deadline: 90, wrongPen: 5, latePen: 5 };   // radar identification grading
-const APP = true, APP_RANGE = 14, APP_COUNT = { training: 4, normal: 6, gusty: 8 };
+const APP = true, APP_RANGE = 30, APP_COUNT = { training: 4, normal: 6, gusty: 8 };
 const appWind = () => { const r = (G.wind.dir + 180) * DEG; return { e: G.wind.spd * Math.sin(r), n: G.wind.spd * Math.cos(r) }; };
 const appRng = a => Math.hypot(a.e, a.n), appBrg = a => norm(Math.atan2(a.e, a.n) / DEG);
 const APP_AUTO_HANDOFF = false;   // see appStep
@@ -2431,11 +2444,22 @@ function sepFor(a, b) {   // -> [lateral NM, vertical ft, label]
   else { vert = V.atOrBelowFL290; vl = 'at/below FL290'; }
   return [far[0], vert, far[1] + ', ' + vl];
 }
+function flightSync() {   // wingmen in formation: 0.5 NM in trail of the leader, same altitude/heading/speed
+  for (const w of G.ac) { if (!w.inForm) continue;
+    const L = G.ac.find(x => x.uid === w.lead);
+    if (!L || L.phase !== 'app' || L.st !== 'ctl') { w.inForm = false; continue; }
+    const h = L.hdg * DEG; w.e = L.e - 0.5 * Math.sin(h); w.n = L.n - 0.5 * Math.cos(h);
+    w.hdg = w.tgtHdg = L.hdg; w.alt = w.tgtAlt = L.alt; w.ias = w.tgtSpd = L.ias; w.gs = L.gs; w.turnDir = null; w.vs = L.vs;
+    if (L.accepted) w.accepted = true; }
+}
+const inFlight = (a, b) => (a.inForm && a.lead === b.uid) || (b.inForm && b.lead === a.uid);
+window.__flightSync = () => flightSync();
 function appConflicts() {
   const L = G.ac.filter(a => a.phase === 'app' && !SEP_STANDARDS.ignoreStates.includes(a.st) && a.alt >= SEP_STANDARDS.ignoreBelowFt);
   const now = new Set(); G.ac.forEach(a => a.conflict = false); G.appConfSeen = G.appConfSeen || new Set();
   for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
-    const a = L[i], b = L[j], [lat, vert, lab] = sepFor(a, b), d = Math.hypot(a.e - b.e, a.n - b.n), dv = Math.abs(a.alt - b.alt);
+    const a = L[i], b = L[j]; if (inFlight(a, b)) continue;
+    const [lat, vert, lab] = sepFor(a, b), d = Math.hypot(a.e - b.e, a.n - b.n), dv = Math.abs(a.alt - b.alt);
     if (d < lat && dv < vert) {
       const key = [a.cs, b.cs].sort().join('|'); now.add(key); a.conflict = b.conflict = true;
       if (!G.appConfSet.has(key)) { G.appConf = (G.appConf || 0) + 1; G.score -= SEP_STANDARDS.penalty;
@@ -2580,7 +2604,8 @@ function mcArrivals(want) {   // arriving aircraft check in for marshal, one eve
     const JETS = AIRLINES.filter(x => x.types.some(t => TYPES[t] && !TYPES[t].helo));
     const al = pick(JETS), n1 = randi(11, 68), nums = [n1, n1 + 1];   // both start jets share one callsign word, different numbers
     for (let i = 0; i < 2; i++) { const cs = al.icao + nums[i];
-      mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: i ? 170 : 240, rng: i ? 11 : 12 }); }
+      const ld = i ? G.ac.find(x => x.cs === al.icao + nums[0]) : null;
+      mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: 240, rng: i ? 12.5 : 12, lead: ld ? ld.uid : null, flight: i ? null : 2 }); }   // one flight: leader checks in for both
     G.nextArr = G.t + rand(120, 180);
   }
   const live = G.ac.filter(a => a.phase === 'app').length;
@@ -2597,6 +2622,8 @@ function mcArrive(spec = {}) {
   let alt; for (let i = 0; i < 20; i++) { alt = helo ? 500 * Math.round(rand(4, 7)) : 1000 * Math.round(rand(8, 14)); if (!usedAlt.has(alt / 500)) break; }
   a.alt = a.tgtAlt = alt; a.ias = a.tgtSpd = helo ? 120 : 250; a.trail = []; a.trailT = 0; a.lastTx = G.t;
   { const f = appFuelSpec(a); a.fuel0 = f[0] * rand(0.45, 0.7); a.launchT = G.t; a.souls = Math.round(rand(f[2], f[3])); }
+  if (spec.lead) { a.lead = spec.lead; a.inForm = true; a.sq = false; }   // wingman: no squawk, flies formation on the leader
+  if (spec.flight) a.flight = spec.flight;
   G.ac.push(a); appCheckIn(a, false); a.needAlt = false; a.identified = true; a.rcDone = true;
   return a;
 }
@@ -2614,9 +2641,11 @@ function appCheckIn(a, again) {
   const pRSay = pR.includes('.') ? pR.split('.').map(d => DIGW[+d]).join(' point ') : (+pR >= 10 ? sayTwo(+pR) : NUMW[+pR]);
   const posit = `${pB} for ${pR} from mother, `, positSay = `${pB.split('').map(d => DIGW[+d]).join(' ')} for ${pRSay} from mother, `;
   a.checkInPosit = { brg: appBrg(a), rng: pR0, text: posit };
+  if (MC && a.lead) return;   // wingman: the leader checks in for the flight
   if (MC) { const st = (Math.floor(appState(a) * 10) / 10).toFixed(1), dB = String(Math.round(appBrg(a)) % 360 || 360).padStart(3, '0'), dR = Math.round(appRng(a));
-    pilotSay(a, `${SHIP_NAME} Marshal, ${a.tel}, ${dB} for ${dR}, angels ${appAngels(a.alt)}, state ${st}, ${n} ${sw} on board.`,
-      `${SHIP_NAME} Marshal, ${a.telSay}, ${dB.split('').map(d => DIGW[+d]).join(' ')} for ${dR >= 10 ? sayTwo(dR) : NUMW[dR]}, angels ${String(appAngels(a.alt)).split('.').map((x, i) => i ? NUMW[+x] : sayTwo(+x)).join(' point ')}, state ${fSay}, ${NUMW[n]} ${sw} on board.`);
+    const fl = a.flight ? `flight of ${a.flight}, ` : '', flS = a.flight ? `flight of ${NUMW[a.flight]}, ` : '';
+    pilotSay(a, `${SHIP_NAME} Marshal, ${a.tel}, ${fl}${dB} for ${dR}, angels ${appAngels(a.alt)}, state ${st}, ${n} ${sw} on board.`,
+      `${SHIP_NAME} Marshal, ${a.telSay}, ${flS}${dB.split('').map(d => DIGW[+d]).join(' ')} for ${dR >= 10 ? sayTwo(dR) : NUMW[dR]}, angels ${String(appAngels(a.alt)).split('.').map((x, i) => i ? NUMW[+x] : sayTwo(+x)).join(' point ')}, state ${fSay}, ${NUMW[n]} ${sw} on board.`);
     if (!G.selected) selectAc(a); return; }
   pilotSay(a, `${SHIP_NAME} Approach, ${a.tel}, ${pre}${again ? posit : ""}state ${f}, ${n} ${sw} on board, request practice PAR approach.`,
     `${SHIP_NAME} Approach, ${a.telSay}, ${pre}${again ? positSay : ""}state ${fSay}, ${NUMW[n]} ${sw} on board, request practice P A R approach.`);
@@ -2839,6 +2868,7 @@ const MAR = {
   dg(v) { return String(v).split('').map(c => c === '.' ? 'point' : DIGW[+c]).join(' '); },
   exec(m, a, heard, src) {
     selectAc(a); a.lastTx = G.t;
+    if (a.inForm) { a.inForm = false; log('sys', `${a.cs} detached from the flight (own marshal).`); }
     if (a.sector) a.sector = null;
     const parts = [], says = [];
     a.mar = a.mar || {};
@@ -2999,7 +3029,9 @@ function appStep(dt) {
   shipTurnStep();
   const want = APP_COUNT[G.d.key || ''] || (G.d.name === 'Training' ? 4 : G.d.name === 'Normal' ? 6 : 8);
   if (G.nextLaunch == null) G.nextLaunch = 10;   // first launch (and check-in) at 10 s sim time
-  if (MC) mcArrivals(want); else {
+  if (MC) mcArrivals(want);
+  flightSync();   // wingmen in formation follow their leader
+  if (!MC) {
   if (!G.confPlan) { const k = CONF_PLAN[G.d.key || ''] || (G.d.name === 'Training' ? 1 : G.d.name === 'Normal' ? 3 : 5), n = k === 1 ? 1 : Math.max(1, k + Math.round(rand(-1, 1)));
     G.confPlan = Array.from({ length: n }, (_, i) => 70 + (i + rand(0.1, 0.9)) * (k === 1 ? 300 : 900 / n)).sort((x, y) => x - y); G.confLog = []; G.appConfSet = new Set(); }
   if (G.confPlan.length && G.t >= G.confPlan[0]) { G.confPlan.shift(); const sc = appConflictScenario(); G.confLog.push({ t: Math.round(G.t), ...sc }); }
@@ -3134,6 +3166,7 @@ function appExecute(p, src) {
   if (!a) { log('sys', `Say the callsign (or select a target) first. Heard: "${p.raw}"`); return; }
   if (!p.cmds.length && !p.cs && p.norm.split(/\s+/).filter(w => w.length > 1 && w !== ',').length < 2) { log('sys', `Ignored noise: "${p.raw}"`); return; }
   if (!a.accepted) { log('sys', `${a.cs} not accepted (click its target to accept): no response to "${p.raw.trim()}".`); return; }
+  if (a.inForm && p.cmds.length) { a.inForm = false; log('sys', `${a.cs} detached from the flight (own instructions).`); }
   if (p.traffic) {   // traffic advisory: pilot takes no action, no grading; replies tally-ho once the transmission has ended
     selectAc(a); a.lastTx = G.t;
     G.lastTx = { a, t: G.t, snap: snapTx(a), dScore: 0, irreversible: false };   // so a following "correction" undoes this (a no-op), not an older call
@@ -3284,12 +3317,12 @@ const PPI = { G: '120,255,140', sweepT: 4000, lastAng: null, scan: null };
 function ppiCol(a) { return `rgba(${PPI.G},${a})`; }
 function appView(w, h) {   // rectangular scope geometry (CSS px): half-extents and px per NM
   const M = 2; let RX = Math.max(10, w / 2 - M), RY = Math.max(10, h / 2 - M);
-  RX = Math.min(RX, 2 * RY); RY = Math.min(RY, 2 * RX);   // aspect cap: longer axis shows at most 2x the shorter (28 NM vs 14); rest is plain background, scope centred
+  RX = Math.min(RX, 2 * RY); RY = Math.min(RY, 2 * RX);   // aspect cap: longer axis shows at most 2x the shorter (60 NM vs 30); rest is plain background, scope centred
   return { RX, RY, sc: Math.min(RX, RY) / APP_RANGE };
 }
 function drawApp(now) {
   now = now || performance.now();
-  // rectangular scope filling the canvas: ship at the centre, 14 NM to the nearer edge, longer axis shows more range
+  // rectangular scope filling the canvas: ship at the centre, 30 NM to the nearer edge, longer axis shows more range
   const cx = W / 2, cy = H / 2, { RX, RY, sc } = appView(W, H);
   const P = (e, n) => [cx + e * sc, cy - n * sc];
   if (G) { G.viewE = RX / sc; G.viewN = RY / sc; }   // scope extents in NM (aircraft-removal bounds)
@@ -3357,6 +3390,10 @@ function drawApp(now) {
     if (a.phase !== 'app' || a.st === 'dep') continue;   // not shown until checked in
     if (!a.code) a.code = '4' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 8)).join('');   // octal Mode 3/A code
     const sel = a === G.selected, fin = a.st === 'final' || a.st === 'purple' || a.st === 'lowout', Q = P(a.e, a.n);
+    if (a.sq === false) {   // no squawk: primary (raw) return only, no data block
+      ctx.fillStyle = sel ? 'rgba(220,255,225,0.95)' : ppiCol(0.75); ctx.fillRect(Q[0] - 2.5, Q[1] - 1.5, 5, 3);
+      if (sel) { ctx.strokeStyle = 'rgba(220,255,225,0.8)'; ctx.strokeRect(Q[0] - 6, Q[1] - 5, 12, 10); }
+      a.hitR = appCtl(a) ? { x: Q[0], y: Q[1] } : null; continue; }
     const col = a.conflict ? ((now / 400 | 0) % 2 ? 'rgba(255,90,70,1)' : 'rgba(255,190,60,1)') : sel ? 'rgba(220,255,225,1)' : fin ? ppiCol(0.4) : ppiCol(0.9);
     ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 4.5; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 4.5, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;   // simple target blip (no lines)
     const bx = Q[0] + 14, by = Q[1] - 22;
