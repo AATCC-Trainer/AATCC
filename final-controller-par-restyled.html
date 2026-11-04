@@ -154,7 +154,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
     <div class="row">
       <button id="bPause" title="Pause (P)">❚❚ Pause</button>
       <button id="bS1" class="on" title="1x (key 1)">1x</button>
-      <button id="bS2" title="2x (key 2)">2x</button>
+      <button id="bS2" title="3x sim speed (key 3)">3x</button>
       <button id="bSet" title="Voice settings">⚙ Voice</button>
       <button id="bHelp" title="Help (?)">? Help</button>
       <button id="bEnd" title="End session">End</button>
@@ -811,7 +811,7 @@ function hoffInitiate(a) {   // Final hands the aircraft to Approach
   if (a.hoff && a.hoff.from === 'APP') { log('sys', `${a.cs}: accept the APP handoff first (click its strip).`); return; }
   hoffStart(a, 'FIN'); log('sys', `Handoff of ${a.cs} to Approach initiated.`);
   if (G.linked) linkPost({ type: 'handoff', callsign: a.cs, from: 'FIN' });
-  else { const cs = a.cs, g = G; setTimeout(() => { if (G === g) hoffAccepted(cs); }, 3000); }   // solo: simulated Approach accepts
+  else { const cs = a.cs, g = G; setTimeout(() => { if (G === g) hoffAccepted(cs); }, 3000 / (G.scale || 1)); }   // solo: simulated Approach accepts
 }
 const HOFF_RE = /^\s*(.+?)[\s,]+(?:hndoff|handoff|hand\s*off|hand-off)[\s.!]*$/i;
 function hoffTyped(text) {   // "<callsign> hndoff" / "handoff" / "hand off": a controller action, never a pilot command
@@ -956,7 +956,7 @@ function newGame(diffKey, opts = {}) {
   G.linked = LINK.on; if (G.linked) { const p = LINK.pending.splice(0); setTimeout(() => p.forEach(m => G && linkHandoff(m)), 0); }
   G.gateAt = rand(FIRST_GAP[0], FIRST_GAP[1]);
   logEl.innerHTML = '';
-  setScale(1); setPaused(false);
+  setScale(S.simSpeed); setPaused(false);
   log('sys', `${d.name}: ${ph('PAR to ' + SHIP_NAME + ', BRC ' + BRC3, 'PAR runway ' + RWY_NUM)}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${G.toSpawn} arrivals.`);
   if (d.hints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
   selectAc(null);
@@ -1830,8 +1830,9 @@ function suggestCall(a) {
 
 /* ===================== settings & sound ===================== */
 const SETTINGS_KEY = 'fcpar_settings_v1';
-const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', sweep: true, servo: true, servoSlew: 1.2, soloHoff: true };
+const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', sweep: true, servo: true, servoSlew: 1.2, soloHoff: true, simSpeed: 1 };
 try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) {}
+if (S.simSpeed !== 3) S.simSpeed = 1;
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) {} };
 
 const Sound = {
@@ -2098,7 +2099,7 @@ $('cmdForm').addEventListener('submit', e => { e.preventDefault(); const v = $('
 $('cmdInput').addEventListener('keydown', e => { if (e.key === 'Escape') $('cmdInput').blur(); });
 
 /* ===================== panel ===================== */
-function setScale(s) { if (!G) return; G.scale = s; $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 2); }
+function setScale(s) { s = s === 3 ? 3 : 1; if (S.simSpeed !== s) { S.simSpeed = s; saveSettings(); } $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 3); if (G) G.scale = s; }
 function setPaused(p) { if (!G) return; G.paused = p; $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p); }
 function selectAc(a) { if (!G) return; G.selected = a; refreshPanel(true); }
 let lastPanel = 0;
@@ -2154,7 +2155,7 @@ stripsEl.addEventListener('click', e => { const s = e.target.closest('.strip'); 
 
 $('bPause').onclick = () => { setPaused(!G.paused); $('bPause').blur(); };
 $('bS1').onclick = () => { setScale(1); $('bS1').blur(); };
-$('bS2').onclick = () => { setScale(2); $('bS2').blur(); };
+$('bS2').onclick = () => { setScale(3); $('bS2').blur(); };
 $('bHelp').onclick = () => openTutorial(0);
 $('bSet').onclick = $('bSet2').onclick = () => openSettings();
 $('bEnd').onclick = () => { if (G && !G.over && confirm('End this session now?')) endGame(); };
@@ -2169,7 +2170,7 @@ document.addEventListener('keydown', e => {
   let used = true;
   switch (e.key) {
     case 'p': case 'P': setPaused(!G.paused); break;
-    case '1': setScale(1); break; case '2': setScale(2); break;
+    case '1': setScale(1); break; case '2': case '3': setScale(3); break;
     case 'Tab': { const l = G.ac.filter(alive); if (l.length) { const i = l.indexOf(G.selected); selectAc(l[(i + 1) % l.length]); } break; }
     case 'Enter': case '/': $('cmdInput').focus(); break;
     case '?': case 'F1': openTutorial(0); break;
