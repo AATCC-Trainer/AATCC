@@ -106,12 +106,24 @@ html,body{background:#030503}
 #panel{border-left-color:#1e3f24}
 .box{background:#071209}
 #ptt{background:#0b2410}
-#layBar{position:fixed;top:0;left:0;right:0;height:26px;padding:2px 8px;z-index:60;display:flex;gap:2px;justify-content:flex-end;align-items:center;background:#030503;border-bottom:1px solid #1e3f24}
+#layBar{position:fixed;top:0;left:0;right:0;height:26px;padding:2px 8px;z-index:60;display:flex;gap:8px;justify-content:flex-end;align-items:center;background:#030503;border-bottom:1px solid #1e3f24}
 #layBar button{opacity:.7}#layBar button:hover,#layBar button.on{opacity:1}
+#layBar .scopeCtrls{margin-right:auto;display:flex;gap:10px;align-items:center;font-size:11px;color:var(--dim);opacity:1}
+#layBar .scopeCtrls label{display:flex;align-items:center;gap:4px;white-space:nowrap}
+#layBar .scopeCtrls input[type=range]{width:110px;min-height:16px;padding:0;accent-color:var(--cyan)}
+#layBar .scopeCtrls select{min-height:20px;padding:0 4px;font-size:11px}
+#layBar .scopeCtrls b{color:var(--cyan);font-weight:normal;min-width:44px}
+#scopeLive{display:none;gap:8px;align-items:center;flex-wrap:wrap;font-size:11.5px;color:var(--dim);padding:2px 0}
+#scopeLive label{display:flex;align-items:center;gap:4px;white-space:nowrap}
+#scopeLive input[type=range]{width:120px;min-height:22px;padding:0;accent-color:var(--cyan)}
+#scopeLive select{min-height:26px;padding:2px 4px;font-size:12px}
+#scopeLive b{color:var(--cyan);font-weight:normal;min-width:48px}
+@media (max-width:950px){#scopeLive{display:flex}}
 @media (min-width:951px){#app{height:calc(100% - 26px);margin-top:26px}}
 #layBar button{min-height:22px;padding:2px 7px;font-size:11px;background:#071209;border-color:#1e3f24}
 #layBar button.on{background:#123f4a;color:var(--cyan);border-color:var(--cyan)}
 @media (max-width:950px){#layBar{display:none}}
+body.lay-transcript #panel>#scopeLive{display:flex!important}
 @media (max-width:950px) and (orientation:landscape) and (max-height:520px){   /* phone landscape: panel beside the scope, scope uses the full height */
   #mptt{left:auto;right:calc(8px + env(safe-area-inset-right));transform:none;width:64px;height:64px;bottom:calc(8px + env(safe-area-inset-bottom));font-size:10px}   /* docked over the side panel, never over the scope */
   #mStat{left:auto;right:calc(80px + env(safe-area-inset-right));bottom:calc(8px + env(safe-area-inset-bottom));width:calc(var(--panW, 300px) - 96px);padding:3px 6px;font-size:11px}
@@ -142,7 +154,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
 </head>
 <body>
-<div id="layBar" title="Layout (L cycles)"><button type="button" data-l="normal">▣ Normal</button><button type="button" data-l="expand">⤢ Expand scope</button><button type="button" data-l="transcript">☰ Scope + log</button></div>
+<div id="layBar" title="Layout (L cycles)"><div class="scopeCtrls" title="Live scope / rings (no pause)"><label>Scope <input type="range" id="liveScope" min="10" max="80" step="5" value="50"><b id="liveScopeLbl">50 NM</b></label><label>Rings <select id="liveRing"><option value="1">1 NM</option><option value="2" selected>2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option></select></label></div><button type="button" data-l="normal">▣ Normal</button><button type="button" data-l="expand">⤢ Expand scope</button><button type="button" data-l="transcript">☰ Scope + log</button></div>
 <div id="app">
   <div id="scopeWrap"><canvas id="scope"></canvas><div id="infoBlk" class="ib"></div><div id="tbBlk" class="ib"></div><div id="starBlk"><span class="sm"></span><span class="st">*</span><input id="starIn" spellcheck="false" autocomplete="off" autocapitalize="characters"></div><div id="shipBanner"></div></div>
   <button id="mptt" type="button">HOLD<br>TO<br>TALK</button><div id="mStat"></div>
@@ -161,6 +173,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
       <button id="bHelp" title="Help (?)">? Help</button><a href="marshal-controller.html" id="xLink" style="align-self:center;color:#8fd8ff;font-size:12px;text-decoration:none;padding:0 6px">Marshal →</a>
       <button id="bEnd" title="End session">End</button>
     </div>
+    <div id="scopeLive" title="Live scope / rings (no pause)"><label>Scope <input type="range" id="liveScope2" min="10" max="80" step="5" value="50"><b id="liveScopeLbl2">50 NM</b></label><label>Rings <select id="liveRing2"><option value="1">1 NM</option><option value="2" selected>2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option></select></label></div>
     <div id="scopeStatus" style="font-size:11px;color:var(--dim);line-height:1.3">PAR · scope idle</div>
     <div class="banner" id="voiceBanner"></div>
     <div class="box">
@@ -231,6 +244,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div class="set"><label for="sVol">Readback volume</label><input type="range" id="sVol" min="0" max="1" step="0.05"></div>
     <div class="set"><label for="sRate">Pilot speaking rate</label><input type="range" id="sRate" min="0.8" max="1.5" step="0.05"></div>
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sScope">Scope range</label><div style="display:flex;gap:8px;align-items:center"><input type="range" id="sScope" min="10" max="80" step="5" style="flex:1;min-height:22px;padding:0"><b id="sScopeLbl" style="color:var(--cyan);min-width:48px">50 NM</b></div></div>
     <div class="set"><label for="sRing">Range ring spacing</label><select id="sRing"><option value="1">1 NM</option><option value="2">2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option></select></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
     <div id="setInfo" class="note" style="color:var(--dim)"></div>
@@ -1532,9 +1546,13 @@ function suggestCall(a) {
 
 /* ===================== settings & sound ===================== */
 const SETTINGS_KEY = 'fcpar_settings_v1';
-const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', ringNm: 2 };
+const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', ringNm: 2, scopeNm: 50 };
 try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) {}
-const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) {} };
+try { const sr = localStorage.getItem('ac_scopeRange'); if (sr != null && sr !== '' && isFinite(+sr)) S.scopeNm = +sr; } catch (e) {}
+S.ringNm = [1, 2, 5, 10].includes(+S.ringNm) ? +S.ringNm : 2;
+S.scopeNm = Math.round(Math.max(10, Math.min(80, +S.scopeNm || 50)) / 5) * 5;
+let APP_RANGE = S.scopeNm;   // live scope half-range in NM (nearer edge); 10–80, default 50; mutated by setScopeNm
+const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); localStorage.setItem('ac_scopeRange', String(S.scopeNm)); } catch (e) {} };
 
 const Sound = {
   ctx: null,
@@ -1986,11 +2004,24 @@ window.addEventListener('blur', () => pttEnd());
 /* ===================== settings overlay ===================== */
 function openSettings() {
   uiPaused = true; setOv.classList.remove('hidden'); loadVoices();
-  $('sRing').value = String(S.ringNm || 2); $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
+  syncScopeUI(); $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
   $('setInfo').innerHTML = `Speech recognition: ${SR ? 'available' : '<b>not available</b> in this browser'} · Speech output: ${TTS ? voices.length + ' English voice(s)' : 'not available'} · Page: ${esc(location.protocol)}`;
 }
 function closeSettings() { setOv.classList.add('hidden'); uiPaused = !helpOv.classList.contains('hidden'); initVoiceStatus(); }
-$('sRing').value = String(S.ringNm || 2); $('sRing').addEventListener('change', () => { S.ringNm = +$('sRing').value; saveSettings(); });
+function setScopeNm(n, src) {   // live zoom: nearer-edge range in NM (does not pause / reset the sim)
+  n = Math.round(Math.max(10, Math.min(80, +n || 50)) / 5) * 5; S.scopeNm = n; APP_RANGE = n; saveSettings();
+  for (const id of ['liveScope', 'liveScope2', 'sScope']) { const el = $(id); if (el && el !== src) el.value = n; }
+  for (const id of ['liveScopeLbl', 'liveScopeLbl2', 'sScopeLbl']) { const el = $(id); if (el) el.textContent = n + ' NM'; }
+}
+function setRingNm(n, src) {   // live range-ring spacing
+  n = [1, 2, 5, 10].includes(+n) ? +n : 2; S.ringNm = n; saveSettings();
+  for (const id of ['liveRing', 'liveRing2', 'sRing']) { const el = $(id); if (el && el !== src) el.value = String(n); }
+}
+function syncScopeUI() { setScopeNm(S.scopeNm); setRingNm(S.ringNm); }
+window.__scope = { get range() { return APP_RANGE; }, get ring() { return S.ringNm; }, set: setScopeNm, setRing: setRingNm, sc() { const v = appView(canvas.clientWidth, canvas.clientHeight); return v.sc; } };
+['liveScope', 'liveScope2', 'sScope'].forEach(id => { const el = $(id); if (!el) return; el.addEventListener('input', e => setScopeNm(e.target.value, e.target)); el.addEventListener('change', e => setScopeNm(e.target.value, e.target)); });
+['liveRing', 'liveRing2', 'sRing'].forEach(id => { const el = $(id); if (!el) return; el.addEventListener('change', e => setRingNm(e.target.value, e.target)); });
+syncScopeUI();
 ['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice'].forEach(id => $(id).addEventListener('change', () => {
   S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.voice = $('sVoice').value; saveSettings();
 }));
@@ -2326,11 +2357,11 @@ inset.addEventListener('pointerdown', e => {
   if (best) selectAc(best);
 });
 
-/* ===================== APPROACH CONTROL (14 NM plan view) ===================== */
+/* ===================== APPROACH CONTROL (live-zoom plan view) ===================== */
 // Geographic frame: e = NM east of the ship, n = NM north of the ship. Ship (Stinger) at the scope centre, BRC 180,
 // so the final approach course runs inbound from the north (aircraft fly 180 down it to the stern).
 const RID = { rngTol: 2, brgTol: 45, deadline: 90, wrongPen: 5, latePen: 5 };   // radar identification grading
-const APP = true, APP_RANGE = 14, APP_COUNT = { training: 4, normal: 6, gusty: 8 };
+const APP = true, APP_COUNT = { training: 4, normal: 6, gusty: 8 };
 const appWind = () => { const r = (G.wind.dir + 180) * DEG; return { e: G.wind.spd * Math.sin(r), n: G.wind.spd * Math.cos(r) }; };
 const appRng = a => Math.hypot(a.e, a.n), appBrg = a => norm(Math.atan2(a.e, a.n) / DEG);
 const APP_AUTO_HANDOFF = false;   // see appStep
@@ -2941,7 +2972,7 @@ function appView(w, h) {   // rectangular scope geometry (CSS px): half-extents 
 }
 function drawApp(now) {
   now = now || performance.now();
-  // rectangular scope filling the canvas: ship at the centre, 14 NM to the nearer edge, longer axis shows more range
+  // rectangular scope filling the canvas: ship at the centre, APP_RANGE NM to the nearer edge (live zoom), longer axis shows more range
   const cx = W / 2, cy = H / 2, { RX, RY, sc } = appView(W, H);
   const P = (e, n) => [cx + e * sc, cy - n * sc];
   if (G) { G.viewE = RX / sc; G.viewN = RY / sc; }   // scope extents in NM (aircraft-removal bounds)
@@ -3010,6 +3041,7 @@ function drawApp(now) {
     if (a.phase !== 'app' || a.st === 'dep') continue;   // not shown until checked in
     if (!a.code) a.code = '4' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 8)).join('');   // octal Mode 3/A code
     const sel = a === G.selected, fin = a.st === 'final' || a.st === 'purple' || a.st === 'lowout', Q = P(a.e, a.n);
+    if (Math.abs(Q[0] - cx) > RX + 6 || Math.abs(Q[1] - cy) > RY + 6) { a.hitR = null; continue; }   // keep data blocks / hits inside the bezel when zoomed in
     const col = a.conflict ? ((now / 400 | 0) % 2 ? 'rgba(255,90,70,1)' : 'rgba(255,190,60,1)') : sel ? 'rgba(220,255,225,1)' : fin ? ppiCol(0.4) : ppiCol(0.9);
     ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 4.5; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 4.5, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;   // simple target blip (no lines)
     const dbo = a.dbo || { x: 14, y: -22 }, bx = Q[0] + dbo.x, by = Q[1] + dbo.y;
