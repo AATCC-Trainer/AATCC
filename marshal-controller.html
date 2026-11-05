@@ -2657,7 +2657,8 @@ function mcArrivals(want) {   // arriving aircraft check in for marshal, one eve
       mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: 240, rng: i ? G.flightRng + 0.5 : (G.flightRng = rand(25, 29.5)), lead: ld ? ld.uid : null, flight: i ? null : 2, wing: i ? null : al.icao + nums[1] }); }   // one flight: leader checks in for both
     G.nextArr = G.t + rand(240, 300);   // next arrival 4-5 min after the start flight
   }
-  if (!MC_MORE_ARRIVALS) { if (!G.allRecSaid && G.t > 30 && !G.ac.length) { G.allRecSaid = true; log('sys', 'All aircraft recovered. No further arrivals (single-flight mode); press End to finish.'); } return; }
+  if (!G.parSpawned && G.t >= MC_PAR_ARR.t) { G.parSpawned = true; mcParArrive(); }   // single PAR arrival ~4 min after start
+  if (!MC_MORE_ARRIVALS) { if (!G.allRecSaid && G.parSpawned && G.t > 30 && !G.ac.length) { G.allRecSaid = true; log('sys', 'All aircraft recovered. No further arrivals (single-flight mode); press End to finish.'); } return; }
   const live = G.ac.filter(a => a.phase === 'app').length;
   if (G.t >= G.nextArr && live < Math.min(want, 6)) { mcArrive(); G.nextArr = G.t + rand(240, 300); }   // 4-5 min between arrivals
 }
@@ -2679,6 +2680,25 @@ function mcArrive(spec = {}) {
   return a;
 }
 window.__mcArrive = mcArrive;
+/* PAR arrival: one aircraft (random jet or helo, different callsign word than the opening flight) checks in ~4 min after
+   start, ~10 NM out, Approach-page phraseology ("request PAR approach"); vectors / altitudes / radar contact / CCA etc. as on
+   the Approach page; "go blue/red", "contact final" or "go purple/copper" hand it off and it recovers to the ship on final. */
+const MC_PAR_ARR = { t: 240, rng: [9.5, 10.5], rel: [115, 145] };
+function mcParArrive() {
+  const helo = Math.random() < 0.5, words = G.ac.map(x => x.cs.replace(/\d+$/, ''));
+  const pool = AIRLINES.filter(x => x.types.some(t => TYPES[t] && !!TYPES[t].helo === helo) && !words.includes(x.icao));
+  const al = pick(pool.length ? pool : AIRLINES.filter(x => x.types.some(t => TYPES[t] && !!TYPES[t].helo === helo)));
+  const a = makeAc({ cs: al.icao + randi(11, 68), type: al.types.find(t => TYPES[t] && !!TYPES[t].helo === helo) });
+  const R = rand(...MC_PAR_ARR.rng), b = norm(BRC + rand(...MC_PAR_ARR.rel)); a.e = R * Math.sin(b * DEG); a.n = R * Math.cos(b * DEG);
+  a.phase = 'app'; a.pars = 0; a.armed = false; a.turnDir = null; a.parArr = true; a.appCount = APP_MAX_PARS - 1;   // one PAR, full stop
+  a.hdg = a.tgtHdg = Math.round(norm(b + 180));   // inbound toward mother
+  a.alt = a.tgtAlt = helo ? 2000 : 3000; a.trail = []; a.trailT = 0; a.lastTx = G.t;
+  { const f = appFuelSpec(a); a.fuel0 = f[0] * rand(0.45, 0.7); a.launchT = G.t; a.souls = Math.round(rand(f[2], f[3])); }
+  G.ac.push(a); appCheckIn(a, false);
+  log('sys', `${a.cs} (${a.type}) checking in ${R.toFixed(1)} NM out, angels ${appAngels(a.alt)}, requesting a PAR approach.`);
+  return a;
+}
+window.__mcParArrive = mcParArrive;
 function appCheckIn(a, again) {
   a.tasks = {}; a.firstTx = true; a.cycle = (a.cycle || 0) + 1;   // grading resets every (re-)check-in
   a.checked = true; a.st = 'ctl'; a.needAlt = true; a.rcDone = false; a.identified = false; a.idLate = false; a.checkInT = G.t;
@@ -2692,7 +2712,11 @@ function appCheckIn(a, again) {
   const pRSay = pR.includes('.') ? pR.split('.').map(d => DIGW[+d]).join(' point ') : (+pR >= 10 ? sayTwo(+pR) : NUMW[+pR]);
   const posit = `${pB} for ${pR} from mother, `, positSay = `${pB.split('').map(d => DIGW[+d]).join(' ')} for ${pRSay} from mother, `;
   a.checkInPosit = { brg: appBrg(a), rng: pR0, text: posit };
-  if (MC && a.lead) return;   // wingman: the leader checks in for the flight
+  if (MC && a.lead) return;   // wingman
+  if (MC && a.parArr) {   // PAR arrival: Approach-page check-in, plus position and angels
+    pilotSay(a, `${SHIP_NAME} Approach, ${a.tel}, ${posit}angels ${appAngels(a.alt)}, state ${f}, ${n} ${sw} on board, request PAR approach.`,
+      `${SHIP_NAME} Approach, ${a.telSay}, ${positSay}angels ${appAngelsSay(a.alt)}, state ${fSay}, ${NUMW[n]} ${sw} on board, request P A R approach.`);
+    if (!G.selected) selectAc(a); return; }
   if (MC) { const st = (Math.floor(appState(a) * 10) / 10).toFixed(1), dB = String(Math.round(appBrg(a)) % 360 || 360).padStart(3, '0'), dR = Math.round(appRng(a));
     const wt = a.wingCs ? telephony(a.wingCs) : null, fl = a.flight ? `flight of ${a.flight}, ${wt ? wt.text + ', ' : ''}` : '', flS = a.flight ? `flight of ${NUMW[a.flight]}, ${wt ? wt.say + ', ' : ''}` : '';
     pilotSay(a, `${SHIP_NAME} Marshal, ${a.tel}, ${fl}${dB} for ${dR}, angels ${appAngels(a.alt)}, state ${st}, ${n} ${sw} on board.`,
@@ -2971,7 +2995,11 @@ const MAR = {
       if (!M.run) log('sys', `${a.cs}: not commenced yet; will report 3 miles outbound after commencing.`);
       M.rpt3 = true; M.rpt3Done = false; parts.push('report 3 miles outbound');
     }
-    if (m.hoFinal) {
+    if (m.hoFinal && a.parArr) {   // PAR arrival: handed to Final, recovers on the final bearing (same as "go purple")
+      a.st = 'purple'; a.onFinal = false; a.turnDir = null; a.sector = null;
+      log('sys', `${a.cs} switched to Final${m.hoFreq ? ' (' + m.hoFreq + ')' : ''} for the PAR; off frequency, recovering to ${SHIP_NAME} on final bearing ${BRC3}.`); parts.push(m.hoFreq ? `go ${m.hoFreq}` : 'switching final');
+      if (G.selected === a) G.selected = null;
+    } else if (m.hoFinal) {
       if (!M.run) { this.say(a, 'unable, not on the approach'); log('sys', `${a.cs}: hand off to Final only after commencing.`); return; }
       for (const x of [a, ...G.ac.filter(w => w.inForm && w.lead === a.uid)]) { x.st = 'mfinal'; x.inForm = false; if (x !== a) { x.mar = JSON.parse(JSON.stringify(M)); } }
       log('sys', `${a.cs} switched to Final${m.hoFreq ? ' (' + m.hoFreq + ')' : ''} (${this.T[M.run].name}); off Marshal frequency.`); parts.push(m.hoFreq ? `go ${m.hoFreq}` : 'switching final');
@@ -3273,8 +3301,8 @@ function appExecute(p, src) {
   if (a.firstTx) { a.firstTx = false; if (p.stinger && !MC) award(a, 'cs', 'Stinger Approach'); }   // never penalized
   const rb = [], rbSay = []; let marked = false, secRb = 0;
   for (const c of p.cmds) {
-    if (MC && ['sector', 'purple', 'cca', 'button', 'climbout', 'climbOut', 'pos', 'rid', 'landChk', 'dirty'].includes(c.k)) { log('sys', `${cmdStr(c)}: not used on the Marshal scope (Approach only).`); continue; }
-    if (MC && c.k === 'radarContact') { rb.push('roger'); rbSay.push('roger'); continue; }
+    if (MC && !a.parArr && ['sector', 'purple', 'cca', 'button', 'climbout', 'climbOut', 'pos', 'rid', 'landChk', 'dirty'].includes(c.k)) { log('sys', `${cmdStr(c)}: not used on the Marshal scope (Approach only).`); continue; }
+    if (MC && !a.parArr && c.k === 'radarContact') { rb.push('roger'); rbSay.push('roger'); continue; }
     if (c.k === 'landChk') {   // helos slow to 100-130 kt; jets ignore it
       if (isHelo(a)) award(a, 'slow', 'landing checks');
       if (isHelo(a)) { a.landChk = true; a.tgtSpd = Math.round(rand(100, 130)); }
