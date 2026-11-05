@@ -27,6 +27,10 @@ html,body{margin:0;height:100%;background:#120e24;color:var(--g);font-family:Con
 .stats b{display:block;font-size:17px;color:var(--cyan);font-weight:normal}
 .stats span{font-size:10px;color:var(--dim);text-transform:uppercase}
 .row{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.liveCtl{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--dim);white-space:nowrap;user-select:none}
+.liveCtl input[type=range]{width:88px;min-height:22px;padding:0;accent-color:var(--cyan)}
+.liveCtl select{min-height:28px;padding:2px 4px;font-size:12px}
+.liveCtl b{color:var(--cyan);font-weight:normal;min-width:2.2em;text-align:right}
 button,select,input{font-family:inherit;font-size:13px;background:var(--panel2);color:var(--g);border:1px solid var(--gdd);border-radius:3px;padding:6px 8px;min-height:32px}
 button{cursor:pointer}
 button:hover{background:var(--hov);border-color:var(--gd)}
@@ -157,6 +161,8 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
       <button id="bPause" title="Pause (P)">❚❚ Pause</button>
       <button id="bS1" class="on" title="1x (key 1)">1x</button>
       <button id="bS2" title="3x (key 3): whole sim runs 3x faster">3x</button>
+      <label class="liveCtl" title="Scope range (zoom): how far the radar shows">Scope <input type="range" id="liveScope" min="5" max="40" step="1" value="30"><b id="liveScopeVal">30</b>NM</label>
+      <label class="liveCtl" title="Range ring spacing">Rings <select id="liveRing"><option value="1">1</option><option value="2">2</option><option value="5">5</option><option value="10">10</option></select>NM</label>
       <button id="bSet" title="Voice settings">⚙ Voice</button>
       <button id="bHelp" title="Help (?)">? Help</button><a href="approach-controller.html" id="xLink" style="align-self:center;color:#8fd8ff;font-size:12px;text-decoration:none;padding:0 6px">← Approach</a>
       <button id="bEnd" title="End session">End</button>
@@ -233,6 +239,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div class="set" style="display:none"><label for="sPat">Show marshal / LH approach patterns on the scope</label><input type="checkbox" id="sPat" style="width:22px;height:22px"></div>
     <div class="set"><label>Geopoints (double-click the scope to add, double-click one to delete)</label><button id="sGpClr" type="button">Clear geopoints</button></div>
     <div class="set"><label for="sRing">Range ring spacing</label><select id="sRing"><option value="1">1 NM</option><option value="2">2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option></select></div>
+    <div class="set"><label for="sScope">Scope range (zoom)</label><span style="display:flex;align-items:center;gap:8px"><input type="range" id="sScope" min="5" max="40" step="1" value="30" style="flex:1"><b id="sScopeVal" style="color:var(--cyan);min-width:3.5em;text-align:right">30 NM</b></span></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
     <div id="setInfo" class="note" style="color:var(--dim)"></div>
   </div>
@@ -1535,8 +1542,12 @@ function suggestCall(a) {
 
 /* ===================== settings & sound ===================== */
 const SETTINGS_KEY = 'mc_settings_v1';
-const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', pat: true, ring: 2 };
+const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, sfx: true, phr: 'ship', pat: true, ring: 2, scope: 30 };
 try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) {}
+const clampRing = n => [1, 2, 5, 10].includes(+n) ? +n : 2;
+const clampScope = n => { n = Math.round(+n); return isFinite(n) ? Math.max(5, Math.min(40, n)) : 30; };
+S.ring = clampRing(S.ring); S.scope = clampScope(S.scope);
+let APP_RANGE = S.scope;   // live scope half-width (NM); kept in sync by setScopeRange / syncScopeRingUI
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) {} };
 
 const Sound = {
@@ -2024,6 +2035,9 @@ $('bEnd').onclick = () => { if (G && !G.over && confirm('End this session now?')
 
 document.addEventListener('keydown', e => {
   const tag = (e.target.tagName || '').toLowerCase();
+  const tid = e.target && e.target.id;
+  const liveScopeCtl = tid === 'liveScope' || tid === 'liveRing' || tid === 'sScope' || tid === 'sRing';
+  if ((e.code === 'Space' || e.key === ' ') && liveScopeCtl) { e.preventDefault(); if (!e.repeat && G && !G.over && startOv.classList.contains('hidden')) pttStart(); return; }   // Space = PTT even if the zoom/ring control has focus
   if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
   if (!helpOv.classList.contains('hidden')) { if (e.key === 'Escape') closeTutorial(); else if (e.key === 'ArrowRight') tutGo(1); else if (e.key === 'ArrowLeft') tutGo(-1); return; }
   if (!setOv.classList.contains('hidden')) { if (e.key === 'Escape') closeSettings(); return; }
@@ -2045,20 +2059,50 @@ document.addEventListener('keydown', e => {
   if (used) e.preventDefault();
 });
 document.addEventListener('keyup', e => {
-  if (e.code === 'Space' || e.key === ' ') { const tag = (e.target.tagName || '').toLowerCase(); if (tag !== 'input') { e.preventDefault(); pttEnd(); } }
+  if (e.code === 'Space' || e.key === ' ') {
+    const tag = (e.target.tagName || '').toLowerCase(), tid = e.target && e.target.id;
+    const liveScopeCtl = tid === 'liveScope' || tid === 'liveRing' || tid === 'sScope' || tid === 'sRing';
+    if (tag !== 'input' || liveScopeCtl) { e.preventDefault(); pttEnd(); }
+  }
 });
 window.addEventListener('blur', () => pttEnd());
 
 /* ===================== settings overlay ===================== */
+function syncScopeRingUI() {
+  const sc = clampScope(S.scope), rg = clampRing(S.ring);
+  S.scope = sc; S.ring = rg; APP_RANGE = sc;
+  const ls = $('liveScope'), lsv = $('liveScopeVal'), lr = $('liveRing'), ss = $('sScope'), ssv = $('sScopeVal'), sr = $('sRing');
+  if (ls) ls.value = String(sc); if (lsv) lsv.textContent = String(sc);
+  if (lr) lr.value = String(rg);
+  if (ss) ss.value = String(sc); if (ssv) ssv.textContent = sc + ' NM';
+  if (sr) sr.value = String(rg);
+}
+function setScopeRange(nm, { blur } = {}) {
+  S.scope = clampScope(nm); APP_RANGE = S.scope; saveSettings(); syncScopeRingUI();
+  try { if (G) refreshPanel(false); } catch (e) {}
+  if (blur) { const el = document.activeElement; if (el && (el.id === 'liveScope' || el.id === 'sScope')) el.blur(); }
+}
+function setRingSpacing(n, { blur } = {}) {
+  S.ring = clampRing(n); saveSettings(); syncScopeRingUI();
+  if (blur) { const el = document.activeElement; if (el && (el.id === 'liveRing' || el.id === 'sRing')) el.blur(); }
+}
 function openSettings() {
   uiPaused = true; setOv.classList.remove('hidden'); loadVoices();
-  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sPat').checked = !!S.pat; $('sRing').value = String(S.ring || 2); $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
+  $('sIn').checked = S.voiceIn; $('sOut').checked = S.voiceOut; $('sVol').value = S.vol; $('sRate').value = S.rate; $('sSfx').checked = S.sfx; $('sPat').checked = !!S.pat; $('sVoice').value = S.voice; $('sPhr').value = isShip() ? 'ship' : 'tower';
+  syncScopeRingUI();
   $('setInfo').innerHTML = `Speech recognition: ${SR ? 'available' : '<b>not available</b> in this browser'} · Speech output: ${TTS ? voices.length + ' English voice(s)' : 'not available'} · Page: ${esc(location.protocol)}`;
 }
 function closeSettings() { setOv.classList.add('hidden'); uiPaused = !helpOv.classList.contains('hidden'); initVoiceStatus(); }
-['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice', 'sPat', 'sRing'].forEach(id => $(id).addEventListener('change', () => {
-  S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.pat = $('sPat').checked; S.ring = +$('sRing').value || 2; S.voice = $('sVoice').value; saveSettings();
+['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice', 'sPat'].forEach(id => $(id).addEventListener('change', () => {
+  S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.pat = $('sPat').checked; S.voice = $('sVoice').value; saveSettings();
 }));
+$('sRing').addEventListener('change', () => { setRingSpacing($('sRing').value, { blur: true }); });
+$('sScope').addEventListener('input', () => { setScopeRange($('sScope').value); });
+$('sScope').addEventListener('change', () => { setScopeRange($('sScope').value, { blur: true }); });
+$('liveRing').addEventListener('change', () => { setRingSpacing($('liveRing').value, { blur: true }); });
+$('liveScope').addEventListener('input', () => { setScopeRange($('liveScope').value); });
+$('liveScope').addEventListener('change', () => { setScopeRange($('liveScope').value, { blur: true }); });
+syncScopeRingUI();   // apply persisted scope/ring to live + settings controls on load
 function setPhr(v) { S.phr = v === 'tower' ? 'tower' : 'ship'; saveSettings(); $('sPhr').value = $('sPhr2').value = S.phr; applyPhrUI(); if (G) refreshPanel(true); }
 function applyPhrUI() {
   const sh = isShip();
@@ -2446,7 +2490,8 @@ inset.addEventListener('pointerdown', e => {
 // Geographic frame: e = NM east of the ship, n = NM north of the ship. Ship (Stinger) at the scope centre, BRC 180,
 // so the final approach course runs inbound from the north (aircraft fly 180 down it to the stern).
 const RID = { rngTol: 2, brgTol: 45, deadline: 90, wrongPen: 5, latePen: 5 };   // radar identification grading
-const APP = true, APP_RANGE = 30, APP_COUNT = { training: 4, normal: 6, gusty: 8 };
+const APP = true, APP_COUNT = { training: 4, normal: 6, gusty: 8 };
+try { syncScopeRingUI(); } catch (e) {}
 const appWind = () => { const r = (G.wind.dir + 180) * DEG; return { e: G.wind.spd * Math.sin(r), n: G.wind.spd * Math.cos(r) }; };
 const appRng = a => Math.hypot(a.e, a.n), appBrg = a => norm(Math.atan2(a.e, a.n) / DEG);
 const APP_AUTO_HANDOFF = false;   // see appStep
