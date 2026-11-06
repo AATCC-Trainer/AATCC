@@ -108,22 +108,14 @@ html,body{background:#030503}
 #ptt{background:#0b2410}
 #layBar{position:fixed;top:0;left:0;right:0;height:26px;padding:2px 8px;z-index:60;display:flex;gap:8px;justify-content:flex-end;align-items:center;background:#030503;border-bottom:1px solid #1e3f24}
 #layBar button{opacity:.7}#layBar button:hover,#layBar button.on{opacity:1}
-#layBar .scopeCtrls{margin-right:auto;display:flex;gap:10px;align-items:center;font-size:11px;color:var(--dim);opacity:1}
-#layBar .scopeCtrls label{display:flex;align-items:center;gap:4px;white-space:nowrap}
-#layBar .scopeCtrls input[type=range]{width:110px;min-height:16px;padding:0;accent-color:var(--cyan)}
-#layBar .scopeCtrls select{min-height:20px;padding:0 4px;font-size:11px}
-#layBar .scopeCtrls b{color:var(--cyan);font-weight:normal;min-width:44px}
-#scopeLive{display:none;gap:8px;align-items:center;flex-wrap:wrap;font-size:11.5px;color:var(--dim);padding:2px 0}
-#scopeLive label{display:flex;align-items:center;gap:4px;white-space:nowrap}
-#scopeLive input[type=range]{width:120px;min-height:22px;padding:0;accent-color:var(--cyan)}
-#scopeLive select{min-height:26px;padding:2px 4px;font-size:12px}
-#scopeLive b{color:var(--cyan);font-weight:normal;min-width:48px}
-@media (max-width:950px){#scopeLive{display:flex}}
+.liveCtl{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--dim);white-space:nowrap;user-select:none}
+.liveCtl input[type=range]{width:100px;min-height:22px;padding:0;accent-color:var(--cyan)}
+.liveCtl select{min-height:28px;padding:2px 4px;font-size:12px}
+.liveCtl b{color:var(--cyan);font-weight:normal;min-width:2.2em;text-align:right}
 @media (min-width:951px){#app{height:calc(100% - 26px);margin-top:26px}}
 #layBar button{min-height:22px;padding:2px 7px;font-size:11px;background:#071209;border-color:#1e3f24}
 #layBar button.on{background:#123f4a;color:var(--cyan);border-color:var(--cyan)}
 @media (max-width:950px){#layBar{display:none}}
-body.lay-transcript #panel>#scopeLive{display:flex!important}
 @media (max-width:950px) and (orientation:landscape) and (max-height:520px){   /* phone landscape: panel beside the scope, scope uses the full height */
   #mptt{left:auto;right:calc(8px + env(safe-area-inset-right));transform:none;width:64px;height:64px;bottom:calc(8px + env(safe-area-inset-bottom));font-size:10px}   /* docked over the side panel, never over the scope */
   #mStat{left:auto;right:calc(80px + env(safe-area-inset-right));bottom:calc(8px + env(safe-area-inset-bottom));width:calc(var(--panW, 300px) - 96px);padding:3px 6px;font-size:11px}
@@ -154,7 +146,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
 </head>
 <body>
-<div id="layBar" title="Layout (L cycles)"><div class="scopeCtrls" title="Live scope / rings (no pause)"><label>Scope <input type="range" id="liveScope" min="10" max="80" step="5" value="50"><b id="liveScopeLbl">50 NM</b></label><label>Rings <select id="liveRing"><option value="1">1 NM</option><option value="2" selected>2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option></select></label></div><button type="button" data-l="normal">▣ Normal</button><button type="button" data-l="expand">⤢ Expand scope</button><button type="button" data-l="transcript">☰ Scope + log</button></div>
+<div id="layBar" title="Layout (L cycles)"><button type="button" data-l="normal">▣ Normal</button><button type="button" data-l="expand">⤢ Expand scope</button><button type="button" data-l="transcript">☰ Scope + log</button></div>
 <div id="app">
   <div id="scopeWrap"><canvas id="scope"></canvas><div id="infoBlk" class="ib"></div><div id="tbBlk" class="ib"></div><div id="starBlk"><span class="sm"></span><span class="st">*</span><input id="starIn" spellcheck="false" autocomplete="off" autocapitalize="characters"></div><div id="shipBanner"></div></div>
   <button id="mptt" type="button">HOLD<br>TO<br>TALK</button><div id="mStat"></div>
@@ -169,11 +161,12 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
       <button id="bPause" title="Pause (P)">❚❚ Pause</button>
       <button id="bS1" class="on" title="1x (key 1)">1x</button>
       <button id="bS2" title="3x sim speed (key 3)">3x</button>
+      <label class="liveCtl" title="Scope range (zoom): how far the radar shows">Scope <input type="range" id="liveScope" min="5" max="80" step="1" value="50"><b id="liveScopeVal">50</b>NM</label>
+      <label class="liveCtl" title="Range ring spacing">Rings <select id="liveRing"><option value="1">1</option><option value="2" selected>2</option><option value="5">5</option><option value="10">10</option></select>NM</label>
       <button id="bSet" title="Voice settings">⚙ Voice</button>
       <button id="bHelp" title="Help (?)">? Help</button><a href="marshal-controller.html" id="xLink" style="align-self:center;color:#8fd8ff;font-size:12px;text-decoration:none;padding:0 6px">Marshal →</a>
       <button id="bEnd" title="End session">End</button>
     </div>
-    <div id="scopeLive" title="Live scope / rings (no pause)"><label>Scope <input type="range" id="liveScope2" min="10" max="80" step="5" value="50"><b id="liveScopeLbl2">50 NM</b></label><label>Rings <select id="liveRing2"><option value="1">1 NM</option><option value="2" selected>2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option></select></label></div>
     <div id="scopeStatus" style="font-size:11px;color:var(--dim);line-height:1.3">PAR · scope idle</div>
     <div class="banner" id="voiceBanner"></div>
     <div class="box">
@@ -244,7 +237,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div class="set"><label for="sVol">Readback volume</label><input type="range" id="sVol" min="0" max="1" step="0.05"></div>
     <div class="set"><label for="sRate">Pilot speaking rate</label><input type="range" id="sRate" min="0.8" max="1.5" step="0.05"></div>
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
-    <div class="set"><label for="sScope">Scope range</label><div style="display:flex;gap:8px;align-items:center"><input type="range" id="sScope" min="10" max="80" step="5" style="flex:1;min-height:22px;padding:0"><b id="sScopeLbl" style="color:var(--cyan);min-width:48px">50 NM</b></div></div>
+    <div class="set"><label for="sScope">Scope range (zoom)</label><span style="display:flex;align-items:center;gap:8px"><input type="range" id="sScope" min="5" max="80" step="1" value="50" style="flex:1"><b id="sScopeVal" style="color:var(--cyan);min-width:3.5em;text-align:right">50 NM</b></span></div>
     <div class="set"><label for="sRing">Range ring spacing</label><select id="sRing"><option value="1">1 NM</option><option value="2">2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option></select></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
     <div id="setInfo" class="note" style="color:var(--dim)"></div>
@@ -512,9 +505,10 @@ const PATTERNS = [
   [/\b(?:at\s+)?decision height\b|\bat minimums\b|\bat minima\b|\bat d h\b/g, () => ({ k: 'dh' })],
   [/\bover\s+(?:the\s+)?(?:landing\s+)?threshold\b|\bover\s+(?:the\s+)?(?:flight\s+)?deck\b/g, () => ({ k: 'thr' })],
   [/\bwave off(?:\s+wave off)*\b|\bgo around\b|\bexecute\s+(?:a\s+)?missed approach\b|\bmissed approach\b|\bbreak off\b/g, () => ({ k: 'ga' })],
-  [/\b(?:take\s+|climb\s+(?:to\s+)?|descend\s+(?:to\s+)?)?angels\s+(\d+(?:\.\d+)?)\b/g, m => { const n = parseFloat(m[1]); return { k: 'alt', v: Math.round(n < 100 ? n * 1000 : n), angels: true }; }],
+  [/\b(?:take\s+|climb\s+(?:to\s+)?|descend\s+(?:to\s+)?|maintain\s+)?angels\s+(\d+(?:\.\d+)?)\b/g, m => { const n = parseFloat(m[1]); return { k: 'alt', v: Math.round(n < 100 ? n * 1000 : n), angels: true }; }],
   [/\b(?:climb|descend)(?:\s+and\s+maintain|\s+to|\s+maintain)?\s+(\d{2,5})(?:\s+feet)?\b|\bmaintain\s+(\d{4,5})(?:\s+feet)?\b/g, m => { let v = +(m[1] || m[2]); if (v < 100) v *= 100; return { k: 'alt', v }; }],
   [/\b(?:fly\s+)?(?:base\s+recovery\s+course|brc|ship\s+s\s+heading)\s+(\d{1,3})\b/g, m => ({ k: 'hdg', dir: null, v: +m[1] })],
+  [/\b(?:fly\s+)?(?:runway\s+heading|ship'?s?\s+heading|base\s+recovery\s+course|brc)\b(?!\s+\d)/g, () => ({ k: 'hdg', dir: null, v: BRC })],
   [/\b(?:turn\s+|come\s+)?(left|right)\s+(?:turn\s+)?(?:to\s+)?heading\s+(\d{1,3})\b|\b(?:fly\s+|turn\s+to\s+)?heading\s+(\d{1,3})\b|\b(?:turn|come)\s+(left|right)\s+(?:to\s+)?(\d{3})\b/g,
     m => { const dir = m[1] || m[4] || null; const v = +(m[2] || m[3] || m[5]); return { k: 'hdg', dir: dir ? SIDE(dir) : null, v }; }],
   [/\b(?:going|drifting|moving)\s+(left|right)\s+(?:of\s+)?(?:course|centerline)\b/g, m => ({ k: 'trendCourse', side: SIDE(m[1]) })],
@@ -550,18 +544,22 @@ function parseSpeech(raw, known = []) {   // detect 'Stinger Approach' BEFORE it
   const st = STINGER_RE.test(String(raw)), p0 = parseSpeech0(String(raw).replace(STINGER_RE_G, ' '), known);
   const p = p0.traffic ? p0 : parseSpeech1(raw, known); if (p) p.stinger = st; return p;
 }
+const CLIMBOUT_HDR_RE = /\b(?:(?:on|after|your)\s+)?climb(?:ed|ing|s)?\s*-?\s*outs?\b(?:\s+instructions?)?(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?|\b(?:missed\s+approach|wave\s*-?\s*off|on\s+(?:the\s+)?go)\s+instructions?\b(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?|(?<!\bmarshal\s)(?<!\bmarshall\s)(?<!\bmartial\s)(?<!\bsay\s)\b(?:climb\w*\s+|your\s+)?instructions?\b(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?(?=\s*,?\s*(?:fly|turn|come|climb|descend|maintain|heading|runway|brc|base\s+recovery|angels|on\s+climb|go\s+(?:red|silver)))/i;
 function parseSpeech1(raw, known = []) {
   // our own station name ('Stinger Approach' and recognizer variants) is ignored wherever it appears
   raw = String(raw).replace(/\b(?:stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's)\s*,?\s*approach(?:es|s)?\b\s*,?/gi, ' ').replace(/^\s*,\s*/, '');
-  // ANY mention of climb out / climbout / climb-out / climbing out makes this a climbout-storage call ONLY:
-  // heading / altitude / speed anywhere in it are stored, nothing else in the transcript is executed now
-  const m = /\bclimb(?:ing)?\s*-?\s*outs?\b(?:\s+instructions?)?(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?/i.exec(String(raw));
+  // ANY mention of climbout / climbout instructions makes this a climbout-storage call ONLY:
+  // heading / altitude / speed / frequency inside it are stored in a.climbout, never executed now
+  const m = CLIMBOUT_HDR_RE.exec(String(raw));
   if (!m) return parseSpeech0(raw, known);
   const pre = parseSpeech0(raw.slice(0, m.index), known), post = String(raw).slice(m.index + m[0].length);
-  const sub = parseSpeech0(post, []), keep = c => c.k === 'hdg' || c.k === 'alt' || c.k === 'spd';
-  let v = sub.cmds.filter(keep); if (!v.some(c => c.k === 'hdg') && /\brunway\s+heading\b/i.test(post)) v.push({ k: 'hdg', v: BRC, dir: null });
-  for (const c of pre.cmds.filter(keep)) if (!v.some(x => x.k === c.k)) v.push(c);
-  pre.cmds = [{ k: 'climbout', v }]; pre.raw = raw; pre.hdgMissing = false; return pre;
+  const sub = parseSpeech0(post, []), keep = c => c.k === 'hdg' || c.k === 'alt' || c.k === 'spd' || c.k === 'goRed' || c.k === 'goSilver';
+  let v = sub.cmds.filter(keep);
+  if (!v.some(c => c.k === 'hdg') && /\b(?:runway\s+heading|ship'?s?\s+heading|base\s+recovery\s+course|b\s*r\s*c)\b/i.test(post)) v.push({ k: 'hdg', v: BRC, dir: null });
+  if (!v.some(c => c.k === 'goRed' || c.k === 'goSilver') && /\b(?:(?:button|frequency|switch(?:ing)?|contact)\s+red|marshal\s+frequency)\b/i.test(post)) v.push({ k: 'goRed' });
+  const preSetup = pre.cmds.filter(c => c.k === 'radarContact' || c.k === 'cca' || c.k === 'button' || c.k === 'pos' || c.k === 'rid' || c.k === 'dirty' || c.k === 'landChk');
+  if (!preSetup.length) { for (const c of pre.cmds.filter(keep)) if (!v.some(x => x.k === c.k)) v.push(c); }
+  pre.cmds = [...preSetup, { k: 'climbout', v }]; pre.raw = raw; pre.hdgMissing = false; return pre;
 }
 const TRAFFIC_RE = /^[\s,]*(?:traffic|traffics|traffic\s+s|trafic|traffik|traffick|trafficking)\b/;   // first word after the callsign
 const DIRBRG = { north: 360, northeast: 45, east: 90, southeast: 135, south: 180, southwest: 225, west: 270, northwest: 315 };
@@ -1558,8 +1556,9 @@ const S = { voiceIn: true, voiceOut: true, voice: 'auto', vol: 0.9, rate: 1.1, s
 try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) {}
 try { const sr = localStorage.getItem('ac_scopeRange'); if (sr != null && sr !== '' && isFinite(+sr)) S.scopeNm = +sr; } catch (e) {}
 S.ringNm = [1, 2, 5, 10].includes(+S.ringNm) ? +S.ringNm : 2;
-S.scopeNm = Math.round(Math.max(10, Math.min(80, +S.scopeNm || 50)) / 5) * 5;
-let APP_RANGE = S.scopeNm;   // live scope half-range in NM (nearer edge); 10–80, default 50; mutated by setScopeNm
+const clampScope = n => { n = Math.round(+n); return isFinite(n) ? Math.max(5, Math.min(80, n)) : 50; };
+S.scopeNm = clampScope(S.scopeNm || 50);
+let APP_RANGE = S.scopeNm;   // live scope half-range in NM (nearer edge); 5–80, default 50; mutated by setScopeRange
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); localStorage.setItem('ac_scopeRange', String(S.scopeNm)); } catch (e) {} };
 
 const Sound = {
@@ -1792,7 +1791,8 @@ function fixSpeech(raw) {
   s = s.replace(/\bmark\s+(?:your|you|yer)\s+(?:farther|fathers|mother's|bother)\b/g, 'mark your father');
   s = s.replace(/\bcross\s*-?\s*wind\b/g, 'crosswind').replace(/\bdown\s*-?\s*wind\b/g, 'downwind').replace(/\bup\s*-?\s*wind\b/g, 'upwind').replace(/\bdog\s*-?\s*leg\b/g, 'dogleg').replace(/\bbase\s+like\b/g, 'base leg');
   s = s.replace(/\b(?:radar\s+contacts?|radio\s+contact|raider\s+contact|radar\s+can\s+tact)\b/g, 'radar contact');
-  s = s.replace(/\bclimb\s+(?:aut|about)\b|\bclimate\b/g, 'climb out').replace(/\bperform\s+(?:landing|landings|lending)\s+(?:check|checks|checking)\b/g, 'perform landing checks');
+  s = s.replace(/\b(?:climb(?:ed|ing|s)?[\s\-]*(?:outs?|aut|about|up|on|all|our|hour|it)|(?:clime|claim|crime|prime|time|line|fine|find|fly|come|call)[\s\-]*outs?|timeout|climber|climate)\s+instructions?\b/g, 'climb out instructions');
+  s = s.replace(/\b(?:climb(?:ed|s)?\s*-?\s*outs?|climb\s+(?:aut|about)|climate)\b/g, 'climb out').replace(/\b(?:clime|claim|crime|prime|time|line|fine|find|fly|come|call)\s*-?\s*outs?\b(?=\s*,?\s*(?:fly|turn|come|climb|maintain|heading|runway|angels|brc\b))/g, 'climb out').replace(/\bperform\s+(?:landing|landings|lending)\s+(?:check|checks|checking)\b/g, 'perform landing checks');
   s = s.replace(/\b(\d+|zero|one|two|three|four|five|six|seven|eight|nine)\s+point\s+(\d|zero|one|two|three|four|five|six|seven|eight|nine)\b/g, (m, a, b) => `${/\d/.test(a) ? a : NUMW.indexOf(a)}.${/\d/.test(b) ? b : NUMW.indexOf(b)}`);
   s = s.replace(/\b(?:correct\s*-?\s*ions?|corrections|korrection|correctioned)\b/g, 'correction').replace(/\bcorrection\b\s*[,.;:!-]*/g, ' correction ');
   s = fuzzyCallsigns(s);
@@ -1818,15 +1818,15 @@ function fuzzyCallsigns(s) {   // replace 1-2 word near-misses of an active call
   }
   return ' ' + out.join(' ') + ' ';
 }
-const VOCAB = ['stinger approach', 'radar contact', 'take angels', 'angels', 'climb out', 'dirty up', 'perform landing checks', 'expect final button', 'copper', 'purple', 'silver', 'red', 'go purple', 'go copper', 'go silver', 'go red', 'vectors for cca', 'cca approach', 'mark your father', 'upwind', 'crosswind', 'downwind', 'base', 'abeam', 'dogleg', 'heading', 'miles', 'left', 'right', 'maintain', 'knots', 'turn'];
-const VOCAB_WORDS = new Set(VOCAB.join(' ').split(' ').concat(['your', 'for', 'approach', 'final', 'button', 'take', 'expect', 'checks', 'landing', 'perform', 'contact', 'radar', 'mother', 'father', 'mark', 'climb', 'out', 'dirty', 'up', 'go', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'zero']));
+const VOCAB = ['stinger approach', 'radar contact', 'take angels', 'angels', 'climb out instructions', 'climbout instructions', 'climb out', 'climbout', 'runway heading', 'dirty up', 'perform landing checks', 'expect final button', 'copper', 'purple', 'silver', 'red', 'go purple', 'go copper', 'go silver', 'go red', 'vectors for cca', 'cca approach', 'mark your father', 'upwind', 'crosswind', 'downwind', 'base', 'abeam', 'dogleg', 'heading', 'miles', 'left', 'right', 'maintain', 'knots', 'turn'];
+const VOCAB_WORDS = new Set(VOCAB.join(' ').split(' ').concat(['your', 'for', 'approach', 'final', 'button', 'take', 'expect', 'checks', 'landing', 'perform', 'contact', 'radar', 'mother', 'father', 'mark', 'climb', 'climbout', 'climbouts', 'instructions', 'instruction', 'runway', 'out', 'dirty', 'up', 'go', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'zero']));
 function scoreAlt(t, conf) {
   const f = ' ' + fixSpeech(t) + ' '; let sc = (conf || 0) * 2;
   for (const v of VOCAB) if (f.includes(' ' + v + ' ')) sc += v.split(' ').length;
   const names = acNames();
   for (const n of names) if (f.includes(' ' + n.name.replace(/\s/g, '') + ' ')) { sc += 3 + (n.ac.accepted ? 1 : 0);
     const num = (n.ac.tel.match(/\d+/) || [''])[0]; if (num && normalizeSpeech(f).replace(/\s/g, '').includes(num)) sc += 3; }
-  try { const p = parseSpeech(f, G ? G.ac.filter(alive).map(a => a.cs) : []); sc += p.cmds.length * 2 + (p.cs && !p.csUnknown ? 3 : 0) - (p.csUnknown ? 2 : 0); } catch (e) {}
+  try { const p = parseSpeech(f, G ? G.ac.filter(alive).map(a => a.cs) : []); const cmdScore = p.cmds.reduce((acc, c) => acc + (c.k === 'climbout' ? (2 + (c.v ? c.v.length : 0)) * 2 + 2 : 2), 0); sc += cmdScore + (p.cs && !p.csUnknown ? 3 : 0) - (p.csUnknown ? 2 : 0); } catch (e) {}
   return sc;
 }
 function pickBestAlt(alts) {
@@ -1984,6 +1984,9 @@ $('bEnd').onclick = () => { if (G && !G.over && confirm('End this session now?')
 
 document.addEventListener('keydown', e => {
   const tag = (e.target.tagName || '').toLowerCase();
+  const tid = e.target && e.target.id;
+  const liveScopeCtl = tid === 'liveScope' || tid === 'liveRing' || tid === 'sScope' || tid === 'sRing';
+  if ((e.code === 'Space' || e.key === ' ') && liveScopeCtl) { e.preventDefault(); if (!e.repeat && G && !G.over && startOv.classList.contains('hidden')) pttStart(); return; }   // Space = PTT even if the zoom/ring control has focus
   if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
   if (!helpOv.classList.contains('hidden')) { if (e.key === 'Escape') closeTutorial(); else if (e.key === 'ArrowRight') tutGo(1); else if (e.key === 'ArrowLeft') tutGo(-1); return; }
   if (!setOv.classList.contains('hidden')) { if (e.key === 'Escape') closeSettings(); return; }
@@ -2006,7 +2009,12 @@ document.addEventListener('keydown', e => {
   if (used) e.preventDefault();
 });
 document.addEventListener('keyup', e => {
-  if (e.code === 'Space' || e.key === ' ') { const tag = (e.target.tagName || '').toLowerCase(); if (tag !== 'input') { e.preventDefault(); pttEnd(); } }
+  if (e.code === 'Space' || e.key === ' ') {
+    const tag = (e.target.tagName || '').toLowerCase();
+    const tid = e.target && e.target.id;
+    const liveScopeCtl = tid === 'liveScope' || tid === 'liveRing' || tid === 'sScope' || tid === 'sRing';
+    if (tag !== 'input' || liveScopeCtl) { e.preventDefault(); pttEnd(); }
+  }
 });
 window.addEventListener('blur', () => pttEnd());
 
@@ -2017,19 +2025,27 @@ function openSettings() {
   $('setInfo').innerHTML = `Speech recognition: ${SR ? 'available' : '<b>not available</b> in this browser'} · Speech output: ${TTS ? voices.length + ' English voice(s)' : 'not available'} · Page: ${esc(location.protocol)}`;
 }
 function closeSettings() { setOv.classList.add('hidden'); uiPaused = !helpOv.classList.contains('hidden'); initVoiceStatus(); }
-function setScopeNm(n, src) {   // live zoom: nearer-edge range in NM (does not pause / reset the sim)
-  n = Math.round(Math.max(10, Math.min(80, +n || 50)) / 5) * 5; S.scopeNm = n; APP_RANGE = n; saveSettings();
-  for (const id of ['liveScope', 'liveScope2', 'sScope']) { const el = $(id); if (el && el !== src) el.value = n; }
-  for (const id of ['liveScopeLbl', 'liveScopeLbl2', 'sScopeLbl']) { const el = $(id); if (el) el.textContent = n + ' NM'; }
+function setScopeRange(n, opts = {}) {   // live zoom: nearer-edge range in NM (does not pause / reset the sim)
+  n = clampScope(n); S.scopeNm = n; APP_RANGE = n; saveSettings();
+  const ls = $('liveScope'), lsv = $('liveScopeVal'), ss = $('sScope'), ssv = $('sScopeVal');
+  if (ls) ls.value = n; if (lsv) lsv.textContent = String(n);
+  if (ss) ss.value = n; if (ssv) ssv.textContent = n + ' NM';
+  if (opts.blur) { const el = document.activeElement; if (el && (el.id === 'liveScope' || el.id === 'sScope')) el.blur(); }
 }
-function setRingNm(n, src) {   // live range-ring spacing
+function setRingSpacing(n, opts = {}) {
   n = [1, 2, 5, 10].includes(+n) ? +n : 2; S.ringNm = n; saveSettings();
-  for (const id of ['liveRing', 'liveRing2', 'sRing']) { const el = $(id); if (el && el !== src) el.value = String(n); }
+  const lr = $('liveRing'), sr = $('sRing');
+  if (lr) lr.value = String(n); if (sr) sr.value = String(n);
+  if (opts.blur) { const el = document.activeElement; if (el && (el.id === 'liveRing' || el.id === 'sRing')) el.blur(); }
 }
-function syncScopeUI() { setScopeNm(S.scopeNm); setRingNm(S.ringNm); }
-window.__scope = { get range() { return APP_RANGE; }, get ring() { return S.ringNm; }, set: setScopeNm, setRing: setRingNm, sc() { const v = appView(canvas.clientWidth, canvas.clientHeight); return v.sc; } };
-['liveScope', 'liveScope2', 'sScope'].forEach(id => { const el = $(id); if (!el) return; el.addEventListener('input', e => setScopeNm(e.target.value, e.target)); el.addEventListener('change', e => setScopeNm(e.target.value, e.target)); });
-['liveRing', 'liveRing2', 'sRing'].forEach(id => { const el = $(id); if (!el) return; el.addEventListener('change', e => setRingNm(e.target.value, e.target)); });
+function syncScopeUI() { setScopeRange(S.scopeNm); setRingSpacing(S.ringNm); }
+window.__scope = { get range() { return APP_RANGE; }, get ring() { return S.ringNm; }, set: setScopeRange, setRing: setRingSpacing, sc() { const v = appView(canvas.clientWidth, canvas.clientHeight); return v.sc; } };
+$('sRing').addEventListener('change', () => { setRingSpacing($('sRing').value, { blur: true }); });
+$('sScope').addEventListener('input', () => { setScopeRange($('sScope').value); });
+$('sScope').addEventListener('change', () => { setScopeRange($('sScope').value, { blur: true }); });
+$('liveRing').addEventListener('change', () => { setRingSpacing($('liveRing').value, { blur: true }); });
+$('liveScope').addEventListener('input', () => { setScopeRange($('liveScope').value); });
+$('liveScope').addEventListener('change', () => { setScopeRange($('liveScope').value, { blur: true }); });
 syncScopeUI();
 ['sIn', 'sOut', 'sVol', 'sRate', 'sSfx', 'sVoice'].forEach(id => $(id).addEventListener('change', () => {
   S.voiceIn = $('sIn').checked; S.voiceOut = $('sOut').checked; S.vol = +$('sVol').value; S.rate = +$('sRate').value; S.sfx = $('sSfx').checked; S.voice = $('sVoice').value; saveSettings();
@@ -2886,7 +2902,7 @@ function appExecute(p, src) {
       a.sector = { n: c.v, c: SECTOR_CTR[c.v], R: SECTOR_PT_NM, est: false }; a.turnDir = null;
       secRb = c.v; continue;
     }
-    if (c.k === 'climbout') { if (c.v.length) { a.climbout = c.v.slice(); award(a, 'co', 'climbout instructions'); } rb.push('wilco'); rbSay.push('wilco'); continue; }   // stored for after the low approach
+    if (c.k === 'climbout') { a.climbout = (c.v || []).slice(); award(a, 'co', 'climbout instructions'); log('sys', `${a.cs} stored climbout instructions${c.v && c.v.length ? ': ' + c.v.map(cmdStr).join(', ') : ''} (standing by — callsign only).`); rb.push('ack'); rbSay.push('ack'); continue; }   // stored for after the low approach; callsign-only readback
     if (c.k === 'cca') { award(a, 'cca', 'vectors for CCA'); rb.push('wilco'); rbSay.push('wilco'); continue; }
     if (c.k === 'button') { award(a, 'btn', 'expect final button'); a.button = c.v; rb.push('wilco'); rbSay.push('wilco'); continue; }
     if (c.k === 'goRed') {   // handoff / switch to Marshal (Red)
