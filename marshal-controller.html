@@ -432,10 +432,21 @@ const PHON_RE = Object.keys(PHON).join('|');
 
 function extractCallsign(s, known) {
   // returns {cs, unknown, s}
+  const byNumSuffix = digits => {
+    if (!digits || digits.length < 2 || digits.length > 3 || digits === '99') return null;
+    const exact = known.filter(k => k.replace(/^\D+/, '') === digits);
+    if (exact.length === 1) return exact[0];
+    const ends = known.filter(k => k.endsWith(digits));
+    return ends.length === 1 ? ends[0] : null;
+  };
   const matchDigits = (prefix, digits) => {
     for (let len = digits.length; len >= 1; len--) {
       const cs = prefix + digits.slice(0, len);
       if (known.includes(cs)) return { cs, rest: digits.slice(len) };
+    }
+    for (let len = Math.min(3, digits.length); len >= 2; len--) {
+      const hit = byNumSuffix(digits.slice(0, len));
+      if (hit) return { cs: hit, rest: digits.slice(len) };
     }
     return null;
   };
@@ -483,6 +494,17 @@ function extractCallsign(s, known) {
   if (m) {
     const cs = 'N' + m[1].toUpperCase();
     return { cs, unknown: !known.includes(cs), s: s.replace(m[0], ' ') };
+  }
+  // bare callsign number (or with unrecognized prefix word) before any command word: e.g. "12, Marshal, ..." or "one two, turn left..."
+  const cmdIdx = s.search(/\b(?:turn|fly|come|heading|climb|descend|descent|maintain|reduce|increase|slow|speed|angels|angles|angel|altitude|radar|vectors?|expect(?:ed)?|cleared|clear|marshal+|martial|outbound|report|go|switch|contact|over|squawk|signal|buster|say|state|mark|dirty|perform|landing|sector|traffic|how|radio|climb\s*outs?|missed|wave|execute|case|lh|lima)\b/);
+  const addr = cmdIdx >= 0 ? s.slice(0, cmdIdx) : s;
+  const dm = addr.match(/\b(\d{2,3})\b/);
+  if (dm && dm[1] !== '99') {
+    const hit = byNumSuffix(dm[1]);
+    if (hit) {
+      const idx = addr.indexOf(dm[0]);
+      return { cs: hit, unknown: false, s: s.slice(0, idx) + ' ' + s.slice(idx + dm[0].length) };
+    }
   }
   return { cs: null, unknown: false, s };
 }
@@ -553,8 +575,8 @@ const PATTERNS = [
 // '<cs>, your climbout instructions are ...': the content is parsed but stored, not executed now
 const STINGER_RE_G = /\b(?:stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's|wasp)\s*,?\s*(?:approach(?:es|s)?|marshal+|martial)\b\s*,?/gi;
 const STINGER_RE = /\b(?:stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's|wasp)\s*,?\s*(?:approach(?:es|s)?|marshal+|martial)\b/i;
-function parseSpeech(raw, known = []) {   // detect 'Stinger Approach' / 'Stinger Marshal' BEFORE it is stripped
-  const st = STINGER_RE.test(String(raw)), p0 = parseSpeech0(String(raw).replace(STINGER_RE_G, ' '), known);
+function parseSpeech(raw, known = []) {   // detect 'Stinger Approach' / 'Stinger Marshal' / self-ID 'Marshal' BEFORE it is stripped
+  const st = STINGER_RE.test(String(raw)) || /\b(?:marshal+|martial)\b/i.test(String(raw)), p0 = parseSpeech0(String(raw).replace(STINGER_RE_G, ' '), known);
   const p = p0.traffic ? p0 : parseSpeech1(raw, known); if (p) p.stinger = st; return p;
 }
 const CLIMBOUT_HDR_RE = /\b(?:(?:on|after|your)\s+)?climb(?:ed|ing|s)?\s*-?\s*outs?\b(?:\s+instructions?)?(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?|\b(?:missed\s+approach|wave\s*-?\s*off|on\s+(?:the\s+)?go)\s+instructions?\b(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?|(?<!\bmarshal\s)(?<!\bmarshall\s)(?<!\bmartial\s)(?<!\bsay\s)\b(?:climb\w*\s+|your\s+)?instructions?\b(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?(?=\s*,?\s*(?:fly|turn|come|climb|descend|maintain|heading|runway|brc|base\s+recovery|angels|on\s+climb|go\s+(?:red|silver)))/i;
@@ -609,7 +631,7 @@ function parseSpeech0(raw, known = []) {
   for (const k of ['climbOut', 'starDelta']) { const ix = cmds.map((c, i) => c.k === k ? i : -1).filter(i => i >= 0); for (const i of ix.slice(1).reverse()) cmds.splice(i, 1); }
   // leftover words (for UI)
   let left = ''; for (let i = 0; i < s.length; i++) left += used[i] ? ' ' : s[i];
-  left = left.replace(/\b(runway|27|two seven|18|one eight|and|the|is|this|your|final|controller|approach|at|of|a|to|now|then|you|are|come|ship|deck|fouled|spot|for|landing|stinger|99|\d)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  left = left.replace(/\b(runway|27|two seven|18|one eight|and|the|is|this|your|final|controller|approach|marshal+|martial|at|of|a|to|now|then|you|are|come|ship|deck|fouled|spot|for|landing|stinger|99|\d)\b/g, ' ').replace(/\s+/g, ' ').trim();
   // turn/heading call with heading-like words but no usable number -> pilot asks for the heading again
   const hdgMissing = !cmds.some(c => c.k === 'hdg' || c.k === 'climbout') && !/\b(?:runway|ship\s+s)\s+heading\b/.test(norm0) &&
     (/\bheading\b/.test(norm0) || /\b(?:turn|come)\s+(?:left|right)\b/.test(s));
@@ -862,12 +884,22 @@ function newGame(diffKey, opts = {}) {
   refreshPanel(true);
 }
 
+function usedCsNums() {
+  const s = new Set();
+  if (typeof G === 'undefined' || !G) return s;
+  for (const x of [...(G.ac || []), ...(G.rejoin || []), ...(G.mcGraded || [])]) {
+    const m = String(x.cs || '').match(/(\d+)$/); if (m) s.add(m[1]);
+  }
+  return s;
+}
 function makeAc(spec) {
   let cs = spec.cs, type = spec.type;
   if (!cs) {
-    for (let i = 0; i < 40; i++) {
-      const al = pick(AIRLINES); cs = al.icao + (rng() < 0.5 ? randi(11, 69) : randi(100, 499)); type = pick(al.types);
-      if (!G.ac.some(a => a.cs === cs) && !G.rejoin.some(j => j.cs === cs)) break;
+    const usedN = usedCsNums();
+    for (let i = 0; i < 50; i++) {
+      const num = String(rng() < 0.5 ? randi(11, 69) : randi(100, 499));
+      const al = pick(AIRLINES); cs = al.icao + num; type = pick(al.types);
+      if (!usedN.has(num) && !G.ac.some(a => a.cs === cs) && !G.rejoin.some(j => j.cs === cs)) break;
     }
   }
   if (!type) { const al = AIRLINES.find(a => cs.startsWith(a.icao)); type = al ? al.types[0] : 'MH60S'; }
@@ -1884,11 +1916,17 @@ function mcFixSpeech(t) {   // forgiving marshal-flow wording: common speech-to-
   s = s.replace(/\b(?:martial|marshall|marshals|marshalls|martian)\b/gi, 'marshal').replace(/\bradar\s+(?:contract|contacts|context|comtact)\b/gi, 'radar contact');
   s = s.replace(/\bcleared\s+(?:four|for|to|2)\s+(?=LH|approach)/gi, 'cleared for ').replace(/\bclear\s+for\b/gi, 'cleared for');
   s = s.replace(/\b(?:three|tree|3)\s*(?:mile|miles|mi|nm)\b/gi, '3 miles').replace(/\b(?:redial|radio|radiol)\b/gi, 'radial');
-  s = s.replace(/\b(?:expect(?:ed|ing)?|accepted)\s+(?:a\s+)?(?:proach|approach)\s+(?:time|times|dime|sign|climb|line)\b/gi, 'expected approach time').replace(/\be\s*\.?\s*a\s*\.?\s*t\.?\b/gi, 'expected approach time');
+  s = s.replace(/\b(?:expect(?:ed|ing)?|accepted)\s+(?:a\s+)?(?:proach|approach)\s+(?:time|times|dime|sign|climb|line)\b/gi, 'expected approach time').replace(/\b(?:expect(?:ed|ing)?|push|commence)\s+time\b/gi, 'expected approach time').replace(/\b(?<!expected\s)approach\s+time\b/gi, 'expected approach time').replace(/\be\s*\.?\s*a\s*\.?\s*t\.?\b/gi, 'expected approach time');
   s = s.replace(/\b(?:ninety[\s\-]*nine|niner[\s\-]*niner|nine[\s\-]*nine|9\s+9|ninety[\s\-]*niner)\s*,?\s*(?:(?:stinger|wasp)\s*,?\s*(?:marshal\s*,?\s*)?)?(?:weather|whether|wether|weathers|feather|leather)\b/gi, '99 weather').replace(/\b99\s*,?\s*(?:(?:stinger|wasp)\s*,?\s*(?:marshal\s*,?\s*)?)?(?:whether|wether|weathers|feather|leather)\b/gi, '99 weather');
-  // callsign digits split or spoken as tens/teens: "Eagle 3 4", "eagle three four", "Venom twenty one", "Eagle sixteen" -> "Eagle 34", "Venom 21", "Eagle 16"
+  // callsign digits split or spoken as tens/teens: "Eagle 3 4", "Venom twenty one", or bare leading "one two, ..." / "twelve, ..."
   const TNW = { twenty: 20, thirty: 30, forty: 40, fourty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
   const TEW = { ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
+  s = s.replace(/^\s*((?:(?:stinger|wasp)?\s*marshal\s*,?\s*)?(?:[a-z]{2,12}\s+)?)(twenty|thirty|forty|fourty|fifty|sixty|seventy|eighty|ninety)(?:[\s,-]+(one|won|two|to|too|three|tree|four|for|fore|five|fife|six|seven|eight|ate|nine|niner))?(?=\s*,|\s+(?:marshal|stinger|radar|turn|fly|come|heading|climb|descend|maintain|cleared|expect|squawk|signal|buster|vectors?|go|switch|contact|report|say|roger|dirty|perform|angels))\b/i,
+    (m, pre, tn, u) => { const w0 = pre.trim().toLowerCase(); if (/^(?:heading|angels|marshal|outbound|speed|sector|case|lh\d?)$/.test(w0)) return m; const n = TNW[tn.toLowerCase()] + (u ? NW[u.toLowerCase()] : 0); return n === 99 ? m : pre + n + ' '; });
+  s = s.replace(/^\s*((?:(?:stinger|wasp)?\s*marshal\s*,?\s*)?(?:[a-z]{2,12}\s+)?)(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen)(?=\s*,|\s+(?:marshal|stinger|radar|turn|fly|come|heading|climb|descend|maintain|cleared|expect|squawk|signal|buster|vectors?|go|switch|contact|report|say|roger|dirty|perform|angels))\b/i,
+    (m, pre, te) => { const w0 = pre.trim().toLowerCase(); if (/^(?:heading|angels|marshal|outbound|speed|sector|case|lh\d?)$/.test(w0)) return m; return pre + TEW[te.toLowerCase()] + ' '; });
+  s = s.replace(new RegExp('^\\s*((?:(?:stinger|wasp)?\\s*marshal\\s*,?\\s*)?(?:[a-z]{2,12}\\s+)?)((?:\\d|' + NWR + ')[\\s,-]+(?:\\d|' + NWR + '))(?=\\s*,|\\s+(?:marshal|stinger|radar|turn|fly|come|heading|climb|descend|maintain|cleared|expect|squawk|signal|buster|vectors?|go|switch|contact|report|say|roger|dirty|perform|angels))\\b', 'i'),
+    (m, pre, ds) => { const w0 = pre.trim().toLowerCase(); if (/^(?:heading|angels|marshal|outbound|speed|sector|case|lh\d?)$/.test(w0)) return m; const dig = ds.trim().split(/[\s,-]+/).map(x => /^\d+$/.test(x) ? x : NW[x.toLowerCase()]); if (dig.some(x => x == null) || dig.join('') === '99') return m; return pre + dig.join('') + ' '; });
   const words = (typeof G !== 'undefined' && G ? G.ac : []).map(a => String(a.tel || '').split(/\s+/)[0]).filter(Boolean);
   for (const w of [...new Set(words)]) {
     const wc = w.replace(/[^a-z]/gi, '');
@@ -1903,8 +1941,13 @@ function mcFixSpeech(t) {   // forgiving marshal-flow wording: common speech-to-
   return s.replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
 }
 window.__mcFix = t => mcFixSpeech(t);
-function csByDigits(pre, live) {   // first choice: the callsign number ("... 42") picks the one live aircraft whose callsign ends in it
-  const m = String(pre || '').match(/\b(\d{2,3})\b/); if (!m) return null;
+function csByDigits(pre, live) {   // first choice: the callsign number ("... 42" or "four two" / "twelve") picks the one live aircraft whose callsign number matches
+  let s = String(pre || '');
+  let m = s.match(/\b(\d{2,3})\b/);
+  if (!m && s.trim()) m = normalizeSpeech(s).match(/\b(\d{2,3})\b/);
+  if (!m || m[1] === '99') return null;
+  const exact = live.filter(x => x.cs.replace(/^\D+/, '') === m[1]);
+  if (exact.length === 1) return exact[0];
   const c = live.filter(x => x.cs.endsWith(m[1])); return c.length === 1 ? c[0] : null;
 }
 function handleTranscript(text, src) {
@@ -1950,15 +1993,22 @@ function handleTranscript(text, src) {
   if (G && !G.over && !isClimboutTx && MAR.trigger.test(heardNoShip)) {   // marshal / LH approach / commence / missed approach
     const mp = MAR.parse(heardNoShip) || MAR.parse(text);
     if (mp) {
-      const ki = heardNoShip.search(MAR.trigger);
-      const preRaw = heardNoShip.slice(0, Math.max(0, ki)).replace(/\b(?:flight(?:\s+of\s+(?:two|2))?|expect(?:ed)?|cleared|execute)\s*,?\s*$/i, '');
+      let ki = heardNoShip.search(MAR.trigger);
+      let preSrc = heardNoShip.slice(0, Math.max(0, ki));
+      if (!preSrc.trim() && /^\s*(?:marshal+|martial)\b/i.test(heardNoShip)) {
+        const restAfterId = heardNoShip.replace(/^\s*(?:marshal+|martial)\s*,?\s*/i, '');
+        const ki2 = restAfterId.search(MAR.trigger);
+        if (ki2 > 0) preSrc = restAfterId.slice(0, ki2);
+      }
+      const preRaw = preSrc.replace(/\b(?:flight(?:\s+of\s+(?:two|2))?|expect(?:ed)?|cleared|execute)\s*,?\s*$/i, '');
       const preFx = fixSpeech(preRaw), up = preRaw.toUpperCase().replace(/[\s,]+/g, '');
       const pool = mp.hoMar ? G.ac.filter(alive) : G.ac.filter(appCtl);
       const pp = preFx.trim() ? parseSpeech(preFx, known) : null, live = G.ac.filter(appCtl);
       let a = csByDigits(preRaw, pool) || csByDigits(preFx, pool) || (pp && pp.cs && pool.find(x => x.cs === pp.cs)) || (up && pool.find(x => up.includes(x.cs))) || null;
-      if (!a && !(pp && pp.csUnknown) && !/\b\d{2,3}\b/.test(preRaw)) a = G.selected && appCtl(G.selected) ? G.selected : (live.length === 1 ? live[0] : null);
-      const marOnly = !!(mp.type || mp.marshal || mp.eat != null || mp.commence || mp.cleared || mp.rpt3 || mp.missed);
-      if (!(a && a.parArr && !marOnly)) {   // CCA arrival uses appExecute for Approach calls + compound handoffs ("turn left heading 360, go purple")
+      if (!a && !(pp && pp.csUnknown) && !/\b\d{2,3}\b/.test(normalizeSpeech(preRaw))) a = G.selected && appCtl(G.selected) ? G.selected : (live.length === 1 ? live[0] : null);
+      const parHasAppCmds = a && a.parArr && parseSpeech(text, known).cmds.some(c => c.k !== 'purple' && c.k !== 'goSilver' && c.k !== 'goRed');
+      const parPureHo = a && a.parArr && !parHasAppCmds && !!(mp.hoFinal || mp.hoApp || mp.hoMar) && !(mp.type || mp.marshal || mp.eat != null || mp.commence || mp.cleared || mp.rpt3 || mp.missed);
+      if (!(a && a.parArr) || parPureHo) {   // CCA arrival (a.parArr) is never marshalling; it uses appExecute for all Approach instructions
         if (src === 'voice') renderTranscript(text, '');
         setHeard(heard, null);
         if (!a) { log('sys', `Say the callsign (or select a target) first. Heard: "${heard}"`); return { cs: null, cmds: [], str: 'marshal?' }; }
@@ -1971,8 +2021,8 @@ function handleTranscript(text, src) {
     }
   }
   if (/\b(hndoff|handoff|hand off|hdoff)\b/i.test(heard) && G && !G.over) {
-    const rest = heard.replace(/\b(hndoff|handoff|hand off|hdoff)\b/ig, ' '), pp = parseSpeech(rest, known), up = rest.toUpperCase().replace(/\s+/g, '');
-    const a = (pp && pp.cs && G.ac.find(x => x.cs === pp.cs)) || G.ac.find(x => alive(x) && up.includes(x.cs)) || (!rest.trim() && G.selected);
+    const rest = heard.replace(/\b(hndoff|handoff|hand off|hdoff)\b/ig, ' '), pp = parseSpeech(rest, known), up = rest.toUpperCase().replace(/\s+/g, ''), liveAll = G.ac.filter(alive);
+    const a = csByDigits(rest, liveAll) || (pp && pp.cs && liveAll.find(x => x.cs === pp.cs)) || liveAll.find(x => up.includes(x.cs)) || (!rest.trim() && G.selected);
     if (src === 'voice') renderTranscript(text, '');
     if (!a) { log('sys', `Handoff: callsign not found in "${heard}".`); return { cs: null, cmds: [], str: 'handoff?' }; }
     log('ctl', `${a.cs}: "${heard}"${src === 'voice' ? ' 🎙' : ''}  →  handoff`); HOFF.start(a); $('parsed').textContent = 'Understood → handoff ' + a.cs; $('parsed').classList.remove('bad');
@@ -2691,6 +2741,16 @@ function flightSync() {   // wingmen in formation: 0.5 NM in trail of the leader
   for (const w of G.ac) { if (!w.inForm) continue;
     const L = G.ac.find(x => x.uid === w.lead);
     if (!L || L.phase !== 'app' || L.st !== 'ctl') { w.inForm = false; continue; }
+    if (L.mar && L.mar.run) {
+      w.inForm = false;
+      if (MC && (!w.mar || !w.mar.ph)) {
+        const fR = L.mar.R != null ? L.mar.R : 30, fD = L.mar.D != null ? L.mar.D : 2, wAlt = Math.max(3000, (L.mar.alt || 2000) + 1000);
+        w.mar = { R: fR, D: fD, alt: wAlt, eat: null, eatAt: null, inMar: true, ph: 'hold', leg: 'tOut', est: false, typeInf: MAR.infer(w, fR, fD) };
+        w.tgtAlt = wAlt; w.sq = true;
+        log('sys', `${w.cs} detached into marshal holding at ${h3z(BRC + fR)}/${fD} angels ${appAngels(wAlt)} (awaiting EAT).`);
+      }
+      continue;
+    }
     const h = L.hdg * DEG; w.e = L.e - 0.5 * Math.sin(h); w.n = L.n - 0.5 * Math.cos(h);
     w.hdg = w.tgtHdg = L.hdg; w.alt = w.tgtAlt = L.alt; w.ias = w.tgtSpd = L.ias; w.gs = L.gs; w.turnDir = null; w.vs = L.vs;
     if (L.accepted) w.accepted = true; }
@@ -2861,8 +2921,9 @@ function mcSpawnFlight(rel) {   // flight of 2 jets (same callsign word, consecu
   const JETS = AIRLINES.filter(x => x.types.some(t => TYPES[t] && !TYPES[t].helo));
   const pool = JETS.filter(x => !usedWords.has(x.icao));
   const al = pick(pool.length ? pool : JETS);
+  const usedN = usedCsNums();
   let n1 = randi(11, 68);
-  for (let k = 0; k < 30; k++) { if (!G.ac.some(x => x.cs === al.icao + n1 || x.cs === al.icao + (n1 + 1))) break; n1 = randi(11, 68); }
+  for (let k = 0; k < 50; k++) { if (!usedN.has(String(n1)) && !usedN.has(String(n1 + 1)) && !G.ac.some(x => x.cs === al.icao + n1 || x.cs === al.icao + (n1 + 1))) break; n1 = randi(11, 68); }
   const nums = [n1, n1 + 1], r0 = 10, rRel = rel != null ? rel : rand(150, 250);
   for (let i = 0; i < 2; i++) {
     const cs = al.icao + nums[i], ld = i ? G.ac.find(x => x.cs === al.icao + nums[0]) : null;
@@ -2920,7 +2981,9 @@ function mcParArrive() {
   const helo = Math.random() < 0.5, words = G.ac.map(x => x.cs.replace(/\d+$/, ''));
   const pool = AIRLINES.filter(x => x.types.some(t => TYPES[t] && !!TYPES[t].helo === helo) && !words.includes(x.icao));
   const al = pick(pool.length ? pool : AIRLINES.filter(x => x.types.some(t => TYPES[t] && !!TYPES[t].helo === helo)));
-  const a = makeAc({ cs: al.icao + randi(11, 68), type: al.types.find(t => TYPES[t] && !!TYPES[t].helo === helo) });
+  const usedN = usedCsNums(); let pn = randi(11, 68);
+  for (let k = 0; k < 50; k++) { if (!usedN.has(String(pn))) break; pn = randi(11, 68); }
+  const a = makeAc({ cs: al.icao + pn, type: al.types.find(t => TYPES[t] && !!TYPES[t].helo === helo) });
   const R = MC_PAR_ARR.rng, b = norm(BRC + rand(...MC_PAR_ARR.rel)); a.e = R * Math.sin(b * DEG); a.n = R * Math.cos(b * DEG);
   a.phase = 'app'; a.pars = 0; a.armed = false; a.turnDir = null; a.parArr = true; a.appCount = APP_MAX_PARS - 1;   // one CCA/PAR recovery, full stop
   a.hdg = a.tgtHdg = Math.round(norm(b + 180));   // inbound toward mother
@@ -3170,10 +3233,15 @@ const MAR = {
     return bad;
   },
   helo90(a, R, D, alt) { return isHelo(a) && Math.abs(angDiff(R, 90)) <= 5 && this.EMER_ALT[Math.round(D)] === alt && Math.round(D) > 5; },
+  isHoldAfter(after) {
+    return /^\s*(?:on\s+(?:the\s+)?)?(?:(?:mother|stinger)(?:\s*s)?\s+)?(?:radial\s*\d{1,3}\b|\d{1,3}\s*(?:radial|r\b)|\d{1,3}\s+at\s+\d|\d{1,3}\s+\d+(?:\.\d+)?\s*(?:miles?|mi|nm|dme)\b(?!\s*(?:north|south|east|west))|\d{1,3}\s+angels?\s*\d|at\s+\d+(?:\.\d+)?\s*(?:miles?|mi|nm|dme|angels?)\b|angels?\s*\d)/.test(after);
+  },
   parse(raw) {
     let s = ' ' + String(raw).toLowerCase()
       .replace(/\b(?:stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's|wasp)\s*,?\s*(?:marshal+|martial|approach(?:es|s)?)\b/g, ' ')
+      .replace(/\b10:([0-5]\d)\b/g, '$1')
       .replace(/\b(\d{1,2}):00\b/g, '$1')
+      .replace(/\b(\d{1,2}):([0-5]\d)\b/g, '$1$2')
       .replace(/[-_,;:]/g, ' ')
       .replace(/\bl\.\s*h\.?/g, 'lh ') + ' ';
     const D = { zero: 0, oh: 0, one: 1, won: 1, two: 2, too: 2, three: 3, tree: 3, four: 4, fower: 4, five: 5, fife: 5, six: 6, seven: 7, eight: 8, ate: 8, nine: 9, niner: 9 };
@@ -3202,19 +3270,26 @@ const MAR = {
     { const b = s.match(/\bbrc\s+(\d{1,3})\b/); if (b) out.brc = +b[1] % 360 || 360; }
     const lh = s.match(/\blh\s+([1-5])\b/); if (lh) out.type = 'LH' + lh[1];
     if (/\bemergency\s+(?:marshal|approach)/.test(s)) out.type = 'EMER';
-    { const em = s.match(/\b(?:(?:expected|expect)\s+approach\s+time|eat)\s*(?:is\s+|at\s+|of\s+)?(\d{1,4})\b/);
+    const eatRe = /\b(?:(?:expected|expect)\s+(?:approach\s+)?time|approach\s+time|(?:push|commence)\s+time|eat)\s*(?:is\s+|at\s+|of\s+)?(?:10\s+(?=\d{1,2}\b))?(\d{1,4})\b/;
+    { const em = s.match(eatRe);
       if (em) { const ev = (+em[1]) % 100; if (ev >= 0 && ev <= 59) out.eat = ev; } }
-    if (/\b(?:marshal+|martial)\b/.test(s)) {
-      const post = s.slice(s.search(/\b(?:marshal+|martial)\b/));
-      const r = post.match(/(\d{1,3})\s*(?:radial|r\b)/) || post.match(/radial\s*(\d{1,3})/) || post.match(/^(?:marshal+|martial)\s+(?:on\s+(?:the\s+)?)?(\d{1,3})\b/), d = post.match(/(\d+(?:\.\d+)?)\s*(?:miles?|mi|nm|dme)\b/) || post.match(/\bat\s+(\d+(?:\.\d+)?)\b/);
-      const an = post.match(/angels?\s*(\d+(?:\.\d+)?)/), ft = post.match(/(\d{4,5})\s*(?:feet|ft)\b/);
-      const e = post.match(/(?:expected|expect)\s+approach\s+time\s*(?:is\s+|at\s+|of\s+)?(\d{1,4})\b/) || post.match(/\beat\s*(?:is\s+|at\s+|of\s+)?(\d{1,4})\b/);
-      const eatM = e ? (+e[1]) % 100 : (out.eat != null ? out.eat : null);
-      if (eatM != null && eatM >= 0 && eatM <= 59) out.eat = eatM;
-      out.marshal = { R: r ? +r[1] % 360 : null, Rabs: r ? +r[1] % 360 : null, D: d ? +d[1] : null, alt: an ? Math.round(+an[1] * 1000) : ft ? +ft[1] : null, eat: (eatM != null && eatM >= 0 && eatM <= 59) ? eatM : null };
+    { const reM = /\b(?:marshal+|martial)\b/g; let mm, holdPost = null;
+      while ((mm = reM.exec(s))) {
+        const after = s.slice(mm.index + mm[0].length);
+        if (this.isHoldAfter(after)) holdPost = s.slice(mm.index);
+      }
+      if (holdPost) {
+        const post = holdPost;
+        const r = post.match(/(\d{1,3})\s*(?:radial|r\b)/) || post.match(/radial\s*(\d{1,3})/) || post.match(/^(?:marshal+|martial)\s+(?:on\s+(?:the\s+)?)?(?:(?:mother|stinger)(?:\s*s)?\s+)?(\d{1,3})\b/), d = post.match(/(\d+(?:\.\d+)?)\s*(?:miles?|mi|nm|dme)\b/) || post.match(/\bat\s+(\d+(?:\.\d+)?)\b/);
+        const an = post.match(/angels?\s*(\d+(?:\.\d+)?)/), ft = post.match(/(\d{4,5})\s*(?:feet|ft)\b/);
+        const e = post.match(eatRe);
+        const eatM = e ? (+e[1]) % 100 : (out.eat != null ? out.eat : null);
+        if (eatM != null && eatM >= 0 && eatM <= 59) out.eat = eatM;
+        out.marshal = { R: r ? +r[1] % 360 : null, Rabs: r ? +r[1] % 360 : null, D: d ? +d[1] : null, alt: an ? Math.round(+an[1] * 1000) : ft ? +ft[1] : null, eat: (eatM != null && eatM >= 0 && eatM <= 59) ? eatM : null };
+      }
     }
     if (/\breport\s+commenc/.test(s)) { out.cleared = true; out.rptComm = true; }
-    else if (/\bcommenc(?:e|ing)\b(?!\s+(?:your\s+)?descen)/.test(s)) out.commence = true;
+    else if (/\bcommenc(?:e|ing)\b(?!\s+(?:your\s+)?descen)(?!\s+time)/.test(s)) out.commence = true;
     if ((out.type && /\bcleared\b/.test(s)) || /\bcleared\s+(?:for\s+)?(?:the\s+)?approach\b/.test(s)) out.cleared = true;   // "cleared for LH-2 approach, report commencing": commence at the marshal fix
     if (/\breport\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound/.test(s)) out.rpt3 = true;
     if (/\b(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?final(?:\s+controller)?\b/.test(s)) out.hoFinal = true;
@@ -3223,7 +3298,7 @@ const MAR = {
     if (out.marshal && out.marshal.R != null) out.marshal.R = norm(out.marshal.R - BRC) % 360;   // spoken radial is BRC + relative value
     return (out.type || out.marshal || out.eat != null || out.cleared || out.commence || out.missed || out.rpt3 || out.hoFinal || out.hoApp || out.hoMar) ? out : null;
   },
-  trigger: /\b(?:go(?:\s+(?:to|too|two))?\s+(?:purple|copper|silver|sliver|blue|red|read|redd)\b|report\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound|report\s+commenc|cleared\s+(?:for\s+)?(?:the\s+)?approach|(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?(?:final|approach)|case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery|(?:expected|expect)\s+approach\s+time|\beat\s+(?:is\s+|at\s+)?(?:\d|zero|oh|one|two|three|four|five|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)|marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
+  trigger: /\b(?:go(?:\s+(?:to|too|two))?\s+(?:purple|copper|silver|sliver|blue|red|read|redd)\b|report\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound|report\s+commenc|cleared\s+(?:for\s+)?(?:the\s+)?approach|(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?(?:final|approach)|case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery|(?:(?:expected|expect|push|commence)\s+)?approach\s+time|(?:expected|expect|push|commence)\s+time|\beat\s+(?:is\s+|at\s+)?(?:\d|zero|oh|one|two|three|four|five|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)|marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
   say(a, txt, say) { if (a.st === 'mfinal') return; pilotSay(a, `${a.tel}, ${txt}.`, `${a.telSay}, ${say || txt}.`); },
   dg(v) { return String(v).split('').map(c => c === '.' ? 'point' : DIGW[+c]).join(' '); },
   exec(m, a, heard, src) {
@@ -3259,17 +3334,17 @@ const MAR = {
         G.firstEatUsed = true;
       }
       const finalEat = eatAssign != null ? eatAssign : (M.eat != null ? M.eat : null);
-      Object.assign(M, { R: k.R, D: k.D, alt: k.alt, eat: finalEat, eatAt: finalEat != null ? this.calcEatAt(finalEat) : null, eatDone: false, inMar: true, ph: 'toMar', leg: null, est: false, eatSaid: false, typeInf: type });
+      Object.assign(M, { R: k.R, D: k.D, alt: k.alt, eat: finalEat, eatAt: finalEat != null ? this.calcEatAt(finalEat) : null, eatDone: false, forceCommence: false, inMar: true, ph: 'toMar', leg: null, est: false, eatSaid: false, typeInf: type });
       a.tgtAlt = k.alt; a.turnDir = null;
       parts.push(`marshal ${h3z(k.R)} radial, ${k.D} miles, angels ${appAngels(k.alt)}${finalEat != null ? ', expected approach time ' + String(finalEat).padStart(2, '0') : ''}`);
       says.push(`marshal ${this.dg(h3z(k.R))} radial, ${k.D >= 10 ? sayTwo(Math.round(k.D)) : this.dg(k.D)} miles, angels ${appAngelsSay(k.alt)}${finalEat != null ? ', expected approach time ' + this.dg(String(finalEat).padStart(2, '0')) : ''}`);
-      log('sys', `${a.cs} proceeding to marshal ${h3z(k.R)}R (bearing ${h3z(BRC + k.R)}) ${k.D} NM, angels ${appAngels(k.alt)}${finalEat != null ? ', EAT :' + String(finalEat).padStart(2, '0') + ' (will report commencing at ' + h3z(BRC + k.R) + '/' + k.D + ' at :' + String(finalEat).padStart(2, '0') + ')' : ''}.`);
+      log('sys', `${a.cs} proceeding to marshal ${h3z(k.R)}R (bearing ${h3z(BRC + k.R)}) ${k.D} NM, angels ${appAngels(k.alt)}${finalEat != null ? ', EAT :' + String(finalEat).padStart(2, '0') + ' (will report commencing at ' + h3z(BRC + k.R) + '/' + k.D + ' at :' + String(finalEat).padStart(2, '0') + ')' : ' (holding until EAT assigned)'}.`);
       const ob = this.outbound();
       if (m.outbound == null) { G.score -= this.PEN; log('bad', `−${this.PEN}: ${a.cs} marshal instruction missing the outbound bearing (${h3z(ob)}).`); Sound.buzz(); }
     }
     if (!m.marshal && m.eat != null) {
       if (!G.firstEatUsed) G.firstEatUsed = true;
-      M.eat = m.eat; M.eatAt = this.calcEatAt(m.eat); M.eatDone = false; M.eatSaid = false;
+      M.eat = m.eat; M.eatAt = this.calcEatAt(m.eat); M.eatDone = false; M.eatSaid = false; M.forceCommence = false;
       parts.push(`expected approach time ${String(m.eat).padStart(2, '0')}`);
       says.push(`expected approach time ${this.dg(String(m.eat).padStart(2, '0'))}`);
       log('sys', `${a.cs} expected approach time set to :${String(m.eat).padStart(2, '0')} (will commence and report commencing at :${String(m.eat).padStart(2, '0')}).`);
@@ -3287,7 +3362,8 @@ const MAR = {
       else {
         M.cleared = true; parts.push(M.rptComm ? 'cleared, report commencing' : 'cleared');
         if (M.ph !== 'hold' && M.ph !== 'toMar') log('sys', `${a.cs} cleared${cType ? ' for ' + this.T[cType].name : ''}; not in marshal yet.`);
-        else log('sys', `${a.cs} cleared${cType ? ' for ' + this.T[cType].name : ''}: will commence${M.rptComm ? ' and report commencing' : ''} at marshal fix ${h3z(BRC + M.R)}/${M.D}.`);
+        else if (M.eat != null) log('sys', `${a.cs} cleared${cType ? ' for ' + this.T[cType].name : ''}: holding until EAT :${String(M.eat).padStart(2, '0')} to commence and report commencing at ${h3z(BRC + M.R)}/${M.D}.`);
+        else log('sys', `${a.cs} cleared${cType ? ' for ' + this.T[cType].name : ''}: holding at ${h3z(BRC + M.R)}/${M.D} awaiting expected approach time.`);
       }
     }
     if (m.rpt3) {
@@ -3340,9 +3416,9 @@ const MAR = {
       if (!type) { this.say(a, 'say approach type'); return; }
       if (M.R != null && M.D != null) {
         const F = this.pt(M.R, M.D), p = this.loc(a), dF = Math.hypot(F[0] - p[0], F[1] - p[1]);
-        if (dF <= 0.4 && Math.abs(angDiff(this.hdgL(a), M.R)) <= 45) { const sayC = !!M.rptComm; M.rptComm = false; this.commence(a, type); parts.push('commencing'); if (sayC) says.push('commencing'); }
-        else { M.cleared = true; if (!M.ph) M.ph = 'toMar'; parts.push('commence at marshal fix'); log('sys', `${a.cs}: will commence${M.rptComm ? ' and report commencing' : ''} at marshal fix ${h3z(BRC + M.R)}/${M.D}.`); }
-      } else { const sayC = !!M.rptComm; M.rptComm = false; this.commence(a, type); parts.push('commencing'); if (sayC) says.push('commencing'); }
+        if (dF <= 0.4 && Math.abs(angDiff(this.hdgL(a), M.R)) <= 45) { M.rptComm = false; M.forceCommence = false; this.commence(a, type); parts.push('commencing'); says.push('commencing'); }
+        else { M.forceCommence = true; M.cleared = true; if (!M.ph) M.ph = 'toMar'; parts.push('commence at marshal fix'); log('sys', `${a.cs}: will commence and report commencing at marshal fix ${h3z(BRC + M.R)}/${M.D}.`); }
+      } else { M.rptComm = false; M.forceCommence = false; this.commence(a, type); parts.push('commencing'); says.push('commencing'); }
     }
     if (m.missed) {
       if (M.ph && /^(out1|iaf2|out2|turnF|final|h4a|arc|h5a|out5)$/.test(M.ph)) { this.missed(a); parts.push('missed approach'); says.push('missed approach'); }
@@ -3388,14 +3464,14 @@ const MAR = {
         if (d <= 0.30) {
           M.inMar = true; M.t0 = G.t;
           const alignedIn = Math.abs(angDiff(this.hdgL(a), cin)) <= 35;
-          const canEatPush = M.eatAt != null && G.t >= M.eatAt - 10 && alignedIn;
-          const canClrPush = M.eatAt == null && M.cleared && (M.type || M.typeInf) && alignedIn;
-          if (canEatPush || canClrPush) {
+          const canEatPush = M.eatAt != null && G.t >= M.eatAt - 5 && alignedIn;
+          const canCmdPush = !!M.forceCommence && (M.type || M.typeInf) && alignedIn;
+          if (canEatPush || canCmdPush) {
             const pushType = M.type || M.typeInf || (isHelo(a) ? 'LH5' : 'LH2');
-            const sayC = canEatPush || !!M.rptComm;
-            M.rptComm = false; if (canEatPush) M.eatDone = true;
+            M.rptComm = false; M.forceCommence = false; if (canEatPush) M.eatDone = true;
             this.commence(a, pushType);
-            if (sayC) { const rFix = h3z(BRC + (M.R != null ? M.R : 30)), dFix = M.D != null ? M.D : 2; this.say(a, `commencing`); log('good', `${a.cs} commencing in marshal ${rFix} at ${dFix}${M.eat != null ? ' at :' + String(M.eat).padStart(2, '0') : ''}.`); }
+            const rFix = h3z(BRC + (M.R != null ? M.R : 30)), dFix = M.D != null ? M.D : 2;
+            this.say(a, 'commencing'); log('good', `${a.cs} commencing in marshal ${rFix} at ${dFix}${M.eat != null ? ' at :' + String(M.eat).padStart(2, '0') : ''}.`);
           } else {
             M.ph = 'hold';
             M.leg = alignedIn ? 'tOut' : 'out';   // aligned inbound -> left 180 turn onto SE outbound leg; arriving from SW/other -> join SE outbound leg, turn left inbound to cross F on cin
@@ -3413,14 +3489,14 @@ const MAR = {
           const al = this.along(F, cin, p);
           this.setH(a, (dF <= 0.8 || al > 0) ? this.direct(F, p) : this.track(F, cin, p));
           if (dF <= 0.35 && al >= -0.25) {
-            const canEatPush = M.eatAt != null && G.t >= M.eatAt - 10;
-            const canClrPush = M.eatAt == null && M.cleared && (M.type || M.typeInf);
-            if (canEatPush || canClrPush) {
+            const canEatPush = M.eatAt != null && G.t >= M.eatAt - 5;
+            const canCmdPush = !!M.forceCommence && (M.type || M.typeInf);
+            if (canEatPush || canCmdPush) {
               const pushType = M.type || M.typeInf || (isHelo(a) ? 'LH5' : 'LH2');
-              const sayC = canEatPush || !!M.rptComm;
-              M.rptComm = false; if (canEatPush) M.eatDone = true;
+              M.rptComm = false; M.forceCommence = false; if (canEatPush) M.eatDone = true;
               this.commence(a, pushType);
-              if (sayC) { const rFix = h3z(BRC + (M.R != null ? M.R : 30)), dFix = M.D != null ? M.D : 2; this.say(a, 'commencing'); log('good', `${a.cs} commencing in marshal ${rFix} at ${dFix}${M.eat != null ? ' at :' + String(M.eat).padStart(2, '0') : ''}.`); }
+              const rFix = h3z(BRC + (M.R != null ? M.R : 30)), dFix = M.D != null ? M.D : 2;
+              this.say(a, 'commencing'); log('good', `${a.cs} commencing in marshal ${rFix} at ${dFix}${M.eat != null ? ' at :' + String(M.eat).padStart(2, '0') : ''}.`);
               break;
             }
             M.leg = 'tOut'; M.t0 = G.t;
