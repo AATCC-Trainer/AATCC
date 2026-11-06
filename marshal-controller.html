@@ -490,6 +490,7 @@ const PATTERNS = [
   [/\bvectors?\s+(?:for\s+)?(?:the\s+|a\s+|an\s+)?(?:c\s*c\s*a|cca|see\s+see\s+(?:a|eh|ay)|sea\s+sea\s+a|ccas?|p\s*a\s*r|par)(?:\s+approach(?:es)?)?\b/g, () => ({ k: 'cca' })],
   [/\bgo(?:\s+(?:to|too|two))?\s+(purple|copper|coppers|purpel)(?:\s+buttons?)?\b/g, m => ({ k: 'purple', v: /^c/i.test(m[1]) ? 'copper' : 'purple' })],
   [/\b(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?final(?:\s+controller)?\b/g, () => ({ k: 'purple', v: null })],
+  [/\bgo(?:\s+(?:to|too|two))?\s+(?:red|read|redd)(?:\s+buttons?)?\b|\bswitch(?:\s+to)?\s+red(?:\s+buttons?)?\b/g, () => ({ k: 'goRed' })],
   [/\bgo(?:\s+(?:to|too|two))?\s+(?:silver|sliver|silvar)(?:\s+buttons?)?\b/g, () => ({ k: 'goSilver' })],
   [/\bmark\s+(?:your\s+|you\s+|yer\s+)?(?:father|farther|mother|fathers?)\b/g, () => ({ k: 'markFather' })],
   // radar identification: "vectors for radar identification" (no action of its own) and "radar contact, 5 miles northeast of mother"
@@ -554,7 +555,7 @@ function parseSpeech1(raw, known = []) {
   const m = /\bclimb(?:ing)?\s*-?\s*outs?\b(?:\s+instructions?)?(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?/i.exec(String(raw));
   if (!m) return parseSpeech0(raw, known);
   const pre = parseSpeech0(raw.slice(0, m.index), known), post = String(raw).slice(m.index + m[0].length);
-  const sub = parseSpeech0(post, []), keep = c => c.k === 'hdg' || c.k === 'alt' || c.k === 'spd';
+  const sub = parseSpeech0(post, []), keep = c => c.k === 'hdg' || c.k === 'alt' || c.k === 'spd' || c.k === 'goRed' || c.k === 'goSilver';
   let v = sub.cmds.filter(keep); if (!v.some(c => c.k === 'hdg') && /\brunway\s+heading\b/i.test(post)) v.push({ k: 'hdg', v: BRC, dir: null });
   for (const c of pre.cmds.filter(keep)) if (!v.some(x => x.k === c.k)) v.push(c);
   pre.cmds = [{ k: 'climbout', v }]; pre.raw = raw; pre.hdgMissing = false; return pre;
@@ -641,6 +642,7 @@ function cmdStr(c) {
     case 'radarContact': return c.rng != null ? `radar contact ${c.rng} NM ${c.dirTxt}` : 'radar contact';
     case 'rid': return 'vectors for radar ID';
     case 'purple': return 'go ' + (c.v || 'purple') + ' (Final freq)';
+    case 'goRed': return 'go red (Marshal)';
     case 'goSilver': return 'go silver (Approach)';
     case 'markFather': return 'mark your father';
     case 'dirty': return 'dirty up';
@@ -822,8 +824,8 @@ const alive = a => !['landed', 'crashed', 'gone'].includes(a.phase);
 function newGame(diffKey, opts = {}) {
   rng = opts.seed != null ? mulberry32(opts.seed) : Math.random;
   const fromStart = nextBRC != null && opts.brc == null;
-  TBRC = opts.brc != null ? opts.brc : nextBRC != null ? nextBRC : randBRC(); nextBRC = null;
-  if (opts.mv != null) MV = opts.mv; else if (!fromStart) MV = randMV();
+  TBRC = opts.brc != null ? opts.brc : !SHIP_TURNS_ON ? 360 : nextBRC != null ? nextBRC : randBRC(); nextBRC = null;
+  if (opts.mv != null) MV = opts.mv; else if (!SHIP_TURNS_ON) MV = 0; else if (!fromStart) MV = randMV();
   setBRC(norm(TBRC - MV));   // FB (magnetic final bearing) drives everything drawn/spoken
   if (!fromStart || !LAND || opts.mv != null || opts.landSeed != null) makeLand(opts.landSeed != null ? opts.landSeed : LAND && fromStart ? LAND.seed : (Math.random() * 2 ** 31) >>> 0);   // land stays with the BRC shown on the start screen   // the BRC shown on the start screen
   const d = DIFFS[diffKey]; lastDiff = diffKey;
@@ -1795,7 +1797,7 @@ function fixSpeech(raw) {
   s = s.replace(/\b(?:see\s+see\s+a|sea\s+sea\s+a|c\s+c\s+a|ccas|c\.c\.a\.?|cc\s+a|c\s+ca)\b/g, 'cca');
   s = s.replace(/\b(?:cooper|coper|kopper|copper's|coppers|cupper)\b/g, 'copper').replace(/\b(?:purpel|purpal|people|pupil)\b(?=\s+button|\s*$|\s+,)/g, 'purple');
   s = s.replace(/\b(?:go(?:\s+to)?)\s+(?:people|pupil|purpel)\b/g, 'go purple');
-  s = s.replace(/\b(?:sliver|silvar|sylver)\b/g, 'silver').replace(/\bgo(?:\s+to)?\s+blue\b/g, 'go silver');
+  s = s.replace(/\b(?:sliver|silvar|sylver)\b/g, 'silver').replace(/\bgo(?:\s+to)?\s+blue\b/g, 'go silver').replace(/\b(?:go(?:\s+to)?)\s+(?:read|redd|rhett|rad)\b/g, 'go red');
   s = s.replace(/\bmark\s+(?:your|you|yer)\s+(?:farther|fathers|mother's|bother)\b/g, 'mark your father');
   s = s.replace(/\bcross\s*-?\s*wind\b/g, 'crosswind').replace(/\bdown\s*-?\s*wind\b/g, 'downwind').replace(/\bup\s*-?\s*wind\b/g, 'upwind').replace(/\bdog\s*-?\s*leg\b/g, 'dogleg').replace(/\bbase\s+like\b/g, 'base leg');
   s = s.replace(/\b(?:radar\s+contacts?|radio\s+contact|raider\s+contact|radar\s+can\s+tact)\b/g, 'radar contact');
@@ -1826,7 +1828,7 @@ function fuzzyCallsigns(s) {   // replace 1-2 word near-misses of an active call
   return ' ' + out.join(' ') + ' ';
 }
 const VOCAB = ['stinger approach', 'stinger marshal', 'case three recovery', 'marshal', 'outbound bearing', 'lima hotel', 'brc', 'expected approach time', 'report commencing', 'cleared for', 'radar contact', 'take angels', 'angels', 'climb out', 'dirty up', 'perform landing checks', 'expect final button', 'copper', 'purple', 'silver', 'red', 'go purple', 'go copper', 'go silver', 'go red', 'vectors for cca', 'cca approach', 'mark your father', 'upwind', 'crosswind', 'downwind', 'base', 'abeam', 'dogleg', 'heading', 'miles', 'left', 'right', 'maintain', 'knots', 'turn'];
-const VOCAB_WORDS = new Set(VOCAB.join(' ').split(' ').concat(['your', 'for', 'approach', 'final', 'button', 'take', 'expect', 'checks', 'landing', 'perform', 'contact', 'radar', 'mother', 'father', 'mark', 'climb', 'out', 'dirty', 'up', 'go', 'case', 'recovery', 'outbound', 'bearing', 'marshal', 'commencing', 'cleared', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'zero']));
+const VOCAB_WORDS = new Set(VOCAB.join(' ').split(' ').concat(['your', 'for', 'approach', 'final', 'button', 'take', 'expect', 'checks', 'landing', 'perform', 'contact', 'radar', 'mother', 'father', 'mark', 'climb', 'out', 'dirty', 'up', 'go', 'case', 'recovery', 'outbound', 'bearing', 'marshal', 'commencing', 'commence', 'cleared', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'zero']));
 function scoreAlt(t, conf) {
   const f = ' ' + fixSpeech(t) + ' '; let sc = (conf || 0) * 2;
   for (const v of VOCAB) if (f.includes(' ' + v + ' ')) sc += v.split(' ').length;
@@ -1855,7 +1857,7 @@ function mcFixSpeech(t) {   // forgiving marshal-flow wording: common speech-to-
   s = s.replace(/\bl(?:h|8)\s*-?\s*([1-5])\b/gi, ' LH$1 ').replace(/\blima\s+hotel\s*([1-5])\b/gi, ' LH$1 ').replace(/\b(?:lh|l8)(to|too|two)\b/gi, ' LH2 ').replace(/\bl82\b/gi, ' LH2 ');
   s = s.replace(/\b(?:angel|angles|angle|ankles|angela|angeles)\b/gi, 'angels');
   s = s.replace(/\bout[\s\-]+bound\b|\boutbond\b|\boutbounds\b|\bout\s+found\b/gi, 'outbound');
-  s = s.replace(/\b(?:commence(?:d|s)?|commencin|commensing|commencement|comments\s+ing|come\s+and\s+sing)\b/gi, 'commencing');
+  s = s.replace(/\breport\s+commence(?:d|s)?\b/gi, 'report commencing').replace(/\b(?:commencin|commensing|commencement|comments\s+ing|come\s+and\s+sing)\b/gi, 'commencing');
   s = s.replace(/\b(?:squak|squad|squawks|squaw|squalk|sqawk|squark|squat|squawked|squawking|squaw\s+k)\b/gi, 'squawk').replace(/\bsquawk\s+(?:normally|norma|nor\s*mal|formal)\b/gi, 'squawk normal');
   s = s.replace(/\b(?:goal|gold|gul|ghost|go\s+to|goes|grow|glow|go\s+on)\s+(blue|blew|red|read|bread)\b/gi, 'go $1').replace(/\bgo\s+blew\b/gi, 'go silver').replace(/\bgo\s+(?:read|bread)\b/gi, 'go red');
   s = s.replace(/\b(?:martial|marshall|marshals|marshalls|martian)\b/gi, 'marshal').replace(/\bradar\s+(?:contract|contacts|context|comtact)\b/gi, 'radar contact');
@@ -1919,17 +1921,18 @@ function handleTranscript(text, src) {
       const ki = heardNoShip.search(MAR.trigger);
       const preRaw = heardNoShip.slice(0, Math.max(0, ki)).replace(/\b(?:flight(?:\s+of\s+(?:two|2))?|expect(?:ed)?|cleared|execute)\s*,?\s*$/i, '');
       const preFx = fixSpeech(preRaw), up = preRaw.toUpperCase().replace(/[\s,]+/g, '');
+      const pool = mp.hoMar ? G.ac.filter(alive) : G.ac.filter(appCtl);
       const pp = preFx.trim() ? parseSpeech(preFx, known) : null, live = G.ac.filter(appCtl);
-      let a = csByDigits(preRaw, live) || csByDigits(preFx, live) || (pp && pp.cs && live.find(x => x.cs === pp.cs)) || (up && live.find(x => up.includes(x.cs))) || null;
+      let a = csByDigits(preRaw, pool) || csByDigits(preFx, pool) || (pp && pp.cs && pool.find(x => x.cs === pp.cs)) || (up && pool.find(x => up.includes(x.cs))) || null;
       if (!a && !(pp && pp.csUnknown) && !/\b\d{2,3}\b/.test(preRaw)) a = G.selected && appCtl(G.selected) ? G.selected : (live.length === 1 ? live[0] : null);
-      const marOnly = !!(mp.type || mp.marshal || mp.commence || mp.rpt3 || mp.missed);
+      const marOnly = !!(mp.type || mp.marshal || mp.commence || mp.cleared || mp.rpt3 || mp.missed);
       if (!(a && a.parArr && !marOnly)) {   // CCA arrival uses appExecute for Approach calls + compound handoffs ("turn left heading 360, go purple")
         if (src === 'voice') renderTranscript(text, '');
         setHeard(heard, null);
         if (!a) { log('sys', `Say the callsign (or select a target) first. Heard: "${heard}"`); return { cs: null, cmds: [], str: 'marshal?' }; }
         if (!a.accepted) { log('sys', `${a.cs} not accepted (click its target to accept): no response to "${heard}".`); return { cs: a.cs, cmds: [], str: 'not accepted' }; }
         MAR.exec(mp, a, heard, src);
-        $('parsed').textContent = 'Understood → ' + a.cs + ' ' + [mp.type && MAR.T[mp.type].name, mp.marshal && `marshal ${mp.marshal.R}/${mp.marshal.D}/${mp.marshal.alt}${mp.marshal.eat != null ? ' EAT ' + mp.marshal.eat : ''}`, mp.commence && 'commence', mp.missed && 'missed approach', mp.hoFinal && (mp.hoFreq ? 'go ' + mp.hoFreq : 'final'), mp.hoApp && 'go silver'].filter(Boolean).join('; ');
+        $('parsed').textContent = 'Understood → ' + a.cs + ' ' + [mp.type && MAR.T[mp.type].name, mp.marshal && `marshal ${mp.marshal.R}/${mp.marshal.D}/${mp.marshal.alt}${mp.marshal.eat != null ? ' EAT ' + mp.marshal.eat : ''}`, mp.cleared && !mp.type && 'cleared/report commencing', mp.commence && 'commence', mp.missed && 'missed approach', mp.hoFinal && (mp.hoFreq ? 'go ' + mp.hoFreq : 'final'), mp.hoApp && 'go silver', mp.hoMar && 'go red'].filter(Boolean).join('; ');
         $('parsed').classList.remove('bad');
         return { cs: a.cs, cmds: ['marshal'], str: 'marshal', mar: mp };
       }
@@ -2279,7 +2282,7 @@ TUT.splice(0, TUT.length,
    <li><b>Flights</b>: for now only one flight checks in: two jets as a flight of two (one call by the leader). Instructions to the leader apply to the flight; calling the wingman by its callsign gives it its own instructions. Only the leader squawks; the wingman shows as a raw return until you tell it "squawk normal".</li>
    <li><b>Geopoints</b>: double-click (double-tap) the scope to drop a geopoint (GPn with radial/DME from the ship); double-click it again to delete; ⚙ Settings → Clear geopoints.</li>
 </ul>`],
-  ['2. Arrivals & CCA pattern', `<p>Three waves check in on Marshal: a <b>flight of two jets at 20 NM</b> for marshal, then a <b>single arrival (jet or helo) at 10 NM</b> between the 270 and 090 radials requesting a <b>CCA approach</b>, then a <b>second flight of two jets at 20 NM</b> for marshal. Click (tap) a target to accept it.</p><p><b>CCA arrival (Approach phraseology)</b>: work the 10 NM single arrival in the CCA pattern just like Approach — "radar contact (10 miles north of mother), turn left heading 180, descend and maintain angels 1.2 (angels 1 for helos), vectors for CCA approach, expect final button purple/copper", pattern position calls (upwind, crosswind, downwind, abeam, dogleg, base), "dirty up" (jets) / "perform landing checks" (helos), climbout instructions, and handoff with "go purple" / "go copper" (Final) or "go silver" (Approach).</p>`],
+  ['2. Arrivals & CCA pattern', `<p>Three waves check in on Marshal: a <b>flight of two jets at 20 NM</b> for marshal, then a <b>single arrival (jet or helo) at 10 NM</b> between the 270 and 090 radials requesting a <b>CCA approach</b>, then a <b>second flight of two jets at 20 NM</b> for marshal. Click (tap) a target to accept it.</p><p><b>CCA arrival (Approach phraseology)</b>: work the 10 NM single arrival in the CCA pattern just like Approach — "radar contact (10 miles north of mother), turn left heading 180, descend and maintain angels 1.2 (angels 1 for helos), vectors for CCA approach, expect final button purple/copper", pattern position calls (upwind, crosswind, downwind, abeam, dogleg, base), "dirty up" (jets) / "perform landing checks" (helos), climbout instructions (with "go red" for Marshal), "go red" (Marshal frequency), and handoff with "go purple" / "go copper" (Final) or "go silver" (Approach).</p>`],
   ['3. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>HOLD TO TALK</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
    <ul><li><b>Best in Chrome or Edge on a computer.</b> Firefox has no speech recognition; Safari and iOS vary. You can always <b>type</b> the same words in the box.</li>
    <li>Chrome's speech recognition <b>needs an internet connection</b>, because the audio goes to Google's speech service.</li>
@@ -3064,16 +3067,17 @@ const MAR = {
       const e = post.match(/(?:expected|expect)\s+approach\s+time\s*(\d{1,2})\b/) || post.match(/\beat\s*(\d{1,2})\b/);
       out.marshal = { R: r ? +r[1] % 360 : null, Rabs: r ? +r[1] % 360 : null, D: d ? +d[1] : null, alt: an ? Math.round(+an[1] * 1000) : ft ? +ft[1] : null, eat: e ? +e[1] : null };
     }
-    if (/\bcommence\b(?!\s+(?:your\s+)?descen)/.test(s)) out.commence = true;
-    if (out.type && /\bcleared\b/.test(s)) out.cleared = true;   // "cleared for LH-2 approach, report commencing": commence at the marshal fix
+    if (/\breport\s+commenc/.test(s)) out.cleared = true;
+    else if (/\bcommenc(?:e|ing)\b(?!\s+(?:your\s+)?descen)/.test(s)) out.commence = true;
+    if ((out.type && /\bcleared\b/.test(s)) || /\bcleared\s+(?:for\s+)?(?:the\s+)?approach\b/.test(s)) out.cleared = true;   // "cleared for LH-2 approach, report commencing": commence at the marshal fix
     if (/\breport\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound/.test(s)) out.rpt3 = true;
     if (/\b(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?final(?:\s+controller)?\b/.test(s)) out.hoFinal = true;
-    { const g = s.match(/\bgo\s+(purple|purpel|copper|cooper|coper|silver|sliver|silvar|blue)(?:\s+(?:for\s+|to\s+)?(?:final|approach))?\b/); if (g) { let f = g[1]; if (/^purp|^people|^pupil/i.test(f)) f = 'purple'; else if (/^cop|^coop/i.test(f)) f = 'copper'; else if (/^sil|^sliv|^blue/i.test(f)) f = 'silver'; if (f === 'silver') { out.hoApp = true; out.hoFreq = 'silver'; } else { out.hoFinal = true; out.hoFreq = f; } } }
+    { const g = s.match(/\bgo(?:\s+(?:to|2))?\s+(purple|purpel|copper|cooper|coper|silver|sliver|silvar|blue|red|read|redd)(?:\s+(?:buttons?|for\s+final|to\s+final|final|approach|marshal+))?\b/); if (g) { let f = g[1]; if (/^purp|^people|^pupil/i.test(f)) f = 'purple'; else if (/^cop|^coop/i.test(f)) f = 'copper'; else if (/^sil|^sliv|^blue/i.test(f)) f = 'silver'; else if (/^red|^read/i.test(f)) f = 'red'; if (f === 'silver') { out.hoApp = true; out.hoFreq = 'silver'; } else if (f === 'red') { out.hoMar = true; out.hoFreq = 'red'; } else { out.hoFinal = true; out.hoFreq = f; } } }
     if (/\b(?:execute\s+)?missed\s+approach\b/.test(s) && !out.marshal) out.missed = true;
     if (out.marshal && out.marshal.R != null) out.marshal.R = norm(out.marshal.R - BRC) % 360;   // spoken radial is BRC + relative value
-    return (out.type || out.marshal || out.commence || out.missed || out.rpt3 || out.hoFinal || out.hoApp) ? out : null;
+    return (out.type || out.marshal || out.cleared || out.commence || out.missed || out.rpt3 || out.hoFinal || out.hoApp || out.hoMar) ? out : null;
   },
-  trigger: /\b(?:go\s+(?:purple|copper|silver|sliver|blue|red)\b|report\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound|(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?(?:final|approach)|case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery|marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
+  trigger: /\b(?:go(?:\s+(?:to|too|two))?\s+(?:purple|copper|silver|sliver|blue|red|read|redd)\b|report\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound|report\s+commenc|cleared\s+(?:for\s+)?(?:the\s+)?approach|(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?(?:final|approach)|case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery|marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
   say(a, txt, say) { if (a.st === 'mfinal') return; pilotSay(a, `${a.tel}, ${txt}.`, `${a.telSay}, ${say || txt}.`); },
   dg(v) { return String(v).split('').map(c => c === '.' ? 'point' : DIGW[+c]).join(' '); },
   exec(m, a, heard, src) {
@@ -3116,9 +3120,10 @@ const MAR = {
     if (m.caseN != null && m.caseN !== 3) log('warn', `${a.cs}: marshal ops here are Case III (heard Case ${m.caseN}).`);
     if (m.cleared) {
       if (M.R == null) { this.say(a, 'say marshal instructions'); return; }
+      const cType = M.type || M.typeInf;
       M.cleared = true; parts.push('cleared, report commencing');
-      if (M.ph !== 'hold' && M.ph !== 'toMar') log('sys', `${a.cs} cleared for ${this.T[M.type].name}; not in marshal yet.`);
-      else log('sys', `${a.cs} cleared for ${this.T[M.type].name}: will commence at the marshal fix.`);
+      if (M.ph !== 'hold' && M.ph !== 'toMar') log('sys', `${a.cs} cleared${cType ? ' for ' + this.T[cType].name : ''}; not in marshal yet.`);
+      else log('sys', `${a.cs} cleared${cType ? ' for ' + this.T[cType].name : ''}: will report commencing at marshal fix ${h3z(BRC + M.R)}/${M.D}.`);
     }
     if (m.rpt3) {
       if (!M.run) log('sys', `${a.cs}: not commenced yet; will report 3 miles outbound after commencing.`);
@@ -3159,26 +3164,41 @@ const MAR = {
       parts.push('switching silver'); says.push('switching silver');
       if (G.selected === a) G.selected = null;
     }
+    if (m.hoMar) {   // Marshal frequency (Red)
+      if (a.hoff && a.hoff.dir === 'in') HOFF.click(a);
+      a.phase = 'app'; a.st = 'ctl'; a.onFinal = false; a.hoffFreq = null; a.accepted = true;
+      log('sys', `${a.cs} on Red (Marshal frequency).`);
+      parts.push('go red'); says.push('switching red');
+    }
     if (m.commence) {
       const type = M.type || M.typeInf;
       if (!type) { this.say(a, 'say approach type'); return; }
-      this.commence(a, type); parts.push('commencing'); says.push('commencing');
+      if (M.R != null && M.D != null) {
+        const F = this.pt(M.R, M.D), p = this.loc(a), dF = Math.hypot(F[0] - p[0], F[1] - p[1]);
+        if (dF <= 0.4 && Math.abs(angDiff(this.hdgL(a), M.R)) <= 45) { this.commence(a, type); parts.push('commencing'); says.push('commencing'); }
+        else { M.cleared = true; if (!M.ph) M.ph = 'toMar'; parts.push('commence at marshal fix'); log('sys', `${a.cs}: will commence and report at marshal fix ${h3z(BRC + M.R)}/${M.D}.`); }
+      } else { this.commence(a, type); parts.push('commencing'); says.push('commencing'); }
     }
     if (m.missed) {
       if (M.ph && /^(out1|iaf2|out2|turnF|final|h4a|arc|h5a|out5)$/.test(M.ph)) { this.missed(a); parts.push('missed approach'); says.push('missed approach'); }
       else { this.say(a, 'unable, not on the approach'); return; }
     }
     log('ctl', `${a.cs}: "${heard.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${parts.join('; ')}`);
-    pilotSay(a, `${a.tel}.`, `${a.telSay}.`);   // readback is the callsign only
+    if (says.includes('commencing')) this.say(a, 'commencing');
+    else pilotSay(a, `${a.tel}.`, `${a.telSay}.`);   // readback is the callsign only
     if (a.st === 'mfinal') return;
     refreshPanel(true);
   },
   commence(a, type) {
-    const M = a.mar; M.run = type; M.inMar = false; M.fafDone = false; M.t0 = G.t;
-    M.ph = { LH1: 'iaf2', LH2: 'iaf2', LH3: 'turnF', LH4: 'h4a', LH5: 'h5a', EMER: 'h4a' }[type]; M.fDir = type === 'LH3' ? null : type === 'LH1' || type === 'LH2' || type === 'LH5' ? 'L' : 'R';
+    const M = a.mar, p = this.loc(a), fR = M.R != null ? M.R : (this.T[type].marR || 30), fD = M.D != null ? M.D : (this.fixD(type, M.alt || 2000) || 2);
+    const F = this.pt(fR, fD), atFix = Math.hypot(F[0] - p[0], F[1] - p[1]) <= 0.6;
+    M.run = type; M.inMar = false; M.cleared = false; M.fafDone = false; M.t0 = G.t;
+    M.ph = { LH1: atFix ? 'out1' : 'iaf2', LH2: atFix ? 'out2' : 'iaf2', LH3: 'turnF', LH4: 'h4a', LH5: atFix ? 'out5' : 'h5a', EMER: 'h4a' }[type];
+    M.fDir = type === 'LH3' ? null : type === 'LH1' || type === 'LH2' || type === 'LH5' ? 'L' : 'R';
     if (M.alt == null) M.alt = Math.round(a.alt / 100) * 100;
     a.tgtSpd = isHelo(a) ? Math.min(a.tgtSpd, 120) : Math.min(a.tgtSpd, 250);
-    log('sys', `${a.cs} commencing ${this.T[type].name === 'EMER' ? 'emergency (LH-4 profile)' : this.T[type].name} approach.`);
+    const obMag = M.outbound || this.outbound();
+    log('sys', `${a.cs} commencing ${this.T[type].name === 'EMER' ? 'emergency (LH-4 profile)' : this.T[type].name} approach at ${h3z(BRC + fR)}/${fD} (outbound bearing ${h3z(obMag)}).`);
   },
   missed(a) {
     const M = a.mar; M.ph = M.run === 'LH5' ? 'mH5a' : (M.run === 'LH4' || M.run === 'EMER') ? 'mH4a' : 'mJ1'; M.t0 = G.t;
@@ -3192,45 +3212,64 @@ const MAR = {
   },
   step(a) {
     const M = a.mar, p = this.loc(a), r = Math.hypot(p[0], p[1]), b = this.lb(p[0], p[1]), dt = G.t - (M.t0 || 0), O = [0, 0], t = this.T[M.run] || null;
-    if (M.run && M.rpt3 && !M.rpt3Done && r >= 3 && Math.abs(angDiff(b, 30)) <= 30 && /^(out1|out2|out5)$/.test(M.ph || '')) {   // local bearing 30 = relative radial 210 (outbound bearing side)
-      M.rpt3Done = true; if (a.st === 'ctl') { this.say(a, 'established in outbound bearing'); log('sys', `${a.cs} 3 NM outbound bearing ${h3z(this.outbound())}.`); } }
+    const obMag = M.outbound || this.outbound(), obL = norm(obMag - BROT());   // local course of outbound bearing (30 when BRC 360 & outbound 210)
+    if (M.run && M.rpt3 && !M.rpt3Done && this.along(O, obL, p) >= 3 && Math.abs(angDiff(b, obL)) <= 35 && /^(out1|out2|out5)$/.test(M.ph || '')) {
+      M.rpt3Done = true; if (a.st === 'ctl') { this.say(a, 'established in outbound bearing'); log('sys', `${a.cs} 3 NM outbound bearing ${h3z(obMag)}.`); } }
     if (a.st === 'mfinal' && M.ph === 'final' && t && (r <= t.map || p[1] < 0)) { a.phase = 'gone'; a.removeAt = G.t; M.ph = null; log('good', `${a.cs} recovered aboard ${SHIP_NAME} (${t.name}, Final).`); return; }
     switch (M.ph) {
-      case 'toMar': {   // fly to the marshal fix at the marshal altitude
-        const F = this.pt(M.R, M.D), d = Math.hypot(F[0] - p[0], F[1] - p[1]);
+      case 'toMar': {   // fly directly over the marshal fix at the marshal altitude before entering the southeast racetrack
+        const F = this.pt(M.R, M.D), d = Math.hypot(F[0] - p[0], F[1] - p[1]), cin = M.R;
         a.tgtAlt = M.alt; this.setH(a, this.direct(F, p));
-        if (d < 1.0) {
-          M.inMar = true;
-          M.ph = 'hold'; M.leg = this.along(F, M.R, p) >= -0.2 ? 'tOut' : 'in'; M.t0 = G.t;
-          if (M.cleared && (M.type || M.typeInf) && d < 0.5) { this.commence(a, M.type || M.typeInf); this.say(a, 'commencing'); }
+        if (d <= 0.30) {
+          M.inMar = true; M.t0 = G.t;
+          const alignedIn = Math.abs(angDiff(this.hdgL(a), cin)) <= 35;
+          if (M.cleared && (M.type || M.typeInf) && alignedIn) {
+            this.commence(a, M.type || M.typeInf); this.say(a, 'commencing');
+          } else {
+            M.ph = 'hold';
+            M.leg = alignedIn ? 'tOut' : 'out';   // aligned inbound -> left 180 turn onto SE outbound leg; arriving from SW/other -> join SE outbound leg, turn left inbound to cross F on cin
+          }
         }
         break;
       }
-      case 'hold': {   // racetrack: inbound to the fix on the radial, left turns, 1 min outbound (or 2 NM beyond the fix)
-        const F = this.pt(M.R, M.D), cin = M.R, cout = norm(M.R + 180);
+      case 'hold': {   // left-hand racetrack on SE (holding) side of the radial: inbound on cin right over F, commence strictly at F
+        const F = this.pt(M.R, M.D), cin = M.R, cout = norm(M.R + 180), dF = Math.hypot(F[0] - p[0], F[1] - p[1]);
+        const Dt = 2 * (Math.max(110, a.gs || a.ias || 250) / 3600) / (3 * DEG);   // exact 3 deg/s 180-turn diameter
+        const Fout = [F[0] + Dt * Math.sin((cin - 90) * DEG), F[1] + Dt * Math.cos((cin - 90) * DEG)];   // SE parallel outbound leg
         a.tgtAlt = M.alt;
-        if (!M.est && Math.abs(a.alt - M.alt) <= 100) { M.est = true; this.say(a, `established in marshal, angels ${appAngels(M.alt)}`, `established in marshal, angels ${appAngelsSay(M.alt)}`); log('sys', `${a.cs} established in marshal ${h3z(M.R)}R ${M.D} NM, angels ${appAngels(M.alt)} (${fmtAlt(Math.round(a.alt))} ft).`); }   // only once in the hold AND at the assigned altitude
-        if (M.leg === 'in') { this.setH(a, this.track(F, cin, p)); if (this.along(F, cin, p) >= -0.2) { M.leg = 'tOut';
-          if (M.cleared && (M.type || M.typeInf)) { this.commence(a, M.type || M.typeInf); this.say(a, 'commencing'); break; } } }
-        if (M.leg === 'tOut') { this.setH(a, cout, 'L'); if (Math.abs(angDiff(this.hdgL(a), cout)) < 3) { M.leg = 'out'; M.t0 = G.t; } }
-        else if (M.leg === 'out') { this.setH(a, cout); if (G.t - M.t0 >= this.HOLD_LEG || r >= M.D + 2.5) M.leg = 'tIn'; }
-        else if (M.leg === 'tIn') { this.setH(a, cin, 'L'); if (Math.abs(angDiff(this.hdgL(a), cin)) < 3) M.leg = 'in'; }
-        if (M.cleared && M.leg !== 'in' && M.leg != null && Math.hypot(F[0] - p[0], F[1] - p[1]) < 0.3 && (M.type || M.typeInf)) { this.commence(a, M.type || M.typeInf); this.say(a, 'commencing'); break; }
+        if (!M.est && Math.abs(a.alt - M.alt) <= 100) { M.est = true; this.say(a, `established in marshal, angels ${appAngels(M.alt)}`, `established in marshal, angels ${appAngelsSay(M.alt)}`); log('sys', `${a.cs} established in marshal ${h3z(BRC + M.R)}R ${M.D} NM, angels ${appAngels(M.alt)} (${fmtAlt(Math.round(a.alt))} ft).`); }
+        if (M.leg === 'in') {
+          const al = this.along(F, cin, p);
+          this.setH(a, (dF <= 0.8 || al > 0) ? this.direct(F, p) : this.track(F, cin, p));
+          if (dF <= 0.32 && al >= -0.25) {
+            if (M.cleared && (M.type || M.typeInf)) { this.commence(a, M.type || M.typeInf); this.say(a, 'commencing'); break; }
+            M.leg = 'tOut'; M.t0 = G.t;
+          }
+        }
+        if (M.leg === 'tOut') { this.setH(a, cout, 'L'); if (Math.abs(angDiff(this.hdgL(a), cout)) < 6) { M.leg = 'out'; M.t0 = G.t; } }
+        else if (M.leg === 'out') { this.setH(a, this.track(Fout, cout, p, 25)); if (-this.along(F, cin, p) >= (isHelo(a) ? 2.5 : 4.0)) M.leg = 'tIn'; }
+        else if (M.leg === 'tIn') { this.setH(a, cin, 'L'); if (Math.abs(angDiff(this.hdgL(a), cin)) < 15) M.leg = 'in'; }
         if (M.eat != null && !M.eatSaid && this.eatMin() === M.eat) { M.eatSaid = true; log('sys', `${a.cs}: expected approach time ${String(M.eat).padStart(2, '0')} (say "commence").`); }
         break;
       }
-      case 'out1':   // LH-1: outbound on the 210 radial, descend to 1/3 of the marshal altitude, turn left not before 12 NM / 3 min
-        a.tgtAlt = Math.max(1200, Math.round(M.alt / 3 / 100) * 100); this.setH(a, this.track(O, norm(210 + 180), p));
-        if (r >= 12 || dt >= 180) this.go(a, 'turnF');
+      case 'out1': {   // LH-1: outbound on outbound bearing (210) from marshal fix through mother, descend to 1/3 marshal alt, turn left at 12 NM / 3 min
+        const F0 = this.pt(M.R != null ? M.R : 30, M.D != null ? M.D : 4);
+        a.tgtAlt = Math.max(1200, Math.round(M.alt / 3 / 100) * 100); this.setH(a, this.track(F0, obL, p));
+        if (this.along(O, obL, p) >= 12 || dt >= 180) this.go(a, 'turnF');
         break;
-      case 'iaf2': { const F = this.pt(30, M.run === 'LH1' ? 4 : 2); a.tgtAlt = M.run === 'LH1' ? 4000 : 2000; this.setH(a, this.direct(F, p)); if (Math.hypot(F[0] - p[0], F[1] - p[1]) < 1.2) this.go(a, 'out2'); break; }
-      case 'out2':   // LH-2: outbound 210 through the ship at 1,200, level left turn that stays inside 8 NM
-        a.tgtAlt = 1200; this.setH(a, this.track(O, 30, p)); if (r >= 5.5 && Math.abs(angDiff(b, 30)) < 60) this.go(a, 'turnF'); break;
-      case 'h4a': { const F = this.pt(M.run === 'EMER' ? M.R : 90, 5); a.tgtAlt = 1000;   // from the 090/7 marshal   // to the 5 NM arc on the holding radial
+      }
+      case 'iaf2': { const F = this.pt(M.R != null ? M.R : 30, M.D != null ? M.D : (M.run === 'LH1' ? 4 : 2)); a.tgtAlt = M.alt || (M.run === 'LH1' ? 4000 : 2000); this.setH(a, this.direct(F, p)); if (Math.hypot(F[0] - p[0], F[1] - p[1]) <= 0.35) this.go(a, M.run === 'LH1' ? 'out1' : 'out2'); break; }
+      case 'out2': {   // LH-2: outbound bearing (210) from 030/2 through mother at 1,200, level left turn past 5.5 NM inside 8 NM
+        const F0 = this.pt(M.R != null ? M.R : 30, M.D != null ? M.D : 2);
+        a.tgtAlt = 1200; this.setH(a, this.track(F0, obL, p));
+        if (this.along(O, obL, p) >= 5.5) this.go(a, 'turnF');
+        break;
+      }
+      case 'h4a': { const F = this.pt(M.run === 'EMER' ? M.R : 90, 5); a.tgtAlt = 1000;   // from the 090/7 marshal to the 5 NM arc on the holding radial
         if (r > 5.4 && Math.hypot(F[0] - p[0], F[1] - p[1]) > 0.6) this.setH(a, this.direct(F, p)); else this.go(a, 'arc'); break; }
       case 'arc': a.tgtAlt = 1000; this.setH(a, this.arcH(p, 5)); if (b >= 346 || b <= 8) this.go(a, 'turnF'); break;
-      case 'h5a': { const F = this.pt(30, 2); a.tgtAlt = 1000; this.setH(a, this.direct(F, p)); if (Math.hypot(F[0] - p[0], F[1] - p[1]) < 0.6) this.go(a, 'out5'); break; }
-      case 'out5': a.tgtAlt = 1000; this.setH(a, this.track(O, 30, p)); if ((r >= 5 && Math.abs(angDiff(b, 30)) < 60) || dt >= 180) this.go(a, 'turnF'); break;
+      case 'h5a': { const F = this.pt(M.R != null ? M.R : 30, M.D != null ? M.D : 2); a.tgtAlt = 1000; this.setH(a, this.direct(F, p)); if (Math.hypot(F[0] - p[0], F[1] - p[1]) <= 0.35) this.go(a, 'out5'); break; }
+      case 'out5': { const F0 = this.pt(M.R != null ? M.R : 30, M.D != null ? M.D : 2); a.tgtAlt = 1000; this.setH(a, this.track(F0, obL, p)); if (this.along(O, obL, p) >= 5 || dt >= 180) this.go(a, 'turnF'); break; }
       case 'turnF': {   // turn onto the final bearing (inbound BRC)
         const h = this.track(O, 180, p), off = Math.abs(angDiff(this.hdgL(a), h));
         this.setH(a, h, off > 15 ? M.fDir : null);
@@ -3429,6 +3468,10 @@ function appExecute(p, src) {
   if (p.cs) {
     a = live.find(x => x.cs === p.cs);
     if (!a && p.csUnknown) { const m = live.filter(x => x.cs.slice(0, 4) === p.cs.slice(0, 4)); if (m.length === 1) a = m[0]; }
+    if (!a && p.cmds.some(c => c.k === 'goRed')) {
+      const off = G.ac.find(x => alive(x) && x.cs === p.cs && (x.st === 'purple' || x.phase === 'withApp'));
+      if (off) { off.phase = 'app'; off.st = 'ctl'; off.onFinal = false; off.hoffFreq = null; off.accepted = true; a = off; }
+    }
     if (!a && G.ac.some(x => x.cs === p.cs && x.st === 'purple')) { log('sys', `${p.cs} is off frequency (purple): no response.`); return; }
     if (!a) { log('sys', `No aircraft "${p.cs}" on frequency. Heard: "${p.raw}"`); Sound.buzz(); return; }
   } else a = G.selected && appCtl(G.selected) ? G.selected : (live.length === 1 ? live[0] : null);
@@ -3493,6 +3536,8 @@ function appExecute(p, src) {
     if (c.k === 'climbout') { if (c.v.length) { a.climbout = c.v.slice(); award(a, 'co', 'climbout instructions'); } rb.push('wilco'); rbSay.push('wilco'); continue; }   // stored for after the low approach
     if (c.k === 'cca') { award(a, 'cca', 'vectors for CCA'); rb.push('wilco'); rbSay.push('wilco'); continue; }
     if (c.k === 'button') { award(a, 'btn', 'expect final button'); a.button = c.v; rb.push('wilco'); rbSay.push('wilco'); continue; }
+    if (c.k === 'goRed') { if (a.hoff && a.hoff.dir === 'in') HOFF.click(a); a.phase = 'app'; a.st = 'ctl'; a.onFinal = false; a.hoffFreq = null;
+      log('sys', `${a.cs} on Red (Marshal frequency).`); rb.push('switching red'); rbSay.push('switching red'); continue; }
     if (c.k === 'goSilver') { a.sector = null; MAR.cancel(a, 'go silver'); a.hoffFreq = 'silver'; a.button = 'silver'; a.st = 'purple'; a.phase = 'withApp'; a.onFinal = false; a.turnDir = null;
       if (LINK.on && LINK.ch) LINK.post({ type: 'handoff', cs: a.cs, callsign: a.tel || a.cs, from: 'MARSHAL', to: 'APP', id: a.cs + '-' + Date.now(), freq: 'silver' });
       log('sys', `${a.cs} switching Silver (Approach); off Marshal frequency.`); rb.push('switching silver'); rbSay.push('switching silver'); continue; }
