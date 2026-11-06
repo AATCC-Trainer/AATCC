@@ -201,7 +201,8 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
       <div class="diff" data-d="gusty"><b>Rush</b><span>Up to 6 arrivals, faster pace. No hints.</span></div>
     </div>
     <div class="row" style="margin:4px 0 2px;gap:8px"><label for="sPhr2" style="color:var(--dim)">Phraseology</label><select id="sPhr2"><option value="ship">Ship: amphibious assault ship (LHA/LHD)</option><option value="tower">Tower: shore runway PAR</option></select></div>
-    <div class="row" style="margin:6px 0 2px;gap:8px;align-items:center;display:none"><button id="bLinkOff">OFF</button><button id="bLinkOn">ON</button></div>
+    <div class="row" style="margin:6px 0 2px;gap:8px;align-items:center"><span style="color:var(--dim)">Link to Final Control</span>
+      <button id="bLinkOff" style="min-height:34px">OFF (solo)</button><button id="bLinkOn" style="min-height:34px">ON (hand off)</button></div>
     <div class="banner" id="startBanner"></div>
     <div class="row" style="margin-top:8px">
       <button id="bStart" class="wide on" style="font-size:16px;min-height:46px">▶ START</button>
@@ -1899,7 +1900,7 @@ function handleTranscript(text, src) {
       return { cs: a.cs, cmds: ['marshal'], str: 'marshal', mar: mp };
     }
   }
-  if (!MC && /\b(hndoff|handoff|hand off|hdoff)\b/i.test(heard) && G && !G.over) {
+  if (/\b(hndoff|handoff|hand off|hdoff)\b/i.test(heard) && G && !G.over) {
     const rest = heard.replace(/\b(hndoff|handoff|hand off|hdoff)\b/ig, ' '), pp = parseSpeech(rest, known), up = rest.toUpperCase().replace(/\s+/g, '');
     const a = (pp && pp.cs && G.ac.find(x => x.cs === pp.cs)) || G.ac.find(x => alive(x) && up.includes(x.cs)) || (!rest.trim() && G.selected);
     if (src === 'voice') renderTranscript(text, '');
@@ -2131,7 +2132,7 @@ function startGame(diff, opts) {
   let seen = false; try { seen = localStorage.getItem('mc_tut_seen') === '1'; } catch (e) {}
   if (!opts && diff === 'training' && !seen) openTutorial(0);
 }
-let linkChoice = localStorage.getItem('mc_link') === '1';
+let linkChoice = localStorage.getItem('stingerLink') === '1';
 const paintLink = () => { $('bLinkOn').classList.toggle('on', linkChoice); $('bLinkOff').classList.toggle('on', !linkChoice); };
 $('bLinkOn').onclick = () => { linkChoice = true; paintLink(); }; $('bLinkOff').onclick = () => { linkChoice = false; paintLink(); }; paintLink();
 $('bStart').onclick = () => { LINK.setOn(linkChoice); startGame(chosenDiff); };
@@ -2624,16 +2625,17 @@ function award(a, key, label) {
   log('good', `+10 ${label} (${a.tel})`); refreshPanel(true);
 }
 /* ---------- Link to Final Control (BroadcastChannel 'stinger-link') ---------- */
-const LINK = { on: false, ch: null, lastAck: -1e9, pendingHandoff: null,
+const LINK = { on: localStorage.getItem('stingerLink') === '1', ch: null, lastAck: -1e9, pendingHandoff: null,
   connected() { return Date.now() - this.lastAck < 8000; },
   post(m) { try { this.ch && this.ch.postMessage(m); } catch (e) {} },
   handoff(a, freq) {
     let coH = BRC, coA = isHelo(a) ? 1000 : 1200;
     for (const c of (a.climbout || [])) { if (c.k === 'hdg') coH = norm(c.v); else if (c.k === 'alt') coA = c.v; }
+    if (a.appCount == null) a.appCount = APP_MAX_PARS - 1;   // Marshal -> Final: full-stop PAR unless already practicing
     const m = { type: 'handoff', callsign: a.tel || a.cs, acType: isHelo(a) ? 'helo' : 'jet', freq, bearingFromShip: Math.round(appBrg(a)) % 360, rangeNm: Math.round(appRng(a) * 10) / 10,
       altitudeFt: Math.round(a.alt), speedKt: Math.round(a.ias), headingDeg: Math.round(norm(a.hdg)), approachNum: Math.min(APP_MAX_PARS, (a.appCount || 0) + 1),
       climbout: { heading: Math.round(coH), altitudeFt: coA }, simTime: Math.round(G.t), mv: MV, brc: TBRC, fb: FB(), dwh: DWH() };
-    this.post(m); a.phase = 'withFinal'; a.accepted = false; a.linkCs = m.callsign;
+    this.post(m); a.phase = 'withFinal'; a.accepted = false; a.linkCs = m.callsign; a.st = 'purple'; a.onFinal = false; a.turnDir = null; a.inForm = false;
     log('sys', `${a.cs} handed off to Final Control (${freq}, approach ${m.approachNum}/${APP_MAX_PARS}).`); refreshPanel(true);
   },
   complete(m) {
@@ -2647,7 +2649,7 @@ const LINK = { on: false, ch: null, lastAck: -1e9, pendingHandoff: null,
     log('sys', `${a.cs} ${m.outcome === 'waveoff' ? 'waved off' : 'low approach'} (Final Control, PAR ${a.appCount}/${APP_MAX_PARS}), flying climbout: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}.`);
   },
   status() { const el = $('linkStat'); if (el) el.textContent = this.on ? 'Linked · Final Control: ' + (this.connected() ? 'connected' : 'not detected') : ''; },
-  setOn(v) { v = false; this.on = v; localStorage.setItem('mc_link', v ? '1' : '0');
+  setOn(v) { this.on = v; localStorage.setItem('stingerLink', v ? '1' : '0');
     if (v && !this.ch && 'BroadcastChannel' in window) { this.ch = new BroadcastChannel('stinger-link');
       this.ch.onmessage = e => { const m = e.data || {}; if (m.type === 'hello-ack') this.lastAck = Date.now(); else if (m.type === 'hello') this.post({ type: 'hello-ack' }); else if (m.type === 'complete') this.complete(m); else HOFF.recv(m); this.status(); }; }
     if (!v && this.ch) { this.ch.close(); this.ch = null; this.lastAck = -1e9; }
@@ -2660,6 +2662,12 @@ const HOFF = { seen: new Set(),
   find(cs) { return G && G.ac.find(x => x.cs === cs || x.tel === cs || x.linkCs === cs); },
   start(a) {
     if (a.hoff && a.hoff.dir === 'out') { log('sys', `${a.cs} handoff already in progress.`); return; }
+    if (a.phase === 'withFinal') { log('sys', `${a.cs} already handed off to Final Control.`); return; }
+    // Linked + still on Marshal: full Approach-format handoff so Final places the aircraft (range/alt/spd).
+    if (LINK.on && LINK.connected() && a.phase === 'app') {
+      LINK.handoff(a, 'blue'); a.owner = 'FINAL';
+      return;
+    }
     const id = a.cs + '-' + Date.now(), solo = !(LINK.on && LINK.ch && LINK.connected());
     a.hoff = { dir: 'out', id, t0: Date.now(), solo }; a.owner = 'APP';
     const m = { type: 'handoff', cs: a.cs, from: 'APP', to: 'FINAL', id };
@@ -3040,15 +3048,30 @@ const MAR = {
       if (!M.run) log('sys', `${a.cs}: not commenced yet; will report 3 miles outbound after commencing.`);
       M.rpt3 = true; M.rpt3Done = false; parts.push('report 3 miles outbound');
     }
-    if (m.hoFinal && a.parArr) {   // PAR arrival: handed to Final, recovers on the final bearing (same as "go purple")
-      a.st = 'purple'; a.onFinal = false; a.turnDir = null; a.sector = null;
-      log('sys', `${a.cs} switched to Final${m.hoFreq ? ' (' + m.hoFreq + ')' : ''} for the PAR; off frequency, recovering to ${SHIP_NAME} on final bearing ${BRC3}.`); parts.push(m.hoFreq ? `go ${m.hoFreq}` : 'switching final');
-      if (G.selected === a) G.selected = null;
+    if (m.hoFinal && a.parArr) {   // PAR arrival: linked -> Final Control; solo -> self-recover on final (same as "go purple")
+      const freq = m.hoFreq || 'purple'; a.sector = null;
+      if (LINK.on && LINK.connected()) {
+        LINK.handoff(a, freq); parts.push(m.hoFreq ? `go ${m.hoFreq}` : 'switching final');
+        if (G.selected === a) G.selected = null;
+      } else {
+        if (LINK.on) log('warn', `Final Control not detected: ${a.cs} self-recovering.`);
+        a.st = 'purple'; a.onFinal = false; a.turnDir = null;
+        log('sys', `${a.cs} switched to Final${m.hoFreq ? ' (' + m.hoFreq + ')' : ''} for the PAR; off frequency, recovering to ${SHIP_NAME} on final bearing ${BRC3}.`); parts.push(m.hoFreq ? `go ${m.hoFreq}` : 'switching final');
+        if (G.selected === a) G.selected = null;
+      }
     } else if (m.hoFinal) {
       if (!M.run) { this.say(a, 'unable, not on the approach'); log('sys', `${a.cs}: hand off to Final only after commencing.`); return; }
-      for (const x of [a, ...G.ac.filter(w => w.inForm && w.lead === a.uid)]) { x.st = 'mfinal'; x.inForm = false; if (x !== a) { x.mar = JSON.parse(JSON.stringify(M)); } }
-      log('sys', `${a.cs} switched to Final${m.hoFreq ? ' (' + m.hoFreq + ')' : ''} (${this.T[M.run].name}); off Marshal frequency.`); parts.push(m.hoFreq ? `go ${m.hoFreq}` : 'switching final');
-      if (G.selected === a) G.selected = null;
+      const freq = m.hoFreq || 'blue', group = [a, ...G.ac.filter(w => w.inForm && w.lead === a.uid)];
+      if (LINK.on && LINK.connected()) {
+        for (const x of group) { if (x !== a && x.mar == null) x.mar = JSON.parse(JSON.stringify(M)); LINK.handoff(x, freq); }
+        parts.push(m.hoFreq ? `go ${m.hoFreq}` : 'switching final');
+        if (G.selected === a) G.selected = null;
+      } else {
+        if (LINK.on) log('warn', `Final Control not detected: ${a.cs} recovering on Marshal (standalone Final).`);
+        for (const x of group) { x.st = 'mfinal'; x.inForm = false; if (x !== a) { x.mar = JSON.parse(JSON.stringify(M)); } }
+        log('sys', `${a.cs} switched to Final${m.hoFreq ? ' (' + m.hoFreq + ')' : ''} (${this.T[M.run].name}); off Marshal frequency.`); parts.push(m.hoFreq ? `go ${m.hoFreq}` : 'switching final');
+        if (G.selected === a) G.selected = null;
+      }
     }
     if (m.commence) {
       const type = M.type || M.typeInf;
