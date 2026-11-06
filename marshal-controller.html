@@ -194,7 +194,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
   <div class="card">
     <h1>WASP MARSHAL</h1>
     <div style="color:var(--dim)" id="subTitle">Marshal, holding and LH-1 to LH-5 approaches</div>
-    <p id="introP">You\'re <b>Stinger Marshal</b>. Arriving aircraft check in 20 miles out. Assign each one a <b>marshal</b> (radial, distance, angels, expected approach time) and an <b>LH approach</b>, keep the altitudes apart, and clear them to <b>commence</b>. Patterns are drawn on the scope.</p>
+    <p id="introP">You\'re <b>Stinger Marshal</b>. Arriving aircraft check in 10 miles out. Assign each one a <b>marshal</b> (radial, distance, angels, expected approach time) and an <b>LH approach</b>, keep the altitudes apart, and clear them to <b>commence</b>. Patterns are drawn on the scope.</p>
     <div class="diffs">
       <div class="diff on" data-d="training"><b>Training</b><span>Up to 4 arrivals, a hint that shows your suggested next call.</span></div>
       <div class="diff" data-d="normal"><b>Normal</b><span>Up to 6 arrivals, firmer pilots. No hints.</span></div>
@@ -547,18 +547,22 @@ function parseSpeech(raw, known = []) {   // detect 'Stinger Approach' / 'Stinge
   const st = STINGER_RE.test(String(raw)), p0 = parseSpeech0(String(raw).replace(STINGER_RE_G, ' '), known);
   const p = p0.traffic ? p0 : parseSpeech1(raw, known); if (p) p.stinger = st; return p;
 }
+const CLIMBOUT_HDR_RE = /\b(?:(?:on|after|your)\s+)?climb(?:ed|ing|s)?\s*-?\s*outs?\b(?:\s+instructions?)?(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?|\b(?:missed\s+approach|wave\s*-?\s*off|on\s+(?:the\s+)?go)\s+instructions?\b(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?|(?<!\bmarshal\s)(?<!\bmarshall\s)(?<!\bmartial\s)(?<!\bsay\s)\b(?:climb\w*\s+|your\s+)?instructions?\b(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?(?=\s*,?\s*(?:fly|turn|come|climb|descend|maintain|heading|runway|brc|base\s+recovery|angels|on\s+climb|go\s+(?:red|silver)))/i;
 function parseSpeech1(raw, known = []) {
   // our own station name ('Stinger Approach' / 'Stinger Marshal' and recognizer variants) is ignored wherever it appears
   raw = String(raw).replace(STINGER_RE_G, ' ').replace(/^\s*,\s*/, '');
-  // ANY mention of climb out / climbout / climb-out / climbing out makes this a climbout-storage call ONLY:
-  // heading / altitude / speed anywhere in it are stored, nothing else in the transcript is executed now
-  const m = /\bclimb(?:ing)?\s*-?\s*outs?\b(?:\s+instructions?)?(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?/i.exec(String(raw));
+  // ANY mention of climbout / climbout instructions makes this a climbout-storage call ONLY:
+  // heading / altitude / speed / frequency inside it are stored in a.climbout, never executed now
+  const m = CLIMBOUT_HDR_RE.exec(String(raw));
   if (!m) return parseSpeech0(raw, known);
   const pre = parseSpeech0(raw.slice(0, m.index), known), post = String(raw).slice(m.index + m[0].length);
   const sub = parseSpeech0(post, []), keep = c => c.k === 'hdg' || c.k === 'alt' || c.k === 'spd' || c.k === 'goRed' || c.k === 'goSilver';
-  let v = sub.cmds.filter(keep); if (!v.some(c => c.k === 'hdg') && /\brunway\s+heading\b/i.test(post)) v.push({ k: 'hdg', v: BRC, dir: null });
-  for (const c of pre.cmds.filter(keep)) if (!v.some(x => x.k === c.k)) v.push(c);
-  pre.cmds = [{ k: 'climbout', v }]; pre.raw = raw; pre.hdgMissing = false; return pre;
+  let v = sub.cmds.filter(keep);
+  if (!v.some(c => c.k === 'hdg') && /\b(?:runway\s+heading|ship'?s?\s+heading|base\s+recovery\s+course|b\s*r\s*c)\b/i.test(post)) v.push({ k: 'hdg', v: BRC, dir: null });
+  if (!v.some(c => c.k === 'goRed' || c.k === 'goSilver') && /\b(?:(?:button|frequency|switch(?:ing)?|contact)\s+red|marshal\s+frequency)\b/i.test(post)) v.push({ k: 'goRed' });
+  const preSetup = pre.cmds.filter(c => c.k === 'radarContact' || c.k === 'cca' || c.k === 'button' || c.k === 'pos' || c.k === 'rid' || c.k === 'dirty' || c.k === 'landChk');
+  if (!preSetup.length) { for (const c of pre.cmds.filter(keep)) if (!v.some(x => x.k === c.k)) v.push(c); }
+  pre.cmds = [...preSetup, { k: 'climbout', v }]; pre.raw = raw; pre.hdgMissing = false; return pre;
 }
 const TRAFFIC_RE = /^[\s,]*(?:traffic|traffics|traffic\s+s|trafic|traffik|traffick|trafficking)\b/;   // first word after the callsign
 const DIRBRG = { north: 360, northeast: 45, east: 90, southeast: 135, south: 180, southwest: 225, west: 270, northwest: 315 };
@@ -1801,7 +1805,8 @@ function fixSpeech(raw) {
   s = s.replace(/\bmark\s+(?:your|you|yer)\s+(?:farther|fathers|mother's|bother)\b/g, 'mark your father');
   s = s.replace(/\bcross\s*-?\s*wind\b/g, 'crosswind').replace(/\bdown\s*-?\s*wind\b/g, 'downwind').replace(/\bup\s*-?\s*wind\b/g, 'upwind').replace(/\bdog\s*-?\s*leg\b/g, 'dogleg').replace(/\bbase\s+like\b/g, 'base leg');
   s = s.replace(/\b(?:radar\s+contacts?|radio\s+contact|raider\s+contact|radar\s+can\s+tact)\b/g, 'radar contact');
-  s = s.replace(/\bclimb\s+(?:aut|about)\b|\bclimate\b/g, 'climb out').replace(/\bperform\s+(?:landing|landings|lending)\s+(?:check|checks|checking)\b/g, 'perform landing checks');
+  s = s.replace(/\b(?:climb(?:ed|ing|s)?[\s\-]*(?:outs?|aut|about|up|on|all|our|hour|it)|(?:clime|claim|crime|prime|time|line|fine|find|fly|come|call)[\s\-]*outs?|timeout|climber|climate)\s+instructions?\b/g, 'climb out instructions');
+  s = s.replace(/\b(?:climb(?:ed|s)?\s*-?\s*outs?|climb\s+(?:aut|about)|climate)\b/g, 'climb out').replace(/\b(?:clime|claim|crime|prime|time|line|fine|find|fly|come|call)\s*-?\s*outs?\b(?=\s*,?\s*(?:fly|turn|come|climb|maintain|heading|runway|angels|brc\b))/g, 'climb out').replace(/\bperform\s+(?:landing|landings|lending)\s+(?:check|checks|checking)\b/g, 'perform landing checks');
   s = s.replace(/\b(\d+|zero|one|two|three|four|five|six|seven|eight|nine)\s+point\s+(\d|zero|one|two|three|four|five|six|seven|eight|nine)\b/g, (m, a, b) => `${/\d/.test(a) ? a : NUMW.indexOf(a)}.${/\d/.test(b) ? b : NUMW.indexOf(b)}`);
   s = s.replace(/\b(?:correct\s*-?\s*ions?|corrections|korrection|correctioned)\b/g, 'correction').replace(/\bcorrection\b\s*[,.;:!-]*/g, ' correction ');
   s = fuzzyCallsigns(s);
@@ -1827,16 +1832,18 @@ function fuzzyCallsigns(s) {   // replace 1-2 word near-misses of an active call
   }
   return ' ' + out.join(' ') + ' ';
 }
-const VOCAB = ['stinger approach', 'stinger marshal', 'case three recovery', 'marshal', 'outbound bearing', 'lima hotel', 'brc', 'expected approach time', 'report commencing', 'cleared for', 'radar contact', 'take angels', 'angels', 'climb out', 'dirty up', 'perform landing checks', 'expect final button', 'copper', 'purple', 'silver', 'red', 'go purple', 'go copper', 'go silver', 'go red', 'vectors for cca', 'cca approach', 'mark your father', 'upwind', 'crosswind', 'downwind', 'base', 'abeam', 'dogleg', 'heading', 'miles', 'left', 'right', 'maintain', 'knots', 'turn'];
-const VOCAB_WORDS = new Set(VOCAB.join(' ').split(' ').concat(['your', 'for', 'approach', 'final', 'button', 'take', 'expect', 'checks', 'landing', 'perform', 'contact', 'radar', 'mother', 'father', 'mark', 'climb', 'out', 'dirty', 'up', 'go', 'case', 'recovery', 'outbound', 'bearing', 'marshal', 'commencing', 'commence', 'cleared', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'zero']));
+const VOCAB = ['stinger approach', 'stinger marshal', 'case three recovery', 'marshal', 'outbound bearing', 'lima hotel', 'brc', 'expected approach time', 'report commencing', 'cleared for', 'radar contact', 'take angels', 'angels', 'climb out instructions', 'climbout instructions', 'climb out', 'climbout', 'runway heading', 'dirty up', 'perform landing checks', 'expect final button', 'copper', 'purple', 'silver', 'red', 'go purple', 'go copper', 'go silver', 'go red', 'vectors for cca', 'cca approach', 'mark your father', 'upwind', 'crosswind', 'downwind', 'base', 'abeam', 'dogleg', 'heading', 'miles', 'left', 'right', 'maintain', 'knots', 'turn'];
+const VOCAB_WORDS = new Set(VOCAB.join(' ').split(' ').concat(['your', 'for', 'approach', 'final', 'button', 'take', 'expect', 'checks', 'landing', 'perform', 'contact', 'radar', 'mother', 'father', 'mark', 'climb', 'climbout', 'climbouts', 'instructions', 'instruction', 'runway', 'out', 'dirty', 'up', 'go', 'case', 'recovery', 'outbound', 'bearing', 'marshal', 'commencing', 'commence', 'cleared', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'zero']));
 function scoreAlt(t, conf) {
-  const f = ' ' + fixSpeech(t) + ' '; let sc = (conf || 0) * 2;
+  const f = ' ' + fixSpeech(MC ? mcFixSpeech(t) : t) + ' '; let sc = (conf || 0) * 2;
   for (const v of VOCAB) if (f.includes(' ' + v + ' ')) sc += v.split(' ').length;
   const names = acNames();
   for (const n of names) if (f.includes(' ' + n.name.replace(/\s/g, '') + ' ')) { sc += 3 + (n.ac.accepted ? 1 : 0);
     const num = (n.ac.tel.match(/\d+/) || [''])[0]; if (num && normalizeSpeech(f).replace(/\s/g, '').includes(num)) sc += 3; }
   try {
-    const p = parseSpeech(f, G ? G.ac.filter(alive).map(a => a.cs) : []); sc += p.cmds.length * 2 + (p.cs && !p.csUnknown ? 3 : 0) - (p.csUnknown ? 2 : 0);
+    const p = parseSpeech(f, G ? G.ac.filter(alive).map(a => a.cs) : []);
+    const cmdScore = p.cmds.reduce((acc, c) => acc + (c.k === 'climbout' ? (2 + (c.v ? c.v.length : 0)) * 2 + 2 : 2), 0);
+    sc += cmdScore + (p.cs && !p.csUnknown ? 3 : 0) - (p.csUnknown ? 2 : 0);
     if (MC) { const mp = MAR.parse(mcFixSpeech(t)); if (mp) sc += (mp.type ? 3 : 0) + (mp.marshal && mp.marshal.R != null ? 4 : 0) + (mp.marshal && mp.marshal.D != null ? 3 : 0) + (mp.marshal && mp.marshal.alt != null ? 3 : 0) + (mp.outbound != null ? 3 : 0) + (mp.brc != null ? 2 : 0); }
   } catch (e) {}
   return sc;
@@ -1857,7 +1864,9 @@ function mcFixSpeech(t) {   // forgiving marshal-flow wording: common speech-to-
   s = s.replace(/\bl(?:h|8)\s*-?\s*([1-5])\b/gi, ' LH$1 ').replace(/\blima\s+hotel\s*([1-5])\b/gi, ' LH$1 ').replace(/\b(?:lh|l8)(to|too|two)\b/gi, ' LH2 ').replace(/\bl82\b/gi, ' LH2 ');
   s = s.replace(/\b(?:angel|angles|angle|ankles|angela|angeles)\b/gi, 'angels');
   s = s.replace(/\bout[\s\-]+bound\b|\boutbond\b|\boutbounds\b|\bout\s+found\b/gi, 'outbound');
-  s = s.replace(/\breport\s+commence(?:d|s)?\b/gi, 'report commencing').replace(/\b(?:commencin|commensing|commencement|comments\s+ing|come\s+and\s+sing)\b/gi, 'commencing');
+  s = s.replace(/\breport\s+(?:commence(?:d|s|ing)?|commencin|commensing|commencement|comments?(?:\s+ing)?|come\s+and\s+sing)\b/gi, 'report commencing').replace(/\b(?:commencin|commensing|commencement|comments\s+ing|come\s+and\s+sing)\b/gi, 'commencing');
+  s = s.replace(/\b(?:climb(?:ed|ing|s)?[\s\-]*(?:outs?|aut|about|up|on|all|our|hour|it)|(?:clime|claim|crime|prime|time|line|fine|find|fly|come|call)[\s\-]*outs?|timeout|climber|climate)\s+instructions?\b/gi, 'climb out instructions');
+  s = s.replace(/\b(?:climbed|climbs)\s*-?\s*outs?\b/gi, 'climb out');
   s = s.replace(/\b(?:squak|squad|squawks|squaw|squalk|sqawk|squark|squat|squawked|squawking|squaw\s+k)\b/gi, 'squawk').replace(/\bsquawk\s+(?:normally|norma|nor\s*mal|formal)\b/gi, 'squawk normal');
   s = s.replace(/\b(?:goal|gold|gul|ghost|go\s+to|goes|grow|glow|go\s+on)\s+(blue|blew|red|read|bread)\b/gi, 'go $1').replace(/\bgo\s+blew\b/gi, 'go silver').replace(/\bgo\s+(?:read|bread)\b/gi, 'go red');
   s = s.replace(/\b(?:martial|marshall|marshals|marshalls|martian)\b/gi, 'marshal').replace(/\bradar\s+(?:contract|contacts|context|comtact)\b/gi, 'radar contact');
@@ -1915,7 +1924,8 @@ function handleTranscript(text, src) {
     return { cs: a.cs, cmds: ['buster'], str: 'signal buster' };
   }
   const heardNoShip = heard.replace(STINGER_RE_G, ' ');
-  if (G && !G.over && MAR.trigger.test(heardNoShip)) {   // marshal / LH approach / commence / missed approach
+  const isClimboutTx = CLIMBOUT_HDR_RE.test(heardNoShip) || CLIMBOUT_HDR_RE.test(text);
+  if (G && !G.over && !isClimboutTx && MAR.trigger.test(heardNoShip)) {   // marshal / LH approach / commence / missed approach
     const mp = MAR.parse(heardNoShip) || MAR.parse(text);
     if (mp) {
       const ki = heardNoShip.search(MAR.trigger);
@@ -2272,7 +2282,7 @@ const TUT_SHIP = {
 };
 TUT.splice(0, TUT.length,
   ['1. Marshal & LH approaches', `<p>All radials are <b>relative to BRC</b>: the 030 radial is bearing BRC+030 from the ship (with BRC 360 they are the listed values), so the whole pattern turns with the ship.</p>
-   <ul><li><b>Marshal</b>: "Venom two one, marshal on the zero niner zero radial, seven miles, angels one point five, expected approach time one five". The pilot answers with the callsign, flies there and holds (left-hand racetrack, 1 min outbound) and reports "established in marshal".</li>
+   <ul><li><b>Marshal</b>: "Venom two one, Case three recovery, LH2 approach with CCA final, marshal 030 at 2, angels 2, BRC 360, outbound bearing 210". The pilot answers with the callsign, flies to 030 at 2 and holds quietly (no established call); only when you say "<b>report commencing</b>" do they report "commencing" at the fix.</li>
    <li><b>Approach type</b>: "expect / cleared LH-1 … LH-5 approach" ("L H one", "lima hotel one", "LH1" all work; "emergency approach" for the emergency helo marshal). <b>Commence</b>: "Venom two one, commence". <b>Missed approach</b>: "execute missed approach" (pilots also go missed on their own at the MAP). Any heading, altitude, sector or go-purple call cancels the procedure (radar vectors).</li>
    <li><b>Full marshal call</b>: "Venom two one, case three recovery, LH2 approach with CCA final, marshal 030 at 2, angels 2, BRC 360, outbound bearing 210." The pilot answers with the callsign only. Outbound bearing = DWH + 30 (DWH = BRC + 180), used for every LH type for now.</li>
    <li><b>Jets only</b> (whole thousands, minimum angels 2): <b>LH-1</b> 030 radial at 4 DME; <b>LH-2</b> 030 at 2; <b>LH-3</b> 180 at (angels + 15) DME. Missed (0.75 NM): climb on BRC to 1,200; no instructions by 4 NM / 2 min: turn downwind, report abeam.</li>
@@ -2282,7 +2292,7 @@ TUT.splice(0, TUT.length,
    <li><b>Flights</b>: for now only one flight checks in: two jets as a flight of two (one call by the leader). Instructions to the leader apply to the flight; calling the wingman by its callsign gives it its own instructions. Only the leader squawks; the wingman shows as a raw return until you tell it "squawk normal".</li>
    <li><b>Geopoints</b>: double-click (double-tap) the scope to drop a geopoint (GPn with radial/DME from the ship); double-click it again to delete; ⚙ Settings → Clear geopoints.</li>
 </ul>`],
-  ['2. Arrivals & CCA pattern', `<p>Three waves check in on Marshal: a <b>flight of two jets at 20 NM</b> for marshal, then a <b>single arrival (jet or helo) at 10 NM</b> between the 270 and 090 radials requesting a <b>CCA approach</b>, then a <b>second flight of two jets at 20 NM</b> for marshal. Click (tap) a target to accept it.</p><p><b>CCA arrival (Approach phraseology)</b>: work the 10 NM single arrival in the CCA pattern just like Approach — "radar contact (10 miles north of mother), turn left heading 180, descend and maintain angels 1.2 (angels 1 for helos), vectors for CCA approach, expect final button purple/copper", pattern position calls (upwind, crosswind, downwind, abeam, dogleg, base), "dirty up" (jets) / "perform landing checks" (helos), climbout instructions (with "go red" for Marshal), "go red" (Marshal frequency), and handoff with "go purple" / "go copper" (Final) or "go silver" (Approach).</p>`],
+  ['2. Arrivals & CCA pattern', `<p>Three waves check in on Marshal: a <b>flight of two jets at 10 NM</b> for marshal, then a <b>single arrival (jet or helo) 6 NM from the right</b> requesting a <b>CCA approach</b>, then a <b>second flight of two jets at 10 NM</b> for marshal. Click (tap) a target to accept it.</p><p><b>CCA arrival (Approach phraseology)</b>: work the 6 NM arrival in the CCA pattern just like Approach — "radar contact (6 miles east of mother), turn left heading 180, descend and maintain angels 1.2 (angels 1 for helos), vectors for CCA approach, expect final button purple/copper", pattern position calls (upwind, crosswind, downwind, abeam, dogleg, base), "dirty up" (jets) / "perform landing checks" (helos), climbout instructions (stored until climbout; pilot responds with callsign only), "go red" (Marshal frequency), and handoff with "go purple" / "go copper" (Final) or "go silver" (Approach).</p>`],
   ['3. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>HOLD TO TALK</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
    <ul><li><b>Best in Chrome or Edge on a computer.</b> Firefox has no speech recognition; Safari and iOS vary. You can always <b>type</b> the same words in the box.</li>
    <li>Chrome's speech recognition <b>needs an internet connection</b>, because the audio goes to Google's speech service.</li>
@@ -2746,20 +2756,20 @@ window.__HOFF = HOFF;
 
 setTimeout(() => LINK.setOn(LINK.on), 0);
 setInterval(() => { if (LINK.on) LINK.post({ type: 'hello' }); LINK.status(); }, 3000);
-function mcSpawnFlight(rel) {   // flight of 2 jets (same callsign word, consecutive numbers) checking in at 20 NM
+function mcSpawnFlight(rel) {   // flight of 2 jets (same callsign word, consecutive numbers) checking in at 10 NM
   const usedWords = new Set(G.ac.map(x => x.cs.replace(/\d+$/, '')));
   const JETS = AIRLINES.filter(x => x.types.some(t => TYPES[t] && !TYPES[t].helo));
   const pool = JETS.filter(x => !usedWords.has(x.icao));
   const al = pick(pool.length ? pool : JETS);
   let n1 = randi(11, 68);
   for (let k = 0; k < 30; k++) { if (!G.ac.some(x => x.cs === al.icao + n1 || x.cs === al.icao + (n1 + 1))) break; n1 = randi(11, 68); }
-  const nums = [n1, n1 + 1], r0 = 20, rRel = rel != null ? rel : rand(150, 250);
+  const nums = [n1, n1 + 1], r0 = 10, rRel = rel != null ? rel : rand(150, 250);
   for (let i = 0; i < 2; i++) {
     const cs = al.icao + nums[i], ld = i ? G.ac.find(x => x.cs === al.icao + nums[0]) : null;
     mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: rRel, rng: i ? r0 + 0.5 : r0, lead: ld ? ld.uid : null, flight: i ? null : 2, wing: i ? null : al.icao + nums[1] });
   }
 }
-function mcArrivals(want) {   // 3-wave Marshal sequence (all at 20 NM): Wave 1 flight -> Wave 2 single bird (270-090) -> Wave 3 flight
+function mcArrivals(want) {   // 3-wave Marshal sequence: Wave 1 flight (10 NM) -> Wave 2 single bird (6 NM right) -> Wave 3 flight (10 NM)
   if (G.mcWave == null) {
     if (G.t < 10) return;
     mcSpawnFlight(240);
@@ -2772,7 +2782,7 @@ function mcArrivals(want) {   // 3-wave Marshal sequence (all at 20 NM): Wave 1 
     return;
   }
   if (G.mcWave === 2 && G.t >= G.nextWaveAt) {
-    mcSpawnFlight();   // second flight of 2 jets for marshal (inbound from 150-250 deg at 20 NM)
+    mcSpawnFlight();   // second flight of 2 jets for marshal (inbound from 150-250 deg at 10 NM)
     G.mcWave = 3; G.nextArr = G.t + rand(240, 300);
     return;
   }
@@ -2788,7 +2798,7 @@ function mcArrivals(want) {   // 3-wave Marshal sequence (all at 20 NM): Wave 1 
 function mcArrive(spec = {}) {
   const used = G.ac.map(a => a.cs);
   let a; for (let i = 0; i < 20; i++) { a = makeAc(spec); if (!used.includes(a.cs)) break; }
-  const helo = isHelo(a), rel = spec.rel != null ? spec.rel : (helo ? rand(40, 140) : rand(150, 260)) , R = spec.rng || 20;   // check in at 20 NM
+  const helo = isHelo(a), rel = spec.rel != null ? spec.rel : (helo ? rand(40, 140) : rand(150, 260)) , R = spec.rng || 10;   // check in at 10 NM
   const b = norm(BRC + rel); a.e = R * Math.sin(b * DEG); a.n = R * Math.cos(b * DEG);
   a.phase = 'app'; a.pars = 0; a.armed = false; a.turnDir = null;
   a.hdg = a.tgtHdg = Math.round(norm(b + 180 + rand(-20, 20)));   // inbound, roughly toward mother
@@ -2803,10 +2813,9 @@ function mcArrive(spec = {}) {
   return a;
 }
 window.__mcArrive = mcArrive;
-/* Wave 2 single CCA arrival: one aircraft (random jet or helo, distinct callsign word) checks in at 10 NM on a radial between
-   270 and 090 (forward/northern semicircle: 270° clockwise through 360° to 090°), flying the CCA pattern with Approach phraseology
-   ("request CCA approach"); "go purple/copper" → Final, "go silver" → Approach, "contact final" → Final. Permanent: Marshal=Red, Approach=Silver, Final=Purple/Copper. */
-const MC_PAR_ARR = { rng: 10, rel: [-90, 90] };   // 10 NM out, BRC + [-90..+90] => 270°..360°..090°
+/* Wave 2 single CCA arrival: one aircraft (random jet or helo, distinct callsign word) checks in 6 NM from the right (East / 080-100 radial),
+   flying the CCA pattern with Approach phraseology ("request CCA approach"); "go purple/copper" → Final, "go silver" → Approach, "contact final" → Final. Permanent: Marshal=Red, Approach=Silver, Final=Purple/Copper. */
+const MC_PAR_ARR = { rng: 6, rel: [80, 100] };   // 6 NM from the right (BRC + 80..100 => ~090° East)
 function mcParArrive() {
   const helo = Math.random() < 0.5, words = G.ac.map(x => x.cs.replace(/\d+$/, ''));
   const pool = AIRLINES.filter(x => x.types.some(t => TYPES[t] && !!TYPES[t].helo === helo) && !words.includes(x.icao));
@@ -2836,7 +2845,7 @@ function appCheckIn(a, again) {
   const posit = `${pB} for ${pR} from mother, `, positSay = `${pB.split('').map(d => DIGW[+d]).join(' ')} for ${pRSay} from mother, `;
   a.checkInPosit = { brg: appBrg(a), rng: pR0, text: posit };
   if (MC && a.lead) return;   // wingman
-  if (MC && a.parArr) {   // CCA arrival at 10 NM (270-090): Approach-style check-in on Marshal, requesting CCA approach
+  if (MC && a.parArr) {   // CCA arrival 6 NM from the right: Approach-style check-in on Marshal, requesting CCA approach
     pilotSay(a, `${SHIP_NAME} Marshal, ${a.tel}, ${posit}angels ${appAngels(a.alt)}, state ${f}, ${n} ${sw} on board, request CCA approach.`,
       `${SHIP_NAME} Marshal, ${a.telSay}, ${positSay}angels ${appAngelsSay(a.alt)}, state ${fSay}, ${NUMW[n]} ${sw} on board, request C C A approach.`);
     if (!G.selected) selectAc(a); return; }
@@ -3067,7 +3076,7 @@ const MAR = {
       const e = post.match(/(?:expected|expect)\s+approach\s+time\s*(\d{1,2})\b/) || post.match(/\beat\s*(\d{1,2})\b/);
       out.marshal = { R: r ? +r[1] % 360 : null, Rabs: r ? +r[1] % 360 : null, D: d ? +d[1] : null, alt: an ? Math.round(+an[1] * 1000) : ft ? +ft[1] : null, eat: e ? +e[1] : null };
     }
-    if (/\breport\s+commenc/.test(s)) out.cleared = true;
+    if (/\breport\s+commenc/.test(s)) { out.cleared = true; out.rptComm = true; }
     else if (/\bcommenc(?:e|ing)\b(?!\s+(?:your\s+)?descen)/.test(s)) out.commence = true;
     if ((out.type && /\bcleared\b/.test(s)) || /\bcleared\s+(?:for\s+)?(?:the\s+)?approach\b/.test(s)) out.cleared = true;   // "cleared for LH-2 approach, report commencing": commence at the marshal fix
     if (/\breport\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound/.test(s)) out.rpt3 = true;
@@ -3118,12 +3127,16 @@ const MAR = {
       parts.push(`outbound ${h3z(m.outbound)}`); }
     if (m.brc != null && Math.abs(angDiff(m.brc, BRC)) > 2) { G.score -= this.PEN; log('bad', `−${this.PEN}: BRC given to ${a.cs} as ${h3z(m.brc)}; BRC is ${BRC3}.`); Sound.buzz(); }
     if (m.caseN != null && m.caseN !== 3) log('warn', `${a.cs}: marshal ops here are Case III (heard Case ${m.caseN}).`);
+    if (m.rptComm) M.rptComm = true;
     if (m.cleared) {
-      if (M.R == null) { this.say(a, 'say marshal instructions'); return; }
+      if (M.R == null && !M.run) { this.say(a, 'say marshal instructions'); return; }
       const cType = M.type || M.typeInf;
-      M.cleared = true; parts.push('cleared, report commencing');
-      if (M.ph !== 'hold' && M.ph !== 'toMar') log('sys', `${a.cs} cleared${cType ? ' for ' + this.T[cType].name : ''}; not in marshal yet.`);
-      else log('sys', `${a.cs} cleared${cType ? ' for ' + this.T[cType].name : ''}: will report commencing at marshal fix ${h3z(BRC + M.R)}/${M.D}.`);
+      if (M.run && m.rptComm) { M.rptComm = false; parts.push('report commencing'); says.push('commencing'); }
+      else {
+        M.cleared = true; parts.push(M.rptComm ? 'cleared, report commencing' : 'cleared');
+        if (M.ph !== 'hold' && M.ph !== 'toMar') log('sys', `${a.cs} cleared${cType ? ' for ' + this.T[cType].name : ''}; not in marshal yet.`);
+        else log('sys', `${a.cs} cleared${cType ? ' for ' + this.T[cType].name : ''}: will commence${M.rptComm ? ' and report commencing' : ''} at marshal fix ${h3z(BRC + M.R)}/${M.D}.`);
+      }
     }
     if (m.rpt3) {
       if (!M.run) log('sys', `${a.cs}: not commenced yet; will report 3 miles outbound after commencing.`);
@@ -3175,9 +3188,9 @@ const MAR = {
       if (!type) { this.say(a, 'say approach type'); return; }
       if (M.R != null && M.D != null) {
         const F = this.pt(M.R, M.D), p = this.loc(a), dF = Math.hypot(F[0] - p[0], F[1] - p[1]);
-        if (dF <= 0.4 && Math.abs(angDiff(this.hdgL(a), M.R)) <= 45) { this.commence(a, type); parts.push('commencing'); says.push('commencing'); }
-        else { M.cleared = true; if (!M.ph) M.ph = 'toMar'; parts.push('commence at marshal fix'); log('sys', `${a.cs}: will commence and report at marshal fix ${h3z(BRC + M.R)}/${M.D}.`); }
-      } else { this.commence(a, type); parts.push('commencing'); says.push('commencing'); }
+        if (dF <= 0.4 && Math.abs(angDiff(this.hdgL(a), M.R)) <= 45) { const sayC = !!M.rptComm; M.rptComm = false; this.commence(a, type); parts.push('commencing'); if (sayC) says.push('commencing'); }
+        else { M.cleared = true; if (!M.ph) M.ph = 'toMar'; parts.push('commence at marshal fix'); log('sys', `${a.cs}: will commence${M.rptComm ? ' and report commencing' : ''} at marshal fix ${h3z(BRC + M.R)}/${M.D}.`); }
+      } else { const sayC = !!M.rptComm; M.rptComm = false; this.commence(a, type); parts.push('commencing'); if (sayC) says.push('commencing'); }
     }
     if (m.missed) {
       if (M.ph && /^(out1|iaf2|out2|turnF|final|h4a|arc|h5a|out5)$/.test(M.ph)) { this.missed(a); parts.push('missed approach'); says.push('missed approach'); }
@@ -3224,7 +3237,7 @@ const MAR = {
           M.inMar = true; M.t0 = G.t;
           const alignedIn = Math.abs(angDiff(this.hdgL(a), cin)) <= 35;
           if (M.cleared && (M.type || M.typeInf) && alignedIn) {
-            this.commence(a, M.type || M.typeInf); this.say(a, 'commencing');
+            const sayC = !!M.rptComm; M.rptComm = false; this.commence(a, M.type || M.typeInf); if (sayC) this.say(a, 'commencing');
           } else {
             M.ph = 'hold';
             M.leg = alignedIn ? 'tOut' : 'out';   // aligned inbound -> left 180 turn onto SE outbound leg; arriving from SW/other -> join SE outbound leg, turn left inbound to cross F on cin
@@ -3237,12 +3250,12 @@ const MAR = {
         const Dt = 2 * (Math.max(110, a.gs || a.ias || 250) / 3600) / (3 * DEG);   // exact 3 deg/s 180-turn diameter
         const Fout = [F[0] + Dt * Math.sin((cin - 90) * DEG), F[1] + Dt * Math.cos((cin - 90) * DEG)];   // SE parallel outbound leg
         a.tgtAlt = M.alt;
-        if (!M.est && Math.abs(a.alt - M.alt) <= 100) { M.est = true; this.say(a, `established in marshal, angels ${appAngels(M.alt)}`, `established in marshal, angels ${appAngelsSay(M.alt)}`); log('sys', `${a.cs} established in marshal ${h3z(BRC + M.R)}R ${M.D} NM, angels ${appAngels(M.alt)} (${fmtAlt(Math.round(a.alt))} ft).`); }
+        if (!M.est && Math.abs(a.alt - M.alt) <= 100) { M.est = true; log('sys', `${a.cs} established in marshal ${h3z(BRC + M.R)}R ${M.D} NM, angels ${appAngels(M.alt)} (${fmtAlt(Math.round(a.alt))} ft).`); }
         if (M.leg === 'in') {
           const al = this.along(F, cin, p);
           this.setH(a, (dF <= 0.8 || al > 0) ? this.direct(F, p) : this.track(F, cin, p));
           if (dF <= 0.32 && al >= -0.25) {
-            if (M.cleared && (M.type || M.typeInf)) { this.commence(a, M.type || M.typeInf); this.say(a, 'commencing'); break; }
+            if (M.cleared && (M.type || M.typeInf)) { const sayC = !!M.rptComm; M.rptComm = false; this.commence(a, M.type || M.typeInf); if (sayC) this.say(a, 'commencing'); break; }
             M.leg = 'tOut'; M.t0 = G.t;
           }
         }
@@ -3498,7 +3511,7 @@ function appExecute(p, src) {
   if (a.firstTx) { a.firstTx = false; if (p.stinger && !MC) award(a, 'cs', 'Stinger Approach'); }   // never penalized
   const rb = [], rbSay = []; let marked = false, secRb = 0;
   for (const c of p.cmds) {
-    if (MC && !a.parArr && ['sector', 'purple', 'cca', 'button', 'climbout', 'climbOut', 'pos', 'rid', 'landChk', 'dirty'].includes(c.k)) { log('sys', `${cmdStr(c)}: not used on the Marshal scope (Approach only).`); continue; }
+    if (MC && !a.parArr && ['sector', 'purple', 'cca', 'button', 'climbOut', 'pos', 'rid', 'landChk', 'dirty'].includes(c.k)) { log('sys', `${cmdStr(c)}: not used on the Marshal scope (Approach only).`); continue; }
     if (MC && !a.parArr && c.k === 'radarContact') { rb.push('roger'); rbSay.push('roger'); continue; }
     if (c.k === 'landChk') {   // helos slow to 100-130 kt; jets ignore it
       if (isHelo(a)) award(a, 'slow', 'landing checks');
@@ -3533,7 +3546,7 @@ function appExecute(p, src) {
       MAR.cancel(a, 'sector'); a.sector = { n: c.v, c: SECTOR_CTR[c.v], R: SECTOR_PT_NM, est: false }; a.turnDir = null;
       secRb = c.v; continue;
     }
-    if (c.k === 'climbout') { if (c.v.length) { a.climbout = c.v.slice(); award(a, 'co', 'climbout instructions'); } rb.push('wilco'); rbSay.push('wilco'); continue; }   // stored for after the low approach
+    if (c.k === 'climbout') { a.climbout = c.v.slice(); award(a, 'co', 'climbout instructions'); log('sys', `${a.cs} stored climbout instructions${c.v.length ? ': ' + c.v.map(cmdStr).join(', ') : ''} (standing by).`); rb.push('wilco'); rbSay.push('wilco'); continue; }   // stored for after the low approach
     if (c.k === 'cca') { award(a, 'cca', 'vectors for CCA'); rb.push('wilco'); rbSay.push('wilco'); continue; }
     if (c.k === 'button') { award(a, 'btn', 'expect final button'); a.button = c.v; rb.push('wilco'); rbSay.push('wilco'); continue; }
     if (c.k === 'goRed') { if (a.hoff && a.hoff.dir === 'in') HOFF.click(a); a.phase = 'app'; a.st = 'ctl'; a.onFinal = false; a.hoffFreq = null;
@@ -3621,7 +3634,7 @@ IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Ma
 function appPanel() {
   const hint = $('hint');
   hint.style.display = G.d.hints ? 'block' : 'none';
-  if (G.d.hints && MC) hint.innerHTML = `💡 A flight of two checks in for marshal. Click a target to accept it, assign a marshal ("<b>${G.selected ? G.selected.tel : 'Venom two one'}</b>, Case three recovery, LH2 approach with CCA final, marshal 030 at 2, angels 2, BRC ${BRC3}, outbound bearing ${h3z(MAR.outbound())}"). The pilot answers with the callsign only, then "<b>commence</b>" at the EAT. Jets: LH-1 030/4, LH-2 030/2, LH-3 180/angels+15; helos: LH-4 090/7, LH-5 030/2 (radials = BRC + value). Outbound bearing = DWH + 30. See ? Help.`;
+  if (G.d.hints && MC) hint.innerHTML = `💡 A flight of two checks in for marshal. Click a target to accept it, assign a marshal ("<b>${G.selected ? G.selected.tel : 'Venom two one'}</b>, Case three recovery, LH2 approach with CCA final, marshal 030 at 2, angels 2, BRC ${BRC3}, outbound bearing ${h3z(MAR.outbound())}"). The pilot answers with the callsign only; say "<b>cleared for LH2 approach, report commencing</b>" when ready to push. Jets: LH-1 030/4, LH-2 030/2, LH-3 180/angels+15; helos: LH-4 090/7, LH-5 030/2 (radials = BRC + value). Outbound bearing = DWH + 30. See ? Help.`;
   else if (G.d.hints) hint.innerHTML = `💡 Vector your launches onto the final approach course (FB ${BRC3}, inbound from ${hdg3(norm(BRC + 180))}) and descend them to 3,000 ft or below inside 3 NM to hand them to ${SHIP_NAME} Final. Aircraft launch from ${SHIP_NAME} one at a time (every 4–6 min), fly up to ${APP_MAX_PARS} practice PARs (low approach, then back to you) and recover full stop on the last. After each check-in, your first altitude must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets (−5 if not). Call <b>radar contact</b> within 2 NM of the ship (−5 if later). To slow down: ${G.selected && G.selected.phase === 'app' ? (isHelo(G.selected) ? `${G.selected.tel} (helo): "<b>perform landing checks</b>"` : `${G.selected.tel} (jet): "<b>dirty up</b>"`) : 'helos "<b>perform landing checks</b>", jets "<b>dirty up</b>"'}.`;
   $('scopeStatus').textContent = `${MC ? 'MARSHAL' : 'APPROACH'} · ${SHIP_NAME.toUpperCase()} · RED · FB ${BRC3} · ${APP_RANGE} NM · WIND ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   $('stLanded').textContent = G.landed; $('stLanded').nextElementSibling.textContent = MC ? 'Approaches' : 'Handed off';
