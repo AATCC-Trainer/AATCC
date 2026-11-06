@@ -2735,7 +2735,7 @@ window.PAR = {
       o.alt = Math.round(a.z || 0); o.tgtAlt = a.levelAlt != null ? Math.round(a.levelAlt) : null; o.rng = +r.toFixed(2);
       o.onScope = a.phase !== 'queue';
     } else {
-      o.e = +(a.e || 0).toFixed(3); o.n = +(a.n || 0).toFixed(3); o.alt = Math.round(a.alt || 0); o.tgtAlt = a.tgtAlt != null ? Math.round(a.tgtAlt) : null;
+      o.e = +(a.e || 0).toFixed(3); o.n = +(a.n || 0).toFixed(3); o.dispE = a.dispE != null ? +a.dispE.toFixed(3) : null; o.dispN = a.dispN != null ? +a.dispN.toFixed(3) : null; o.alt = Math.round(a.alt || 0); o.tgtAlt = a.tgtAlt != null ? Math.round(a.tgtAlt) : null;
       o.onScope = a.phase === 'app' && a.st !== 'dep' ? true : a.phase === 'app';
     }
     return o;

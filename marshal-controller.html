@@ -3915,7 +3915,8 @@ function drawApp(now) {
   { const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, RD); g.addColorStop(0, '#031006'); g.addColorStop(1, '#000300'); ctx.fillStyle = g; ctx.fillRect(cx - RX, cy - RY, 2 * RX, 2 * RY); }
   { const L = landLayer(cx, cy, RX, RY, sc); if (L) ctx.drawImage(L, cx - RX, cy - RY); }   // land returns under rings, sweep and targets
   // sweep (clockwise from north) + afterglow wedge
-  const ang = (now % PPI.sweepT) / PPI.sweepT * 360, prev = PPI.lastAng == null ? ang : PPI.lastAng; PPI.lastAng = ang;
+  { const dtw = PPI.lastNow == null ? 0 : Math.min(250, now - PPI.lastNow); PPI.lastNow = now; const run = G && !G.over; PPI.ph = ((PPI.ph || 0) + dtw * (run ? (G.paused || uiPaused ? 0 : G.scale || 1) : 1)) % PPI.sweepT; }   // sweep follows sim time: 1x / 3x, stops when paused
+  const ang = PPI.ph / PPI.sweepT * 360, prev = PPI.lastAng == null ? ang : PPI.lastAng; PPI.lastAng = ang;
   const toC = d => (d - 90) * DEG;
   for (let k = 0; k < 24; k++) {
     const a0 = ang - (k + 1) * 3, a1 = ang - k * 3;
@@ -3940,7 +3941,9 @@ function drawApp(now) {
   const crossed = d => { const span = norm(ang - prev); return span < 180 && norm(d - prev) <= span; };
   if (G) for (const a of G.ac) {
     if (a.phase !== 'app' || a.st === 'dep') continue;   // not shown until checked in
-    if (!a.paint || crossed(appBrg(a))) a.paint = { e: a.e, n: a.n, t: now };
+    if (!a.paint || crossed(appBrg(a))) a.paint = { e: a.e, n: a.n, t: now, alt: a.alt, gs: a.gs, hdg: a.hdg };   // displayed position/readouts latch on each sweep pass
+    a.dispE = a.paint.e; a.dispN = a.paint.n; a.dispAlt = a.paint.alt; a.dispGs = a.paint.gs; a.dispHdg = a.paint.hdg;
+    if (a.priCut) continue;   // instructor SECONDARY ONLY: no primary paint
     const age = (now - a.paint.t) / PPI.sweepT, al = Math.max(0, 1 - age);
     if (al <= 0) continue;
     const Q = P(a.paint.e, a.paint.n);
@@ -3973,7 +3976,7 @@ function drawApp(now) {
   for (const a of G.ac) {
     if (a.phase !== 'app' || a.st === 'dep') continue;   // not shown until checked in
     if (!a.code) a.code = '4' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 8)).join('');   // octal Mode 3/A code
-    const sel = a === G.selected, fin = a.st === 'final' || a.st === 'mfinal' || a.st === 'purple' || a.st === 'lowout', Q = P(a.e, a.n);
+    const sel = a === G.selected, fin = a.st === 'final' || a.st === 'mfinal' || a.st === 'purple' || a.st === 'lowout', Q = a.paint ? P(a.paint.e, a.paint.n) : P(a.e, a.n);   // sweep-latched position
     if (a.sq === false) {   // no squawk: primary (raw) return only, no data block
       if (a.priCut) { a.hitR = null; continue; }   // instructor cut primary + no squawk: nothing on the scope
       ctx.fillStyle = sel ? 'rgba(220,255,225,0.95)' : ppiCol(0.75); ctx.fillRect(Q[0] - 2.5, Q[1] - 1.5, 5, 3);
@@ -3983,7 +3986,7 @@ function drawApp(now) {
     if (a.priCut) ctx.globalAlpha = 0; ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 4.5; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 4.5, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1; ctx.globalAlpha = 1;   // simple target blip (no lines; hidden when the instructor cuts primary radar)
     const bx = Q[0] + 14 + (a.dbx || 0), by = Q[1] - 22 + (a.dby || 0);
     if (a.dbx || a.dby) { ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(Q[0], Q[1]); ctx.lineTo(bx - 2, by + 4); ctx.stroke(); ctx.globalAlpha = 1; }   // leader line to a moved data block
-    const l1 = (a.st === 'purple' || a.phase === 'withFinal' || a.phase === 'withApp') ? a.cs + ' ' + freqTag(a.hoffFreq || a.button || (a.phase === 'withApp' ? 'silver' : 'purple')) : a.cs, l2 = `${String(Math.round(a.alt / 100)).padStart(3, '0')} ${String(Math.round(a.gs / 10)).padStart(2, '0')} ${a.code}`;
+    const l1 = (a.st === 'purple' || a.phase === 'withFinal' || a.phase === 'withApp') ? a.cs + ' ' + freqTag(a.hoffFreq || a.button || (a.phase === 'withApp' ? 'silver' : 'purple')) : a.cs, l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')} ${String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0')} ${a.code}`;
     ctx.fillStyle = col; if (a.hoff && !((now / 350 | 0) % 2)) ctx.globalAlpha = 0.3; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12); ctx.globalAlpha = 1;
     { const tags = (a.identified ? ' ID' : '');   // ownership / handoff tags
       if (a.hoff) { if ((now / 350 | 0) % 2) { ctx.fillStyle = 'rgba(255,235,120,1)'; ctx.fillText(' ' + (a.hoff.dir === 'out' ? 'APP' : 'FIN') + (a.identified ? ' ID' : ''), bx + ctx.measureText(l1).width, by); ctx.fillStyle = col; } }
@@ -4130,7 +4133,7 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
       o.alt = Math.round(a.z || 0); o.tgtAlt = a.levelAlt != null ? Math.round(a.levelAlt) : null; o.rng = +r.toFixed(2);
       o.onScope = a.phase !== 'queue';
     } else {
-      o.e = +(a.e || 0).toFixed(3); o.n = +(a.n || 0).toFixed(3); o.alt = Math.round(a.alt || 0); o.tgtAlt = a.tgtAlt != null ? Math.round(a.tgtAlt) : null;
+      o.e = +(a.e || 0).toFixed(3); o.n = +(a.n || 0).toFixed(3); o.dispE = a.dispE != null ? +a.dispE.toFixed(3) : null; o.dispN = a.dispN != null ? +a.dispN.toFixed(3) : null; o.alt = Math.round(a.alt || 0); o.tgtAlt = a.tgtAlt != null ? Math.round(a.tgtAlt) : null;
       o.onScope = a.phase === 'app' && a.st !== 'dep' ? true : a.phase === 'app';
     }
     return o;

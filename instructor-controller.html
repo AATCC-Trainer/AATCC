@@ -83,7 +83,7 @@ const SRC_FREQ = { MARSHAL: 'red', APPROACH: 'silver', FINAL: 'purple' };
 const ls = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const I = { link: ls('instLink', 'MARSHAL'), scope: +ls('instScope', 30), ring: +ls('instRing', 2), lh: ls('instLH', '1') === '1',
-  src: {}, sel: null, trails: {}, db: {}, txOpen: false, solo: null, pend: {} };
+  src: {}, disp: {}, sel: null, trails: {}, db: {}, txOpen: false, solo: null, pend: {} };
 const ch = new BroadcastChannel('stinger-link');
 const links = () => (I.link === 'BOTH' ? ['MARSHAL', 'APPROACH'] : [I.link]).concat('FINAL');
 const live = s => I.src[s] && Date.now() - I.src[s].rx < 3000;
@@ -185,6 +185,14 @@ function draw() {
   ctx.save(); ctx.beginPath(); ctx.rect(cx - RX, cy - RY, 2 * RX, 2 * RY); ctx.clip();
   if (I.ring) { ctx.strokeStyle = ppi(0.18); ctx.font = FONT(10); ctx.fillStyle = ppi(0.45); const maxR = Math.hypot(RX, RY) / sc;
     for (let r = I.ring, i = 1; r <= maxR; r += I.ring, i++) { ctx.lineWidth = r % 10 === 0 ? 1.2 : 0.8; ctx.beginPath(); ctx.arc(cx, cy, r * sc, 0, 2 * Math.PI); ctx.stroke(); if (r % Math.max(I.ring, I.scope >= 40 ? 10 : 5) === 0 || I.ring >= 5) ctx.fillText(r, cx + r * sc * 0.707 + 2, cy - r * sc * 0.707 - 2); } }
+  { const now = performance.now(), dtw = I.lastNow == null ? 0 : Math.min(250, now - I.lastNow); I.lastNow = now;   // radar sweep: 4 s/rev in sim time (1x/3x, stops when the linked sims pause)
+    const st = links().map(x => live(x) && I.src[x].running ? I.src[x] : null).find(Boolean), k = st ? (st.paused ? 0 : st.scale || 1) : 1;
+    I.ph = ((I.ph || 0) + dtw * k) % 4000; I.prevAng = I.ang == null ? I.ph / 4000 * 360 : I.ang; I.ang = I.ph / 4000 * 360;
+    const RD = Math.hypot(RX, RY) + 2, toC = d => (d - 90) * DEG;
+    for (let q = 0; q < 24; q++) { ctx.fillStyle = ppi(0.16 * Math.pow(1 - q / 24, 2)); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, RD, toC(I.ang - (q + 1) * 3), toC(I.ang - q * 3)); ctx.closePath(); ctx.fill(); }
+    const g = ctx.createLinearGradient(cx, cy, cx + Math.sin(I.ang * DEG) * RD, cy - Math.cos(I.ang * DEG) * RD); g.addColorStop(0, ppi(0.3)); g.addColorStop(1, ppi(0.95));
+    ctx.strokeStyle = g; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.sin(I.ang * DEG) * RD, cy - Math.cos(I.ang * DEG) * RD); ctx.stroke(); ctx.lineWidth = 1; }
+  const nrm = d => ((d % 360) + 360) % 360, crossed = d => { const span = nrm(I.ang - I.prevAng); return span < 180 && nrm(d - I.prevAng) <= span; };
   const B = brc(), fb = B * DEG;   // final bearing line (approach course into the ship) + BRC wake
   ctx.strokeStyle = ppi(0.55); ctx.setLineDash([6, 5]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - Math.sin(fb) * 3 * W, cy + Math.cos(fb) * 3 * W); ctx.stroke(); ctx.setLineDash([]);
   if (I.lh) {   // marshal pattern: LH radial (BRC+30 relative) at 4 / 2 NM fixes and DWH outbound radial
@@ -196,15 +204,18 @@ function draw() {
   const now = performance.now(), acs = allAc(); ctx.font = FONT(11);
   for (const a of acs) {
     if (!a.onScope) continue;
-    const Q = P(a.e, a.n), tr = I.trails[a.key] || (I.trails[a.key] = []);
-    if (!tr.length || now - tr[tr.length - 1].t > 4000) { tr.push({ e: a.e, n: a.n, t: now }); if (tr.length > 6) tr.shift(); }
-    ctx.fillStyle = ppi(0.3); for (const p of tr.slice(0, -1)) { const q = P(p.e, p.n); ctx.fillRect(q[0] - 1, q[1] - 1, 2, 2); }
+    const tr = I.trails[a.key] || (I.trails[a.key] = []);
+    let D = I.disp[a.key]; const brgA = nrm(Math.atan2(a.e, a.n) / DEG);
+    if (!D || crossed(brgA)) { if (D) { tr.push({ e: D.e, n: D.n }); if (tr.length > 5) tr.shift(); } D = I.disp[a.key] = { e: a.e, n: a.n, alt: a.alt, gs: a.gs || a.ias, hdg: a.hdg }; }   // latch on sweep pass
+    a.dispE = D.e; a.dispN = D.n; a.dispAlt = D.alt; a.dispGs = D.gs;
+    const Q = P(D.e, D.n);
+    ctx.fillStyle = ppi(0.3); for (const p of tr) { const q = P(p.e, p.n); ctx.fillRect(q[0] - 1, q[1] - 1, 2, 2); }
     const sel = a.key === I.sel, f = freqOf(a), col = sel ? 'rgba(220,255,225,1)' : ppi(0.9);
     ctx.globalAlpha = a.priCut ? 0.35 : 1; ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); ctx.arc(Q[0], Q[1], 4.5, 0, 2 * Math.PI); ctx.stroke(); ctx.lineWidth = 1; ctx.globalAlpha = 1;
     if (sel) { ctx.strokeStyle = 'rgba(46,230,230,0.9)'; ctx.strokeRect(Q[0] - 9, Q[1] - 9, 18, 18); }
     const d = I.db[a.key] || { x: 0, y: 0 }, bx = Q[0] + 14 + d.x, by = Q[1] - 22 + d.y;
     if (d.x || d.y) { ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(Q[0], Q[1]); ctx.lineTo(bx - 2, by + 4); ctx.stroke(); ctx.globalAlpha = 1; }
-    const l1 = a.cs + ' ' + FREQ_TAG[f], l2 = `${String(Math.round(a.alt / 100)).padStart(3, '0')} ${String(Math.round((a.gs || a.ias) / 10)).padStart(2, '0')} ${a.src[0]}`;
+    const l1 = a.cs + ' ' + FREQ_TAG[f], l2 = `${String(Math.round(D.alt / 100)).padStart(3, '0')} ${String(Math.round(D.gs / 10)).padStart(2, '0')} ${a.src[0]}`;
     ctx.fillStyle = col; ctx.globalAlpha = a.sq ? 1 : 0.55; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12); ctx.globalAlpha = 1;
     const tags = ({ PO: '[PRI ONLY]', SO: '[SEC ONLY]', OFF: '[RADAR OFF]', NR: '' }[radarMode(a)]) + (a.buster ? '[BUSTER]' : '');
     if (tags) { ctx.fillStyle = 'rgba(255,90,110,1)'; ctx.fillText(tags, bx, by + 24); }
