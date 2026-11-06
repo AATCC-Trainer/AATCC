@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Wasp Approach</title>
 <style>
+.card .row:has(#bStart){position:sticky;bottom:-20px;z-index:3;background:inherit;padding:8px 0 10px;box-shadow:0 -10px 14px rgba(0,0,0,.45)}   /* START always visible on short screens */
+
 :root{--g:#dcdaec;--gd:#6f6a9a;--gdd:#342c5c;--bg:#17122c;--amber:#ffbf3c;--red:#ff5a6e;--cyan:#2ee6e6;--dim:#8b86ad;--panel2:#201a3c;--hov:#2a2350}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:#120e24;color:var(--g);font-family:Consolas,Menlo,"DejaVu Sans Mono","Courier New",monospace;overflow:hidden;-webkit-tap-highlight-color:transparent}
@@ -3083,6 +3085,11 @@ function drawApp(now) {
     if (!a.code) a.code = '4' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 8)).join('');   // octal Mode 3/A code
     const sel = a === G.selected, fin = a.st === 'final' || a.st === 'purple' || a.st === 'lowout', Q = P(a.e, a.n);
     if (Math.abs(Q[0] - cx) > RX + 6 || Math.abs(Q[1] - cy) > RY + 6) { a.hitR = null; continue; }   // keep data blocks / hits inside the bezel when zoomed in
+    if (a.sq === false) {   // instructor PRIMARY ONLY: raw target only, no data block (both cut: nothing)
+      if (a.priCut) { a.hitR = null; continue; }
+      ctx.fillStyle = sel ? 'rgba(220,255,225,0.95)' : ppiCol(0.75); ctx.fillRect(Q[0] - 2.5, Q[1] - 1.5, 5, 3);
+      if (sel) { ctx.strokeStyle = 'rgba(220,255,225,0.8)'; ctx.strokeRect(Q[0] - 6, Q[1] - 5, 12, 10); }
+      a.hitR = appCtl(a) ? { x: Q[0], y: Q[1] } : null; continue; }
     const col = a.conflict ? ((now / 400 | 0) % 2 ? 'rgba(255,90,70,1)' : 'rgba(255,190,60,1)') : sel ? 'rgba(220,255,225,1)' : fin ? ppiCol(0.4) : ppiCol(0.9);
     if (a.priCut) ctx.globalAlpha = 0; ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 4.5; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 4.5, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1; ctx.globalAlpha = 1;   // simple target blip (no lines; hidden when the instructor cuts primary radar)
     const dbo = a.dbo || { x: 14, y: -22 }, bx = Q[0] + dbo.x, by = Q[1] + dbo.y;
@@ -3279,7 +3286,7 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
     const m = { type: 'inst-state', src: PAGE, ts: Date.now(), running: !!(G && !G.over), paused: !!(G && G.paused) };
     if (G) {
       track(G);
-      Object.assign(m, { t: Math.round(G.t * 10) / 10, scale: G.scale || 1, brc: typeof BRC !== 'undefined' ? BRC : null, wind: G.wind ? { dir: G.wind.dir, spd: G.wind.spd } : null, diff: G.d && G.d.name,
+      Object.assign(m, { t: Math.round(G.t * 10) / 10, scale: G.scale || 1, brc: typeof BRC !== 'undefined' ? BRC : null, tbrc: typeof TBRC !== 'undefined' ? TBRC : null, dwh: typeof DWH === 'function' ? DWH() : null, wind: G.wind ? { dir: G.wind.dir, spd: G.wind.spd } : null, diff: G.d && G.d.name,
         ac: G.ac.filter(alv).map(acOut), roster: roster(G) });
     }
     try { ch.postMessage(m); } catch (e) {}
@@ -3289,21 +3296,19 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   function sysLog(s) { try { log('sys', '[Instructor] ' + s); } catch (e) {} }
   function cmd(m) {
     const G = g(); if (!G || G.over) return ack(m, false, PAGE + ' not running');
-    if (m.op === 'spawn') {
-      try {
-        if (PAGE === 'MARSHAL') { G.nextWaveAt = G.t; if (G.mcWave == null) G.t = Math.max(G.t, 10); if (G.instPlan) { const k = 'w' + ((G.mcWave || 0) + 1); G.instPlan[k] = G.t; } }
-        else if (PAGE === 'APPROACH') { G.nextLaunch = G.t; if (G.instPlan) { const i = (G.launches || 0); G.instPlan[i] = G.t; } }
-        else { G.nextSpawn = G.t; if (G.instPlan) G.instPlan[G.spawned] = G.t; }
-        sysLog('spawn-now requested'); return ack(m, true, 'next scheduled aircraft spawning now');
-      } catch (e) { return ack(m, false, String(e)); }
-    }
+    if (m.op === 'pause' || m.op === 'resume') { try { setPaused(m.op === 'pause'); } catch (e) { G.paused = m.op === 'pause'; } sysLog(m.op === 'pause' ? 'paused by instructor' : 'resumed by instructor'); send(); return ack(m, true, m.op === 'pause' ? 'PAUSED' : 'RESUMED'); }
+    if (m.op) return ack(m, false, 'Instructor can only command aircraft');
     const a = find(G, m); if (!a) return ack(m, false, (m.cs || '?') + ' not on ' + PAGE);
     const raw = String(m.text || '').trim(), s = raw.toLowerCase();
     const parts = []; let rest = s;
     const rule = (re, fn, label) => { if (re.test(rest)) { fn(); parts.push(label); rest = rest.replace(re, ' '); } };
-    rule(/\b(cut|kill|lose|fail)\s+(the\s+)?primary(\s+radar)?\b|\bprimary(\s+radar)?\s+(off|cut|fail(ed)?)\b/, () => a.priCut = true, 'PRIMARY CUT');
+    rule(/\b(radar\s+off|no\s+radar|cut\s+(both|all\s+radar))\b/, () => { a.priCut = true; a.sq = false; }, 'RADAR OFF (no target, no data block)');
+    rule(/\bprimary\s+only\b/, () => { a.priCut = false; a.sq = false; }, 'PRIMARY ONLY (target only, no data block)');
+    rule(/\bsecondary\s+only\b/, () => { a.priCut = true; a.sq = true; }, 'SECONDARY ONLY (data block only, no target)');
+    rule(/\bnormal\s+radar\b|\bradar\s+normal\b/, () => { a.priCut = false; a.sq = true; }, 'NORMAL RADAR');
+    rule(/\b(cut|kill|lose|fail)\s+(the\s+)?primary(\s+radar)?\b|\bprimary(\s+radar)?\s+(off|cut|fail(ed)?)\b/, () => a.priCut = true, 'SECONDARY ONLY (primary cut)');
     rule(/\b(restore|return)\s+(the\s+)?primary(\s+radar)?\b|\bprimary(\s+radar)?\s+(on|restored?)\b/, () => a.priCut = false, 'PRIMARY ON');
-    rule(/\b(cut|kill|lose|fail)\s+(the\s+)?secondary(\s+radar)?\b|\bsecondary(\s+radar)?\s+(off|cut)\b|\bsquawk\s+(off|standby)\b/, () => a.sq = false, 'SECONDARY CUT');
+    rule(/\b(cut|kill|lose|fail)\s+(the\s+)?secondary(\s+radar)?\b|\bsecondary(\s+radar)?\s+(off|cut)\b|\bsquawk\s+(off|standby)\b/, () => a.sq = false, 'PRIMARY ONLY (secondary cut)');
     rule(/\b(restore|return)\s+(the\s+)?secondary(\s+radar)?\b|\bsecondary(\s+radar)?\s+on\b/, () => a.sq = true, 'SECONDARY ON');
     rest = rest.replace(/^[\s,.;]+|[\s,.;]+$/g, '');
     let res = null;
@@ -3326,6 +3331,7 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   };
   setInterval(() => { if (wanted && Date.now() - peerT < 8000 && Date.now() - lastSend > 200) send(); }, 220);
   try { ch.postMessage({ type: 'inst-state', src: PAGE, ts: Date.now(), running: false, hello: true }); } catch (e) {}
+  { const unscroll = () => { if (document.body.scrollTop) document.body.scrollTop = 0; if (document.documentElement.scrollTop) document.documentElement.scrollTop = 0; }; document.body.addEventListener('scroll', unscroll); addEventListener('scroll', unscroll); setInterval(unscroll, 1000); }   // a focused prompt must never scroll the page (it hid the top bar + Scope slider)
   window.__INST = { send, cmd, PAGE }; window.__instStart = (d, o) => startGame(d, o); window.__instScale = s => { try { setScale(s); } catch (e) {} };
 })();
 })();
