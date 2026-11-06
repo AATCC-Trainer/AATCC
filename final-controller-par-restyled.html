@@ -232,7 +232,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
     <div class="set"><label for="sRate">Pilot speaking rate</label><input type="range" id="sRate" min="0.8" max="1.5" step="0.05"></div>
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
     <div class="set"><label for="sSweep">Radar scan line</label><input type="checkbox" id="sSweep" style="width:22px;height:22px"></div>
-    <div class="set"><label for="sServo" title="Press (or drag up/down) on a scope at the target's height to see it there; each scope has its own narrow horizontal band. Touch: only while your finger is down. Mouse: the point stays until right-click (that scope) or double-click (both). Off: targets always show.">Servo mode</label><input type="checkbox" id="sServo" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sServo" title="Press (or drag up/down) on a scope at the target's height to see it there; each scope has its own narrow horizontal band. The band stays parked where you tap/click or drag (right-click clears one scope, double-click clears both). Off: targets always show.">Servo mode</label><input type="checkbox" id="sServo" style="width:22px;height:22px"></div>
     <div class="set"><label for="sSoloHoff" title="Solo: each arrival comes in as a flashing APP handoff on its strip; click the strip to accept">Solo handoffs (APP)</label><input type="checkbox" id="sSoloHoff" checked style="width:22px;height:22px"></div>
     <div class="set"><label for="sServoSpd" title="Seconds for the servo band to slew across the full scope height">Servo speed</label><span style="display:flex;align-items:center;gap:8px"><input type="range" id="sServoSpd" min="0.4" max="2.5" step="0.1" style="flex:1"><span id="sServoSpdV" style="min-width:3.5em"></span></span></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
@@ -2631,7 +2631,7 @@ function servoClear(sc) { for (const k of sc ? [sc] : ['E', 'A']) { if (SERVO[k]
 const servoHalfPx = () => tickSize().TH / 2 + SERVO_PAD_PX;
 const servoScopeAt = py => py < (L.eBot + L.aTop) / 2 ? 'E' : 'A';
 const servoClampY = (sc, y) => sc === 'E' ? clamp(y, L.eTop, L.eBot) : clamp(y, L.aTop, L.aBot);
-const servoActive = sc => !!SERVO[sc] && (SERVO[sc].mouse || SERVO[sc].ptr != null);
+const servoActive = sc => !!SERVO[sc];
 function servoShows(sc, y) { return servoActive(sc) && Math.abs(y - SERVO[sc].y) <= servoHalfPx(); }
 const servoLocal = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
 canvas.addEventListener('pointerdown', e => {
@@ -2652,7 +2652,7 @@ canvas.addEventListener('pointermove', e => {
   if (!servoOn()) return;
   for (const sc of ['E', 'A']) { const v = SERVO[sc]; if (v && v.ptr === e.pointerId) v.ty = servoClampY(sc, servoLocal(e).y); }   // drag: the band chases the pointer at the slew rate
 });
-const servoUp = e => { for (const sc of ['E', 'A']) { const v = SERVO[sc]; if (v && v.ptr === e.pointerId) { if (v.mouse) v.ptr = null; else servoClear(sc); } } };   // touch: lift = gone; mouse: stays parked
+const servoUp = e => { for (const sc of ['E', 'A']) { const v = SERVO[sc]; if (v && v.ptr === e.pointerId) v.ptr = null; } };   // touch & mouse: band stays parked after lift
 canvas.addEventListener('pointerup', servoUp);
 canvas.addEventListener('pointercancel', servoUp);
 canvas.addEventListener('dblclick', e => { if (servoOn()) { e.preventDefault(); servoClear(); } });
