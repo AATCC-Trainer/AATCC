@@ -201,7 +201,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
       <button id="bTut" class="wide" style="min-height:46px">How PAR works (tutorial)</button>
       <button id="bSet2" style="min-height:46px">⚙ Voice</button>
     </div>
-    <div class="note">For practice and fun only, not real ATC training.</div>
+    <div class="note">Frequencies: Marshal = Red · Approach = Silver · Final = Purple / Copper. For practice and fun only, not real ATC training.</div>
   </div>
 </div>
 
@@ -258,6 +258,10 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
 'use strict';
 /* ===================== helpers ===================== */
 const DEG = Math.PI / 180;
+const FREQ_TAG = { purple: 'PRPL', copper: 'COPR', red: 'RED', silver: 'SLVR', blue: 'SLVR' };
+const freqTag = f => FREQ_TAG[String(f || '').toLowerCase()] || String(f || 'PRPL').toUpperCase().slice(0, 4);
+const FREQ_HELP = '<p><b>Permanent frequencies:</b> Marshal = <b>Red</b> · Approach = <b>Silver</b> · Final Control = <b>Purple</b> / <b>Copper</b>.</p>';
+
 const norm = h => ((h % 360) + 360) % 360;
 const angDiff = (a, b) => { let d = norm(a - b); return d > 180 ? d - 360 : d; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -485,7 +489,9 @@ const PATTERNS = [
   [/\b(?:make\s+)?standard\s+rate(?:\s+turns?)?\b/g, () => ({ k: 'ngStd' })],
   [/\blow\s+altitude\s+alerts?\b|\bcheck\s+(?:your\s+)?altitude\s+immediately\b/g, () => ({ k: 'laa' })],
   [/\bhow do you (?:hear|read)(?: me)?\b|\bradio check\b/g, () => ({ k: 'hear' })],
-  [/\b(?:execute\s+)?climb\s*outs?\b(?:\s*,?\s*go\s+blue\b)?|\bgo\s+blue\b/g, () => ({ k: 'climbOut' })],
+  [/\b(?:execute\s+)?climb\s*outs?\b(?:\s*,?\s*go\s+silver\b)?|\bgo\s+silver\b/g, () => ({ k: 'climbOut' })],
+  [/\bgo(?:\s+(?:to|too|two))?\s+red\b/g, () => ({ k: 'goRed' })],
+  
   [/\b(?:enter(?:ing)?\s+(?:the\s+)?)?(?:starboard|stbd)\s+delta\b/g, () => ({ k: 'starDelta' })],
   [/\b(?:do\s+not|don\s*t|dont|do\s+no|no\s+need\s+to|need\s+not|not\s+to)\s+(?:to\s+)?(?:acknowledge?(?:s|d|ment)?|acknowledging|ack|reply|respond|answer)(?:\s+(?:any|all|the|my|our))?(?:\s+(?:further|farther|father|additional|more|subsequent|following|future|other|for\s+the|for\s+their))?(?:\s+(?:radio\s+)?(?:transmissions?|transmission\s+is|transmit(?:ions?)?|calls?|messages?))?\b|\b(?:no|negative)\s+(?:further\s+)?acknowledge?(?:ment)?s?\s+(?:required|necessary|needed)\b/g, () => ({ k: 'dna' })],
   [/\bwinds?\s+(?:are\s+|is\s+)?calm\b/g, () => ({ k: 'wind', dir: 0, spd: 0, calm: true })],
@@ -612,7 +618,8 @@ function cmdStr(c) {
     case 'spd': return `speed ${c.v}`;
     case 'hear': return 'radio check';
     case 'goGreen': return 'go green';
-    case 'climbOut': return 'climb outs, go blue';
+    case 'climbOut': return 'climb outs, go silver';
+    case 'goRed': return 'go red (Marshal)';
     case 'starDelta': return 'starboard delta';
     case 'callBall': return 'call the ball';
     case 'rogerBall': return 'roger ball';
@@ -666,11 +673,11 @@ const GP_INTERCEPT_R = [4, 5];               // entry altitude chosen so the gli
 const NEXT_GAP = [10, 15];                   // s: one aircraft on final at a time; the next one appears this long after the last one leaves
 const FIRST_GAP = [3, 5];                    // s: first aircraft of the session
 const PRAC_RANGE = [1, 3];                   // practice-approach aircraft fly 1-3 practice PARs, then a full stop
-const CLIMB_JET = { alt: 1200, hdg: norm(BRC - 90), dir: 'L' };   // "execute climb outs, go blue": angels 1.2, left to BRC-90
+const CLIMB_JET = { alt: 1200, hdg: norm(BRC - 90), dir: 'L' };   // "execute climb outs, go silver": angels 1.2, left to BRC-90
 const CLIMB_HELO = { alt: 1000, hdg: norm(BRC + 90), dir: 'R' };  // "enter starboard delta": angels 1, right to BRC+90
 const CLIMB_WIN = [0.6, 1.4];                 // NM window for the one-mile practice call
 const isPrac = a => a.intent === 'prac';
-const climbCallOf = a => isHelo(a) ? 'one mile, enter starboard delta, go green' : 'one mile, execute climb outs, go blue';
+const climbCallOf = a => isHelo(a) ? 'one mile, enter starboard delta, go green' : 'one mile, execute climb outs, go silver';
 const INTERCEPT_OFFSET = 20;                 // deg: aircraft join PAR final on BRC -/+ 20 (BRC-20 from the right, BRC+20 from the left)
 const ENTRY_LAT_FT = [1300, 1900];           // lateral offset at PAR handoff, on the arrival side (ft)
 const interceptHdg = side => (norm(RWY - Math.sign(side || 1) * INTERCEPT_OFFSET) || 360);  // side +1 = right of course -> BRC-20
@@ -1303,7 +1310,7 @@ function updatePar(a, dt) {
       if (a.phase === 'final') { pilotSay(a, `${a.tel}, missed approach point, never got the descent, executing missed approach.`, `${a.telSay}, missed approach point, executing missed approach.`, true); doMissed(a, 'ASR: never descended to the MDA', 0); return; }
       if (isShip() && isPrac(a) && !a.climbCalled) {
         addPts(a, -5, `${a.cs} reached the missed approach point without "${climbCallOf(a)}" or "surveillance minimums"; the pilot climbs out on its own.`, 'warn');
-        const t = isHelo(a) ? 'entering starboard delta' : 'executing climb out, going blue';
+        const t = isHelo(a) ? 'entering starboard delta' : 'executing climb out, going silver';
         pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true);
         startClimbout(a, true); return;
       }
@@ -1318,7 +1325,7 @@ function updatePar(a, dt) {
     if (!a.gear) addPts(a, -10, ph(`${a.cs} reached half a mile without a wheels check.`, `${a.cs} reached DH without a gear check.`), 'warn');
     if (isShip() && isPrac(a)) {   // practice approach: no climb-out call by half a mile -> pilot climbs out on its own
       addPts(a, -5, `${a.cs} reached half a mile without "${climbCallOf(a)}"; the pilot climbs out on its own.`, 'warn');
-      const t = isHelo(a) ? 'entering starboard delta' : 'executing climb out, going blue';
+      const t = isHelo(a) ? 'entering starboard delta' : 'executing climb out, going silver';
       pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true);
       startClimbout(a, true); return;
     }
@@ -1359,7 +1366,7 @@ function startClimbout(a, own) {
   if (!own && a.phase === 'descent' && Math.abs(elevDev(a)) <= LIM.gpSl && Math.abs(azDeg(a)) <= LIM.azSl) addPts(a, 10, `${a.cs} stable on the practice approach.`, 'good');
   a.phase = 'climbout'; a.climbT = G.t; a.limit = null; a.climbCalled = true;
   a.gaAlt = P.alt; a.tgtHdg = P.hdg; a.turnDir = P.dir; a.tgtSpd = a.T.vapp + 20;
-  log('sys', `${a.cs} ${isHelo(a) ? `entering starboard delta: climbing to 1,000, right turn to ${hdg3(CLIMB_HELO.hdg)}` : `climbing out, going blue: climbing to 1,200, left turn to ${hdg3(CLIMB_JET.hdg)}`}.`);
+  log('sys', `${a.cs} ${isHelo(a) ? `entering starboard delta: climbing to 1,000, right turn to ${hdg3(CLIMB_HELO.hdg)}` : `climbing out, going silver: climbing to 1,200, left turn to ${hdg3(CLIMB_JET.hdg)}`}.`);
   practiceDone(a);
 }
 function completePractice(a) { a.phase = 'gone'; a.removeAt = G.t; }   // climb-out traffic has left the area
@@ -1580,7 +1587,7 @@ function execute(p, src) {
         judge(a, ok, 'surveillance minimums', `${a.r.toFixed(2)} NM (call it at three-quarter mile)`);
         if (a.phase === 'visual') break;   // jet already called the ball
         if ((isHelo(a) || !isShip()) && asrStable(a)) {
-          const t = `${ph('mother', 'runway')} in sight${isShip() && isPrac(a) ? (isHelo(a) ? ', entering starboard delta' : ', going blue') : ''}`;
+          const t = `${ph('mother', 'runway')} in sight${isShip() && isPrac(a) ? (isHelo(a) ? ', entering starboard delta' : ', going silver') : ''}`;
           pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true, false, true);
           asrVisual(a);
         } else {
@@ -1689,7 +1696,7 @@ function execute(p, src) {
           judge(a, ok, 'one mile, call the ball', `${a.r.toFixed(2)} NM (call it at one mile)`);
           special = true;
           if (asrStable(a)) {
-            a.ballCalled = true; const t = `${a.T.ball} ball${isPrac(a) ? ', going blue' : ''}`;
+            a.ballCalled = true; const t = `${a.T.ball} ball${isPrac(a) ? ', going silver' : ''}`;
             pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true, false, true); asrVisual(a);
           } else pilotSay(a, `${a.tel}, clara.`, `${a.telSay}, clara.`, true, false, true);
           break;
@@ -1700,17 +1707,23 @@ function execute(p, src) {
         judge(a, ok, 'three-quarter mile, call the ball', !isHelo(a) ? `${a.r.toFixed(2)} NM (call it at about three-quarter mile)` : `${a.type} is a helicopter: use "one mile, go green"`);
         if (!isHelo(a)) { a.ballCalled = true; const f = fuelOf(a); pilotSay(a, `Ball, state ${f}.`, `Ball, state ${f.replace('.', ' point ').replace(/\d/g, d => DIGW[+d])}.`, true); deckClear(a); }
         break; }
+      case 'goRed': {
+        a.goFreq = 'red'; log('sys', `${a.cs} switching Red (Marshal).`);
+        if (G.linked) try { linkPost({ type: 'handoff', callsign: a.cs, cs: a.cs, from: 'FIN', to: 'MARSHAL', freq: 'red' }); } catch (e) {}
+        pilotSay(a, `${a.tel}, going red.`, `${a.telSay}, going red.`, true);
+        break;
+      }
       case 'climbOut': case 'starDelta': {
         if (!isShip()) { log('sys', 'Climb outs / starboard delta are ship phraseology (switch Phraseology to Ship).'); break; }
         if (!PAR_PHASES.includes(a.phase) || a.climbCalled) break;
-        const want = isHelo(a) ? 'starDelta' : 'climbOut', said = c.k === 'climbOut' ? 'execute climb outs, go blue' : 'enter starboard delta, go green';
+        const want = isHelo(a) ? 'starDelta' : 'climbOut', said = c.k === 'climbOut' ? 'execute climb outs, go silver' : 'enter starboard delta, go green';
         special = true;
         if (!isPrac(a)) { judge(a, false, said, `a full stop: use "${isHelo(a) ? 'one mile, go green' : 'three-quarter mile, call the ball'}"`); pilotSay(a, `${a.tel}, unable, full stop.`, `${a.telSay}, unable, full stop.`, true); break; }
-        if (c.k !== want) { judge(a, false, said, `${a.type} is ${isHelo(a) ? 'a helicopter: use "one mile, enter starboard delta, go green"' : 'fixed-wing: use "one mile, execute climb outs, go blue"'}`); pilotSay(a, `${a.tel}, negative, ${isHelo(a) ? 'request starboard delta' : 'request climb out'}.`, `${a.telSay}, negative, ${isHelo(a) ? 'request starboard delta' : 'request climb out'}.`, true); break; }
+        if (c.k !== want) { judge(a, false, said, `${a.type} is ${isHelo(a) ? 'a helicopter: use "one mile, enter starboard delta, go green"' : 'fixed-wing: use "one mile, execute climb outs, go silver"'}`); pilotSay(a, `${a.tel}, negative, ${isHelo(a) ? 'request starboard delta' : 'request climb out'}.`, `${a.telSay}, negative, ${isHelo(a) ? 'request starboard delta' : 'request climb out'}.`, true); break; }
         const ok = a.r >= CLIMB_WIN[0] && a.r <= CLIMB_WIN[1];
         if (ok) a.pts += 3;
         judge(a, ok, said, `${a.r.toFixed(2)} NM (call it at about one mile)`);
-        { const t = isHelo(a) ? 'entering starboard delta' : 'going blue'; pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true); }
+        { const t = isHelo(a) ? 'entering starboard delta' : 'going silver'; pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true); }
         startClimbout(a, false);
         break; }
       case 'rogerBall': if (isShip() && a.ballCalled) a.rogerBall = true; break;
@@ -2200,7 +2213,7 @@ function applyPhrUI() {
   const sh = isShip();
   $('subTitle').textContent = sh ? `Precision Approach Radar talk-down simulator · ${SHIP_NAME} (LHA/LHD) · BRC ${BRC3}` : `Precision Approach Radar talk-down simulator · Runway ${RWY_NUM}`;
   if (!applyPhrUI.towerIntro) applyPhrUI.towerIntro = $('introP').innerHTML;
-  $('introP').innerHTML = sh ? `You're the <b>final controller</b> aboard <b>${SHIP_NAME}</b>, an amphibious assault ship. Each aircraft is handed to you <b>7 to 9 miles</b> astern on the <b>base recovery course (BRC) ${BRC3}</b>. Using your <b>voice</b>, talk it down to the deck: course and glidepath calls with "come left/right heading" corrections, range calls every mile, the wheels check and the landing clearance to its <b>spot</b>, all the way to <b>short final</b>, then hand it to <b>Tower</b>. Some pilots ask for <b>multiple practice PARs</b>: at one mile send them back around ("execute climb outs, go blue" / "enter starboard delta, go green") until their last approach is a <b>full stop</b>. Pilots answer each call with their callsign until you say "do not acknowledge further transmissions"; after that they stay quiet, so keep talking!` : applyPhrUI.towerIntro;
+  $('introP').innerHTML = sh ? `You're the <b>final controller</b> aboard <b>${SHIP_NAME}</b>, an amphibious assault ship. Each aircraft is handed to you <b>7 to 9 miles</b> astern on the <b>base recovery course (BRC) ${BRC3}</b>. Using your <b>voice</b>, talk it down to the deck: course and glidepath calls with "come left/right heading" corrections, range calls every mile, the wheels check and the landing clearance to its <b>spot</b>, all the way to <b>short final</b>, then hand it to <b>Tower</b>. Some pilots ask for <b>multiple practice PARs</b>: at one mile send them back around ("execute climb outs, go silver" / "enter starboard delta, go green") until their last approach is a <b>full stop</b>. Pilots answer each call with their callsign until you say "do not acknowledge further transmissions"; after that they stay quiet, so keep talking!` : applyPhrUI.towerIntro;
   $('cmdInput').placeholder = sh ? 'Type instead (Enter): lightning 21 come left heading 268' : 'Type instead (Enter): lightning 21 turn left heading 268';
   if (!helpOv.classList.contains('hidden')) renderTut();
 }
@@ -2247,7 +2260,7 @@ function endGame() {
 
 /* ===================== tutorial ===================== */
 const TUT = [
-  ['1. What is PAR?', `<p><b>Precision Approach Radar (PAR)</b> is a very accurate radar that sits beside the runway. The final controller watches the aircraft on it and <b>talks the pilot down</b> with a steady stream of instructions, all the way to <b>decision height (DH)</b>, 200 ft above the ground about 0.6 NM from touchdown. The pilot needs no ILS; they just follow your voice.</p>
+  ['1. What is PAR?', `${FREQ_HELP}<p><b>Precision Approach Radar (PAR)</b> is a very accurate radar that sits beside the runway. The final controller watches the aircraft on it and <b>talks the pilot down</b> with a steady stream of instructions, all the way to <b>decision height (DH)</b>, 200 ft above the ground about 0.6 NM from touchdown. The pilot needs no ILS; they just follow your voice.</p>
    <p>Aircraft are fed to you <b>7 to 9 miles out</b>, a little off course and below the glidepath (level at about 1,300 to 1,550 ft, so they meet it 4 to 5 miles out). You work <b>one aircraft at a time</b>: the next one checks in 10 to 15 seconds after the previous one has left you (on deck, climbing out, or waved off); the status line shows the countdown. Your job is to get them onto the centerline and the 3° glidepath and keep them there.</p>`],
   ['2. Reading the two displays', `<p><b>Top: ELEVATION.</b> Range from touchdown runs left to right (0 to 10 NM, a line every mile). Height runs up. The dotted sloping line is the <b>3° glidepath</b>. The target tick sits <i>above</i> the line when the plane is high and <i>below</i> it when it's low. Glidepath calls follow what you see on the tick: dotted line through the <b>middle</b> of the tick = <b>on glidepath</b>; between the middle and the end = <b>slightly above/below glidepath</b>; touching the <b>end</b> of the tick = <b>above/below glidepath</b>; tick not touching the line = <b>well above/below glidepath</b>.</p>
    <p><b>Bottom: AZIMUTH.</b> Same range axis. The horizontal line is the <b>runway centerline / course cursor</b>. A target above the line is <b>right of course</b>; below the line is <b>left of course</b> (as the pilot sees it). <b>Course calls go by what you see</b>: course line through the <b>middle</b> of the tick = "on course"; between the middle and the end = "slightly left/right of course"; touching the <b>end</b> of the tick = "left/right of course"; tick not touching the line = "well left/right of course".</p>
@@ -2287,7 +2300,7 @@ const TUT = [
    <p>Tip: start on <b>Training</b>. The amber hint box shows a good next call; just read it out loud.</p>`],
 ];
 const TUT_SHIP = {
-  0: ['1. What is shipboard PAR?', `<p><b>Precision Approach Radar (PAR)</b> on an amphibious assault ship (LHA/LHD) lets the ship's <b>final controller</b> (in CATCC/AATCC, callsign "${SHIP_NAME} Final") watch an aircraft on final and <b>talk the pilot down</b> to the deck in bad weather, all the way to <b>short final</b>, about half a mile aft of the ship, where the pilot lands visually.</p>
+  0: ['1. What is shipboard PAR?', `${FREQ_HELP}<p><b>Precision Approach Radar (PAR)</b> on an amphibious assault ship (LHA/LHD) lets the ship's <b>final controller</b> (in CATCC/AATCC, callsign "${SHIP_NAME} Final") watch an aircraft on final and <b>talk the pilot down</b> to the deck in bad weather, all the way to <b>short final</b>, about half a mile aft of the ship, where the pilot lands visually.</p>
    <p>Aircraft are fed to you <b>7 to 9 miles</b> astern on the <b>base recovery course (BRC) ${BRC3}</b>, a little off course and below the glidepath (level at about 1,300 to 1,550 ft, so they meet it 4 to 5 miles out). You work <b>one aircraft at a time</b>: the next one checks in 10 to 15 seconds after the previous one has left you (on deck, climbing out, or waved off); the status line shows the countdown. Get them onto the final bearing and the 3° glidepath, then hand them to <b>Tower</b> (Primary Flight Control / the Air Boss) for the landing spot.</p>`],
   1: ['2. Reading the two displays', `<p><b>Top: ELEVATION.</b> Range from the landing <b>spot</b> on deck runs left to right (0 to 10 NM, a line every mile). Height runs up. The dotted sloping line is the <b>3° glidepath</b>. The white tick is the aircraft: <i>above</i> the line when it's high, <i>below</i> when it's low. Glidepath calls follow what you see on the tick: dotted line through the <b>middle</b> of the tick = <b>on glidepath</b>; between the middle and the end = <b>slightly above/below glidepath</b>; touching the <b>end</b> of the tick = <b>above/below glidepath</b>; tick not touching the line = <b>well above/below glidepath</b>.</p>
    <p><b>Bottom: AZIMUTH.</b> Same range axis. The horizontal line is the <b>final bearing</b>, the ship's <b>base recovery course (BRC) ${BRC3}</b>. Aircraft are handed to you on a 20° intercept: from the <b>right</b> (above the line) heading <b>${hdg3(BRC - 20)}</b>, from the <b>left</b> (below) heading <b>${hdg3(BRC + 20)}</b>. Turn them onto the BRC before they cross it. <b>Course calls go by what you see</b>: course line through the <b>middle</b> of the tick = "on course"; between the middle and the end = "slightly left/right of course"; touching the <b>end</b> of the tick = "left/right of course"; tick not touching the line = "well left/right of course".</p>
@@ -2300,12 +2313,12 @@ const TUT_SHIP = {
    <li><b>Sinker:</b> on some approaches the aircraft starts sinking below the glidepath and glidepath calls won't stop it. Only "<b>Low altitude alert, Lightning two one, check your altitude immediately, altimeter two niner niner two</b>" does (pilot: "Lightning two one, climbing.", even after "do not acknowledge"); it then climbs back to the glidepath.</li>
    <li>If you didn't say "wheels should be down" on contact: "<b>check wheels down</b>". No separate landing clearance is needed: the deck call exchange below clears the aircraft to land ("deck is clear, cleared to land spot seven" is still accepted).</li>
    <li><b>Deck call</b> (required before half a mile): helicopters (CH-53E, AH-1Z, UH-1Y, MH-60S) get "<b>one mile, go green</b>" (pilot: "<b>Going green</b>"). Jets (F-35B, AV-8B) get "<b>three-quarter mile, call the ball</b>" (pilot: "<b>Ball, state four point nine</b>", the fuel state). That reply is the landing clearance: the aircraft may land. "Roger ball" is optional. Pilots make these replies even after "do not acknowledge".</li>
-   <li><b>Practice approaches</b>: at check-in each pilot states an intention: "…for the PAR to the ship, <b>full stop</b>" (FS) or "…<b>request multiple practice PARs</b>" (PRAC; shown in the side panel). A practice aircraft gets no deck call. At <b>one mile</b> instead: jets "<b>one mile, execute climb outs, go blue</b>" (pilot: "Lightning two one, going blue"; climbs to 1,200 ft, left turn to ${hdg3(CLIMB_JET.hdg)}); helicopters "<b>one mile, enter starboard delta, go green</b>" (pilot: "Nighthawk two five, entering starboard delta"; climbs to 1,000 ft, right turn to ${hdg3(CLIMB_HELO.hdg)}). It then comes back around for another approach; after 1–3 practice approaches it checks in with "<b>this will be a full stop</b>" and lands.</li>
+   <li><b>Practice approaches</b>: at check-in each pilot states an intention: "…for the PAR to the ship, <b>full stop</b>" (FS) or "…<b>request multiple practice PARs</b>" (PRAC; shown in the side panel). A practice aircraft gets no deck call. At <b>one mile</b> instead: jets "<b>one mile, execute climb outs, go silver</b>" (pilot: "Lightning two one, going silver"; climbs to 1,200 ft, left turn to ${hdg3(CLIMB_JET.hdg)}); helicopters "<b>one mile, enter starboard delta, go green</b>" (pilot: "Nighthawk two five, entering starboard delta"; climbs to 1,000 ft, right turn to ${hdg3(CLIMB_HELO.hdg)}). It then comes back around for another approach; after 1–3 practice approaches it checks in with "<b>this will be a full stop</b>" and lands.</li>
    <li>Full stop, inside half a mile: "<b>over the deck</b>", then "<b>contact Tower</b>" (or "Tower has you").</li></ol>
    <p>If you need to wave it off: "<b>wave off, wave off, climb and maintain two thousand, fly base recovery course ${BRC_SAY}</b>". No deck call (or spot clearance) by half a mile means a <b>fouled deck</b> and the pilot waves off.</p>`],
   3: ['4. Sample script', `<div class="say">"Lightning two one, ${SHIP_NAME} final, how do you hear me, wheels should be down, report see me." <i>(pilot: "Lightning two one, loud and clear, wheels down, will report see you")</i><br>"Well right of course, come right heading ${sayDigits(hdg3(BRC - 10))}, nine and a half miles." <i>("Lightning two one")</i><br>"Slightly right of course, come right heading ${BRC_SAY}." <i>("Lightning two one")</i><br>"Approaching glidepath." <i>("Lightning two one")</i><br>"Begin descent." <i>("Lightning two one")</i><br>"Do not acknowledge further transmissions." <i>("Lightning two one", then silent)</i><br>"On course, on glidepath, seven miles."<br>"On course, slightly above glidepath."<br>"On course, on glidepath, five miles."<br>"On course, on glidepath, four miles."<br><i>(pilot, at 2 miles: "Lightning two one, see you")</i><br>"On course, on glidepath, one and a half miles."<br>"Three-quarter mile, call the ball." <i>(pilot: "Ball, state four point nine": cleared to land)</i><br>"Over the deck." … "Contact Tower."</div>
    <p>For a helicopter, the deck call at one mile is "<b>One mile, go green.</b>" <i>(pilot: "Going green": cleared to land)</i>.</p>
-   <p><b>Practice approach</b> (pilot checked in with "request multiple practice PARs"): the same talk-down, but at one mile: jet "<b>One mile, execute climb outs, go blue.</b>" <i>("Lightning two one, going blue": climbs to 1,200, left to ${hdg3(CLIMB_JET.hdg)})</i>; helicopter "<b>One mile, enter starboard delta, go green.</b>" <i>("Nighthawk two five, entering starboard delta": climbs to 1,000, right to ${hdg3(CLIMB_HELO.hdg)})</i>. It comes back for another PAR; the last one starts "…this will be a full stop".</p>
+   <p><b>Practice approach</b> (pilot checked in with "request multiple practice PARs"): the same talk-down, but at one mile: jet "<b>One mile, execute climb outs, go silver.</b>" <i>("Lightning two one, going silver": climbs to 1,200, left to ${hdg3(CLIMB_JET.hdg)})</i>; helicopter "<b>One mile, enter starboard delta, go green.</b>" <i>("Nighthawk two five, entering starboard delta": climbs to 1,000, right to ${hdg3(CLIMB_HELO.hdg)})</i>. It comes back for another PAR; the last one starts "…this will be a full stop".</p>
    <p>Pilots react to glidepath calls: "slightly above" makes them descend a bit faster, "slightly below" a bit slower, and "on glidepath" brings them back to normal. Heading calls are the only way to move them sideways.</p>
    <p><b>ASR (surveillance) approach</b>: no glidepath; the pilot holds altitude until told to descend to the <b>MDA (470 ft)</b> at the final approach fix and reaches it by the missed approach point (¾ mile). Announce it <b>no later than 4 miles (rotary, incl. MV-22B) / 5 miles (fixed wing)</b>; pilot: "(callsign), surveillance approach". Each scripted call is graded within ±0.3 mile.</p>
    <div class="say"><b>Rotary wing</b><br>(≥4 mi) "Nighthawk two five, this will be a surveillance approach."<br>(4 mi) "Nighthawk two five, four miles. Prepare to descend in one mile."<br>(3 mi) "Nighthawk two five, three miles. Descend to your minimum descent altitude. Minimum descent altitude four seven zero." <i>("Nighthawk two five, descending to four seven zero")</i><br>(2 mi) "Nighthawk two five, two miles, on course."<br>(1 mi) "Nighthawk two five, one mile, on course."<br>(¾ mi) "Nighthawk two five, surveillance minimums, on course, if mother not in sight, execute missed approach." <i>(stable: "Mother in sight" and lands; otherwise executes the missed approach)</i></div>
@@ -2316,7 +2329,7 @@ const TUT_SHIP = {
    <li><b>Low altitude alert +5</b> when the aircraft is really sinking; -3 if it isn't. An incomplete alert (missing the callsign, "check your altitude immediately" or "altimeter two niner niner two") is not accepted and the aircraft keeps sinking.</li>
    <li><b>Bonus +1</b> for the complete contact call ("…${SHIP_NAME} final, how do you hear me, wheels should be down, report see me", with the callsign) and +1 for "approaching glidepath" 10–30 s before the aircraft reaches the glidepath. Both show in the log with ★.</li>
    <li><b>Deck call</b>: "one mile, go green" (helos) or "three-quarter mile, call the ball" (jets) gives +3 at the right range. Using the wrong one counts as an inaccurate call; missing it by half a mile costs 5.</li>
-   <li><b>Practice approaches</b>: the right one-mile call for the type ("execute climb outs, go blue" for jets, "enter starboard delta, go green" for helicopters) between 0.6 and 1.4 NM gives +3, and +10 if the aircraft is stable at that point. A completed practice approach counts as a successful approach (+40). A landing call ("call the ball", "go green") to a practice aircraft, or a climb-out/delta call to a full-stop aircraft, is an inaccurate call (-3); the pilot answers "negative, practice approach" / "unable, full stop". No climb-out call by minimums: the pilot climbs out on its own (-5).</li>
+   <li><b>Practice approaches</b>: the right one-mile call for the type ("execute climb outs, go silver" for jets, "enter starboard delta, go green" for helicopters) between 0.6 and 1.4 NM gives +3, and +10 if the aircraft is stable at that point. A completed practice approach counts as a successful approach (+40). A landing call ("call the ball", "go green") to a practice aircraft, or a climb-out/delta call to a full-stop aircraft, is an inaccurate call (-3); the pilot answers "negative, practice approach" / "unable, full stop". No climb-out call by minimums: the pilot climbs out on its own (-5).</li>
    <li><b>Stable at half a mile</b> (both within "slightly") +10. Unstable or not cleared (no deck call: fouled deck) at half a mile means the pilot waves off.</li>
    <li><b>Wave-offs cost no points</b> (called by you or by the pilot: fouled deck, unstable, too high, safety limit, lost comms): the approach simply ends, keeping what it earned so far but without the +40 for getting on deck.</li>
    <li><b>Penalties</b>: a gap of more than 5 s without a call on final once you have made your first call (−5 each time), too steep or too shallow, inaccurate calls. Far too low (below the lower limit) it crashes and the session fails, so call the wave-off early if it gets that low.</li>
@@ -2328,7 +2341,7 @@ const TUT_SHIP = {
    <li>[callsign], ${SHIP_NAME} final, how do you hear me, wheels should be down, report see me</li>
    <li>check wheels down · roger · deck is clear, cleared to land spot ___ (winds ___ at ___) · over the deck</li>
    <li><b>one mile, go green</b> (helos) · <b>three-quarter mile, call the ball</b> (jets): the pilot's "Going green" / "Ball, state …" reply clears it to land · roger ball (optional)</li>
-   <li>practice approaches: <b>one mile, execute climb outs, go blue</b> (jets; "climb out" / "climbout" / "climb outs" all work) · <b>one mile, enter starboard delta, go green</b> (helos)</li>
+   <li>practice approaches: <b>one mile, execute climb outs, go silver</b> (jets; "climb out" / "climbout" / "climb outs" all work) · <b>one mile, enter starboard delta, go green</b> (helos)</li>
    <li>low altitude alert, (callsign), check your altitude immediately, altimeter two niner niner two</li>
    <li><b>Ship turns (broadcast, no readback):</b> ninety-nine, mother is in port/starboard turn, standby for new BRC · ninety-nine, mother is steady, new BRC is ___ (digit by digit, e.g. "one seven three"; "99", "niner niner", "nine nine" all work)</li>
    <li>wave off, wave off, climb and maintain ___, fly base recovery course ___ · reduce speed to ___ knots · contact Tower / Tower has you · say callsign · how do you hear me</li>
@@ -2500,9 +2513,10 @@ function drawTarget(a, blink) {
 let hudCache = { st: null, al: null };
 function drawHud(now, blink) {
   const w = G.wind;
-  const st = `${ph('PAR · ' + SHIP_NAME.toUpperCase() + ' · BRC ' + BRC3, 'PAR RWY ' + RWY_NUM)} · WIND ${String(w.dir).padStart(3, '0')}/${w.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
+  const st = `${ph('FINAL · ' + SHIP_NAME.toUpperCase() + ' · PURPLE/COPPER · BRC ' + BRC3, 'FINAL RWY ' + RWY_NUM + ' · PURPLE/COPPER')} · WIND ${String(w.dir).padStart(3, '0')}/${w.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   const waiting = !G.busy && !G.ac.some(a => PAR_PHASES.includes(a.phase)) && (G.rejoin.length || G.ac.some(a => a.phase === 'queue') || G.spawned < G.toSpawn);
-  const st2 = st + (G.linked ? (G.ac.some(a => alive(a) && a.removeAt == null) ? '' : ' · LINKED, AWAITING HANDOFF') : (waiting && G.gateAt > G.t ? ` · NEXT AIRCRAFT IN ${Math.ceil(G.gateAt - G.t)}s` : ''));
+  const af = (G.selected && G.selected.link && G.selected.link.freq) ? String(G.selected.link.freq).toUpperCase() : '';
+  const st2 = st + (af ? ' · ON ' + af : '') + (G.linked ? (G.ac.some(a => alive(a) && a.removeAt == null) ? '' : ' · LINKED, AWAITING HANDOFF') : (waiting && G.gateAt > G.t ? ` · NEXT AIRCRAFT IN ${Math.ceil(G.gateAt - G.t)}s` : ''));
   if (st2 !== hudCache.st) { hudCache.st = st2; $('scopeStatus').textContent = st2; }
 }
 
