@@ -837,7 +837,7 @@ function newGame(diffKey, opts = {}) {
   G.gateAt = rand(FIRST_GAP[0], FIRST_GAP[1]);
   logEl.innerHTML = '';
   setScale(1); setPaused(false);
-  log('sys', `${d.name}: ${'Marshal, ' + SHIP_NAME + ', BRC ' + BRC3}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? (MC_MORE_ARRIVALS ? 'Arrivals check in for marshal every 4–5 min;' : 'One flight of two checks in for marshal;') + ' press End to finish.' : G.toSpawn + ' arrivals.'}`);
+  log('sys', `${d.name}: ${'Marshal, ' + SHIP_NAME + ', BRC ' + BRC3}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? (MC_MORE_ARRIVALS ? 'Arrivals check in for marshal every 4–5 min;' : 'Three waves check in at 20 NM (marshal flight, PAR arrival 270–090, second marshal flight);') + ' press End to finish.' : G.toSpawn + ' arrivals.'}`);
   if (d.hints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
   selectAc(null);
   refreshPanel(true);
@@ -2715,20 +2715,44 @@ window.__HOFF = HOFF;
 
 setTimeout(() => LINK.setOn(LINK.on), 0);
 setInterval(() => { if (LINK.on) LINK.post({ type: 'hello' }); LINK.status(); }, 3000);
-function mcArrivals(want) {   // arriving aircraft check in for marshal, one every 4-5 min, up to the difficulty's count
-  if (G.nextArr == null) {   // start of run: exactly 2 jets check in (for now) after 10 s of sim time, then the normal flow
-    if (G.t < 10) return;
-    const JETS = AIRLINES.filter(x => x.types.some(t => TYPES[t] && !TYPES[t].helo));
-    const al = pick(JETS), n1 = randi(11, 68), nums = [n1, n1 + 1];   // both start jets share one callsign word, different numbers
-    for (let i = 0; i < 2; i++) { const cs = al.icao + nums[i];
-      const ld = i ? G.ac.find(x => x.cs === al.icao + nums[0]) : null;
-      mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: 240, rng: i ? G.flightRng + 0.5 : (G.flightRng = rand(25, 29.5)), lead: ld ? ld.uid : null, flight: i ? null : 2, wing: i ? null : al.icao + nums[1] }); }   // one flight: leader checks in for both
-    G.nextArr = G.t + rand(240, 300);   // next arrival 4-5 min after the start flight
+function mcSpawnFlight(rel) {   // flight of 2 jets (same callsign word, consecutive numbers) checking in at 20 NM
+  const usedWords = new Set(G.ac.map(x => x.cs.replace(/\d+$/, '')));
+  const JETS = AIRLINES.filter(x => x.types.some(t => TYPES[t] && !TYPES[t].helo));
+  const pool = JETS.filter(x => !usedWords.has(x.icao));
+  const al = pick(pool.length ? pool : JETS);
+  let n1 = randi(11, 68);
+  for (let k = 0; k < 30; k++) { if (!G.ac.some(x => x.cs === al.icao + n1 || x.cs === al.icao + (n1 + 1))) break; n1 = randi(11, 68); }
+  const nums = [n1, n1 + 1], r0 = 20, rRel = rel != null ? rel : rand(150, 250);
+  for (let i = 0; i < 2; i++) {
+    const cs = al.icao + nums[i], ld = i ? G.ac.find(x => x.cs === al.icao + nums[0]) : null;
+    mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: rRel, rng: i ? r0 + 0.5 : r0, lead: ld ? ld.uid : null, flight: i ? null : 2, wing: i ? null : al.icao + nums[1] });
   }
-  if (!G.parSpawned && G.t >= MC_PAR_ARR.t) { G.parSpawned = true; mcParArrive(); }   // single PAR arrival ~4 min after start
-  if (!MC_MORE_ARRIVALS) { if (!G.allRecSaid && G.parSpawned && G.t > 30 && !G.ac.length) { G.allRecSaid = true; log('sys', 'All aircraft recovered. No further arrivals (single-flight mode); press End to finish.'); } return; }
+}
+function mcArrivals(want) {   // 3-wave Marshal sequence (all at 20 NM): Wave 1 flight -> Wave 2 single bird (270-090) -> Wave 3 flight
+  if (G.mcWave == null) {
+    if (G.t < 10) return;
+    mcSpawnFlight(240);
+    G.mcWave = 1; G.nextWaveAt = G.t + rand(150, 180);   // Wave 2 ~2.5-3 min after Wave 1
+    return;
+  }
+  if (G.mcWave === 1 && G.t >= G.nextWaveAt) {
+    G.parSpawned = true; mcParArrive();
+    G.mcWave = 2; G.nextWaveAt = G.t + rand(150, 180);   // Wave 3 ~2.5-3 min after Wave 2
+    return;
+  }
+  if (G.mcWave === 2 && G.t >= G.nextWaveAt) {
+    mcSpawnFlight();   // second flight of 2 jets for marshal (inbound from 150-250 deg at 20 NM)
+    G.mcWave = 3; G.nextArr = G.t + rand(240, 300);
+    return;
+  }
+  if (!MC_MORE_ARRIVALS) {
+    if (!G.allRecSaid && G.mcWave >= 3 && G.t > 30 && !G.ac.length) {
+      G.allRecSaid = true; log('sys', 'All aircraft recovered. All three arrival waves complete; press End to finish.');
+    }
+    return;
+  }
   const live = G.ac.filter(a => a.phase === 'app').length;
-  if (G.t >= G.nextArr && live < Math.min(want, 6)) { mcArrive(); G.nextArr = G.t + rand(240, 300); }   // 4-5 min between arrivals
+  if (G.t >= G.nextArr && live < Math.min(want, 6)) { mcArrive(); G.nextArr = G.t + rand(240, 300); }
 }
 function mcArrive(spec = {}) {
   const used = G.ac.map(a => a.cs);
@@ -2748,16 +2772,16 @@ function mcArrive(spec = {}) {
   return a;
 }
 window.__mcArrive = mcArrive;
-/* PAR arrival: one aircraft (random jet or helo, different callsign word than the opening flight) checks in ~4 min after
-   start, ~10 NM out, Approach-page phraseology ("request PAR approach"); vectors / altitudes / radar contact / CCA etc. as on
-   the Approach page; "go purple/copper" → Final, "go silver" → Approach, "contact final" → Final (purple). Permanent: Marshal=Red, Approach=Silver, Final=Purple/Copper. */
-const MC_PAR_ARR = { t: 240, rng: [9.5, 10.5], rel: [115, 145] };
+/* Wave 2 single arrival: one aircraft (random jet or helo, distinct callsign word) checks in at 20 NM on a radial between
+   270 and 090 (forward/northern semicircle: 270° clockwise through 360° to 090°), Approach-page phraseology ("request PAR approach");
+   "go purple/copper" → Final, "go silver" → Approach, "contact final" → Final (purple). Permanent: Marshal=Red, Approach=Silver, Final=Purple/Copper. */
+const MC_PAR_ARR = { rng: 20, rel: [-90, 90] };   // BRC + [-90..+90] => 270°..360°..090°
 function mcParArrive() {
   const helo = Math.random() < 0.5, words = G.ac.map(x => x.cs.replace(/\d+$/, ''));
   const pool = AIRLINES.filter(x => x.types.some(t => TYPES[t] && !!TYPES[t].helo === helo) && !words.includes(x.icao));
   const al = pick(pool.length ? pool : AIRLINES.filter(x => x.types.some(t => TYPES[t] && !!TYPES[t].helo === helo)));
   const a = makeAc({ cs: al.icao + randi(11, 68), type: al.types.find(t => TYPES[t] && !!TYPES[t].helo === helo) });
-  const R = rand(...MC_PAR_ARR.rng), b = norm(BRC + rand(...MC_PAR_ARR.rel)); a.e = R * Math.sin(b * DEG); a.n = R * Math.cos(b * DEG);
+  const R = MC_PAR_ARR.rng, b = norm(BRC + rand(...MC_PAR_ARR.rel)); a.e = R * Math.sin(b * DEG); a.n = R * Math.cos(b * DEG);
   a.phase = 'app'; a.pars = 0; a.armed = false; a.turnDir = null; a.parArr = true; a.appCount = APP_MAX_PARS - 1;   // one PAR, full stop
   a.hdg = a.tgtHdg = Math.round(norm(b + 180));   // inbound toward mother
   a.alt = a.tgtAlt = helo ? 2000 : 3000; a.trail = []; a.trailT = 0; a.lastTx = G.t;
