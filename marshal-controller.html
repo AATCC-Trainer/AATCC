@@ -138,6 +138,16 @@ body.lay-transcript #parsed,body.lay-transcript #heard{font-size:10.5px}
 body.lay-transcript #log{flex:1;max-height:none;font-size:11px;line-height:1.3}
 body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;max-height:30vh;overflow-y:auto}}
 }
+#eatPrompt{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:24;background:rgba(6,16,8,0.96);border:1.5px solid rgba(120,255,140,0.75);border-radius:6px;padding:14px 18px;color:rgba(195,255,205,0.96);font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;box-shadow:0 8px 28px rgba(0,0,0,0.78);min-width:300px;max-width:92%}
+#eatPrompt.hidden{display:none}
+#eatPrompt h3{margin:0 0 5px;font-size:13px;color:rgba(120,255,140,0.98);letter-spacing:0.6px;text-transform:uppercase}
+#eatPrompt .sub{color:rgba(175,235,185,0.82);font-size:11.5px;margin-bottom:9px}
+#eatForm{display:flex;gap:8px;align-items:center}
+#eatIn{width:104px;background:#030a04;border:1px solid rgba(120,255,140,0.68);border-radius:4px;color:#b8ffc4;font:bold 16px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:5px 8px;text-align:center;outline:none}
+#eatIn:focus{border-color:#78ff8c;box-shadow:0 0 0 2px rgba(120,255,140,0.22)}
+#eatBtn{background:rgba(120,255,140,0.18);border:1px solid rgba(120,255,140,0.72);color:#b8ffc4;border-radius:4px;padding:6px 12px;font:bold 12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;cursor:pointer}
+#eatBtn:hover{background:rgba(120,255,140,0.3)}
+#eatPreview{margin-top:8px;font-size:12px;color:#8fd8ff;min-height:17px}
 </style>
 <link rel="manifest" href="marshal.webmanifest">
 <meta name="theme-color" content="#0b0d0b">
@@ -148,11 +158,11 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 <body>
 <div id="layBar" title="Layout (L cycles)"><button type="button" data-l="normal">▣ Normal</button><button type="button" data-l="expand">⤢ Expand scope</button><button type="button" data-l="transcript">☰ Scope + log</button></div>
 <div id="app">
-  <div id="scopeWrap"><canvas id="scope"></canvas><div id="infoBlk" class="ib"></div><div id="tbBlk" class="ib"></div><div id="starBlk"><span class="sm"></span><span class="st">*</span><input id="starIn" spellcheck="false" autocomplete="off" autocapitalize="characters"></div><div id="shipBanner"></div></div>
+  <div id="scopeWrap"><canvas id="scope"></canvas><div id="infoBlk" class="ib"></div><div id="tbBlk" class="ib"></div><div id="starBlk"><span class="sm"></span><span class="st">*</span><input id="starIn" spellcheck="false" autocomplete="off" autocapitalize="characters"></div><div id="eatPrompt" class="hidden"><h3>Enter Start / Recovery Minute</h3><div class="sub">Type a minute (00–59) and press Enter — 1st Expected Approach Time is 6 min prior.</div><form id="eatForm" autocomplete="off"><input id="eatIn" inputmode="numeric" maxlength="4" placeholder="e.g. 18" spellcheck="false"><button id="eatBtn" type="submit">Enter</button></form><div id="eatPreview"></div></div><div id="shipBanner"></div></div>
   <button id="mptt" type="button">HOLD<br>TO<br>TALK</button><div id="mStat"></div>
   <div id="panel">
     <div class="box stats">
-      <div style="display:none"><b id="stScore">0</b><span>Score</span></div>
+      <div><b id="stScore">0/0</b><span>Points</span></div>
       <div><b id="stLanded">0</b><span>Landed</span></div>
       <div><b id="stMissed">0</b><span>Missed/Fail</span></div>
       <div><b id="stAcc">--</b><span>Call accuracy</span></div>
@@ -180,7 +190,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div id="hint"></div>
     <div class="box" id="readout">Waiting for traffic…</div>
     <div id="linkBox" style="font-size:11.5px;color:#8fd8ff;margin:4px 0"><span id="linkStat"></span></div>
-    <div id="gradeBox" style="display:none;font-size:11.5px;line-height:1.4;color:#8fd8ff;white-space:pre;overflow-x:auto"></div>
+    <div id="gradeBox" style="font-size:11.5px;line-height:1.4;color:#8fd8ff;white-space:pre;overflow-x:auto"></div>
     <div class="box">
       <div style="font-size:11px;color:var(--dim);margin-bottom:4px">TRAFFIC</div>
       <canvas id="inset" style="display:none"></canvas>
@@ -840,12 +850,14 @@ function newGame(diffKey, opts = {}) {
     results: [], wind, gustNow: { x: 0, y: 0 }, paused: false, scale: 1, selected: null, over: false, conflicts: new Set(),
     spawned: 0, nextSpawn: 0, toSpawn: opts.arrivals != null ? opts.arrivals : d.n, seq: 0, failMsg: null, endAt: null,
     pilotBias: opts.pilotBias, sideToggle: rng() < 0.5 ? 1 : -1,
+    mcPts: 0, mcGraded: [], eatRef: null, eatBase: null, eatAwait: false, firstEatUsed: false,
   };
   G.gateAt = rand(FIRST_GAP[0], FIRST_GAP[1]);
   logEl.innerHTML = '';
   setScale(1); setPaused(false);
   log('sys', `${d.name}: ${'Marshal, ' + SHIP_NAME + ', BRC ' + BRC3}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? (MC_MORE_ARRIVALS ? 'Arrivals check in for marshal every 4–5 min;' : 'Three waves: flight of two at 20 NM, single CCA arrival at 10 NM (270–090), then a second flight of two at 20 NM;') + ' press End to finish.' : G.toSpawn + ' arrivals.'}`);
   if (d.hints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
+  if (MC && opts.eatRef != null) mcSetEatRef(opts.eatRef);
   selectAc(null);
   refreshPanel(true);
 }
@@ -943,7 +955,7 @@ const tasOf = a => a.ias;   // low-level final: TAS = IAS, so calm-air groundspe
 const vsNominal = a => a.gs * 101.27 * GP_TAN;   // fpm for a 3 degree path at this groundspeed
 
 function step(dt) {
-  if (!G || G.over) return;
+  if (!G || G.over || G.eatAwait) return;
   if (APP) { appStep(dt); return; }
   G.t += dt;
   // gusts
@@ -1832,8 +1844,8 @@ function fuzzyCallsigns(s) {   // replace 1-2 word near-misses of an active call
   }
   return ' ' + out.join(' ') + ' ';
 }
-const VOCAB = ['stinger approach', 'stinger marshal', 'case three recovery', 'marshal', 'outbound bearing', 'lima hotel', 'brc', 'expected approach time', 'report commencing', 'cleared for', 'radar contact', 'take angels', 'angels', 'climb out instructions', 'climbout instructions', 'climb out', 'climbout', 'runway heading', 'dirty up', 'perform landing checks', 'expect final button', 'copper', 'purple', 'silver', 'red', 'go purple', 'go copper', 'go silver', 'go red', 'vectors for cca', 'cca approach', 'mark your father', 'upwind', 'crosswind', 'downwind', 'base', 'abeam', 'dogleg', 'heading', 'miles', 'left', 'right', 'maintain', 'knots', 'turn'];
-const VOCAB_WORDS = new Set(VOCAB.join(' ').split(' ').concat(['your', 'for', 'approach', 'final', 'button', 'take', 'expect', 'checks', 'landing', 'perform', 'contact', 'radar', 'mother', 'father', 'mark', 'climb', 'climbout', 'climbouts', 'instructions', 'instruction', 'runway', 'out', 'dirty', 'up', 'go', 'case', 'recovery', 'outbound', 'bearing', 'marshal', 'commencing', 'commence', 'cleared', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'zero']));
+const VOCAB = ['99 weather', 'ninety nine weather', 'stinger approach', 'stinger marshal', 'case three recovery', 'marshal', 'outbound bearing', 'lima hotel', 'brc', 'expected approach time', 'report commencing', 'cleared for', 'radar contact', 'take angels', 'angels', 'climb out instructions', 'climbout instructions', 'climb out', 'climbout', 'runway heading', 'dirty up', 'perform landing checks', 'expect final button', 'copper', 'purple', 'silver', 'red', 'go purple', 'go copper', 'go silver', 'go red', 'vectors for cca', 'cca approach', 'mark your father', 'upwind', 'crosswind', 'downwind', 'base', 'abeam', 'dogleg', 'heading', 'miles', 'left', 'right', 'maintain', 'knots', 'turn'];
+const VOCAB_WORDS = new Set(VOCAB.join(' ').split(' ').concat(['weather', 'ninety', 'eat', 'your', 'for', 'approach', 'final', 'button', 'take', 'expect', 'checks', 'landing', 'perform', 'contact', 'radar', 'mother', 'father', 'mark', 'climb', 'climbout', 'climbouts', 'instructions', 'instruction', 'runway', 'out', 'dirty', 'up', 'go', 'case', 'recovery', 'outbound', 'bearing', 'marshal', 'commencing', 'commence', 'cleared', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'zero']));
 function scoreAlt(t, conf) {
   const f = ' ' + fixSpeech(MC ? mcFixSpeech(t) : t) + ' '; let sc = (conf || 0) * 2;
   for (const v of VOCAB) if (f.includes(' ' + v + ' ')) sc += v.split(' ').length;
@@ -1844,7 +1856,7 @@ function scoreAlt(t, conf) {
     const p = parseSpeech(f, G ? G.ac.filter(alive).map(a => a.cs) : []);
     const cmdScore = p.cmds.reduce((acc, c) => acc + (c.k === 'climbout' ? (2 + (c.v ? c.v.length : 0)) * 2 + 2 : 2), 0);
     sc += cmdScore + (p.cs && !p.csUnknown ? 3 : 0) - (p.csUnknown ? 2 : 0);
-    if (MC) { const mp = MAR.parse(mcFixSpeech(t)); if (mp) sc += (mp.type ? 3 : 0) + (mp.marshal && mp.marshal.R != null ? 4 : 0) + (mp.marshal && mp.marshal.D != null ? 3 : 0) + (mp.marshal && mp.marshal.alt != null ? 3 : 0) + (mp.outbound != null ? 3 : 0) + (mp.brc != null ? 2 : 0); }
+    if (MC) { const fxT = mcFixSpeech(t), mp = MAR.parse(fxT); if (mp) sc += (mp.type ? 3 : 0) + (mp.marshal && mp.marshal.R != null ? 4 : 0) + (mp.marshal && mp.marshal.D != null ? 3 : 0) + (mp.marshal && mp.marshal.alt != null ? 3 : 0) + (mp.eat != null ? 4 : 0) + (mp.outbound != null ? 3 : 0) + (mp.brc != null ? 2 : 0); if (wxCallParse(fxT)) sc += 6; }
   } catch (e) {}
   return sc;
 }
@@ -1872,6 +1884,8 @@ function mcFixSpeech(t) {   // forgiving marshal-flow wording: common speech-to-
   s = s.replace(/\b(?:martial|marshall|marshals|marshalls|martian)\b/gi, 'marshal').replace(/\bradar\s+(?:contract|contacts|context|comtact)\b/gi, 'radar contact');
   s = s.replace(/\bcleared\s+(?:four|for|to|2)\s+(?=LH|approach)/gi, 'cleared for ').replace(/\bclear\s+for\b/gi, 'cleared for');
   s = s.replace(/\b(?:three|tree|3)\s*(?:mile|miles|mi|nm)\b/gi, '3 miles').replace(/\b(?:redial|radio|radiol)\b/gi, 'radial');
+  s = s.replace(/\b(?:expect(?:ed|ing)?|accepted)\s+(?:a\s+)?(?:proach|approach)\s+(?:time|times|dime|sign|climb|line)\b/gi, 'expected approach time').replace(/\be\s*\.?\s*a\s*\.?\s*t\.?\b/gi, 'expected approach time');
+  s = s.replace(/\b(?:ninety[\s\-]*nine|niner[\s\-]*niner|nine[\s\-]*nine|9\s+9|ninety[\s\-]*niner)\s*,?\s*(?:(?:stinger|wasp)\s*,?\s*(?:marshal\s*,?\s*)?)?(?:weather|whether|wether|weathers|feather|leather)\b/gi, '99 weather').replace(/\b99\s*,?\s*(?:(?:stinger|wasp)\s*,?\s*(?:marshal\s*,?\s*)?)?(?:whether|wether|weathers|feather|leather)\b/gi, '99 weather');
   // callsign digits split or spoken as tens/teens: "Eagle 3 4", "eagle three four", "Venom twenty one", "Eagle sixteen" -> "Eagle 34", "Venom 21", "Eagle 16"
   const TNW = { twenty: 20, thirty: 30, forty: 40, fourty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
   const TEW = { ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
@@ -1898,6 +1912,14 @@ function handleTranscript(text, src) {
   const known = G ? G.ac.filter(alive).map(a => a.cs) : [];
   const heard = String(text).trim(); text = fixSpeech(text);
   const sc = shipCallParse(heard) || shipCallParse(text);
+  const wxc = MC ? (wxCallParse(heard) || wxCallParse(text)) : null;
+  if (G && !G.over && MC && wxc) {
+    setHeard(heard, null); if (src === 'voice') renderTranscript(text, '');
+    wxCallExec(heard, src);
+    $('parsed').textContent = `Understood → 99 weather (${G.mcPts || 0}/${(G.mcGraded || []).length} pts)`;
+    $('parsed').classList.remove('bad');
+    return { cs: null, cmds: ['wx99'], str: '99 weather', pts: G.mcPts || 0, maxPts: (G.mcGraded || []).length };
+  }
   const sqm = /\bsq(?:u|w)?a+w?c?k?s?\s*,?\s*normal\b/i.exec(heard);
   if (G && !G.over && sqm) {   // "squawk normal": a wingman with no squawk starts squawking (data block appears)
     const pre = heard.slice(0, sqm.index), pp = pre.trim() ? parseSpeech(pre, known) : null, live = G.ac.filter(appCtl), up = pre.toUpperCase().replace(/[\s,]+/g, '');
@@ -1935,14 +1957,14 @@ function handleTranscript(text, src) {
       const pp = preFx.trim() ? parseSpeech(preFx, known) : null, live = G.ac.filter(appCtl);
       let a = csByDigits(preRaw, pool) || csByDigits(preFx, pool) || (pp && pp.cs && pool.find(x => x.cs === pp.cs)) || (up && pool.find(x => up.includes(x.cs))) || null;
       if (!a && !(pp && pp.csUnknown) && !/\b\d{2,3}\b/.test(preRaw)) a = G.selected && appCtl(G.selected) ? G.selected : (live.length === 1 ? live[0] : null);
-      const marOnly = !!(mp.type || mp.marshal || mp.commence || mp.cleared || mp.rpt3 || mp.missed);
+      const marOnly = !!(mp.type || mp.marshal || mp.eat != null || mp.commence || mp.cleared || mp.rpt3 || mp.missed);
       if (!(a && a.parArr && !marOnly)) {   // CCA arrival uses appExecute for Approach calls + compound handoffs ("turn left heading 360, go purple")
         if (src === 'voice') renderTranscript(text, '');
         setHeard(heard, null);
         if (!a) { log('sys', `Say the callsign (or select a target) first. Heard: "${heard}"`); return { cs: null, cmds: [], str: 'marshal?' }; }
         if (!a.accepted) { log('sys', `${a.cs} not accepted (click its target to accept): no response to "${heard}".`); return { cs: a.cs, cmds: [], str: 'not accepted' }; }
         MAR.exec(mp, a, heard, src);
-        $('parsed').textContent = 'Understood → ' + a.cs + ' ' + [mp.type && MAR.T[mp.type].name, mp.marshal && `marshal ${mp.marshal.R}/${mp.marshal.D}/${mp.marshal.alt}${mp.marshal.eat != null ? ' EAT ' + mp.marshal.eat : ''}`, mp.cleared && !mp.type && 'cleared/report commencing', mp.commence && 'commence', mp.missed && 'missed approach', mp.hoFinal && (mp.hoFreq ? 'go ' + mp.hoFreq : 'final'), mp.hoApp && 'go silver', mp.hoMar && 'go red'].filter(Boolean).join('; ');
+        $('parsed').textContent = 'Understood → ' + a.cs + ' ' + [mp.type && MAR.T[mp.type].name, mp.marshal && `marshal ${mp.marshal.R}/${mp.marshal.D}/${mp.marshal.alt}${mp.marshal.eat != null ? ' EAT ' + String(mp.marshal.eat).padStart(2, '0') : ''}`, !mp.marshal && mp.eat != null && `EAT ${String(mp.eat).padStart(2, '0')}`, mp.cleared && !mp.type && 'cleared/report commencing', mp.commence && 'commence', mp.missed && 'missed approach', mp.hoFinal && (mp.hoFreq ? 'go ' + mp.hoFreq : 'final'), mp.hoApp && 'go silver', mp.hoMar && 'go red'].filter(Boolean).join('; ');
         $('parsed').classList.remove('bad');
         return { cs: a.cs, cmds: ['marshal'], str: 'marshal', mar: mp };
       }
@@ -2021,7 +2043,7 @@ setInterval(() => { const v = startOv.classList.contains('hidden') && endOv.clas
 mptt.addEventListener('touchstart', e => e.preventDefault(), { passive: false });   // no iOS long-press callout / zoom
 if (MOBILE && !SR) setTimeout(() => mStatus('🎙 Voice input is not available in this browser' + (IOS && STANDALONE ? ': voice works best in a Safari tab, not the home-screen app.' : '.') + ' Type commands instead.', 15000), 800);
 if (MOBILE && !TTS) setTimeout(() => mStatus('🔇 This browser has no speech synthesis: pilot replies are text only.', 10000), 800);
-$('cmdForm').addEventListener('submit', e => { e.preventDefault(); const v = $('cmdInput').value.trim(); if (!v) return; Sound.ensure(); handleTranscript(v, 'typed'); $('cmdInput').value = ''; });
+$('cmdForm').addEventListener('submit', e => { e.preventDefault(); const v = $('cmdInput').value.trim(); if (!v) return; Sound.ensure(); if (MC && G && !G.over && /^\d{1,4}$/.test(v) && (G.eatAwait || (G.eatRef == null && G.t < 20))) { mcSetEatRef(+v); $('cmdInput').value = ''; return; } handleTranscript(v, 'typed'); $('cmdInput').value = ''; });
 $('cmdInput').addEventListener('keydown', e => { if (e.key === 'Escape') $('cmdInput').blur(); });
 
 /* ===================== panel ===================== */
@@ -2049,11 +2071,28 @@ function refreshPanel(force) {
   const now = performance.now();
   if (!force && now - lastPanel < 200) return;
   lastPanel = now;
-  $('stScore').textContent = G.score + G.ac.filter(a => !a.result).reduce((s, a) => s + 0, 0);
+  if (MC) {
+    const gr = G.mcGraded || [], pts = gr.filter(x => x.mcTasks && x.mcTasks.wx99).length;
+    G.mcPts = pts;
+    $('stScore').textContent = `${pts}/${gr.length}`;
+    const gb = $('gradeBox');
+    if (gb) {
+      const eatHdr = G.eatBase != null ? ` · REF :${String(G.eatRef).padStart(2, '0')} → 1ST EAT :${String(G.eatBase).padStart(2, '0')}` : '';
+      const L = gr.map(x => {
+        const ok = !!(x.mcTasks && x.mcTasks.wx99);
+        const eatTag = x.mar && x.mar.eat != null ? `  EAT :${String(x.mar.eat).padStart(2, '0')}${x.mar.eatDone ? '✓' : ''}` : '';
+        return `${x.cs.padEnd(8)} ${ok ? '✓ 99 weather   1/1' : '· needs 99 wx  0/1'}${eatTag}`;
+      });
+      const t = `GRADING · 99 WEATHER (1 pt/bird)${eatHdr}\n` + (L.length ? L.join('\n') : '(waiting for marshal arrivals)') + `\nPOINTS ${pts} / ${gr.length}`;
+      if (gb.textContent !== t) gb.textContent = t;
+    }
+  } else {
+    $('stScore').textContent = G.score + G.ac.filter(a => !a.result).reduce((s, a) => s + 0, 0);
+    const gb = $('gradeBox'); if (gb) { const L = G.ac.filter(a => a.phase === 'app' && a.st !== 'dep').map(a => `${a.cs.padEnd(8)} P${Math.min(a.cycle || 1, APP_MAX_PARS)} ` + GRADE_TASKS.map(([k]) => (a.tasks || {})[k] ? '✓' : '·').join('') + ` +${a.pts10 || 0}`);
+      const t = 'GRADING  1 stgr 2 rc 3 alt 4 cca 5 btn 6 pos 7 co 8 slow\n' + (L.length ? L.join('\n') : '(no traffic)') + `\nSCORE ${G.score}`; if (gb.textContent !== t) gb.textContent = t; }
+  }
   $('stLanded').textContent = G.landed + (G.practice ? ` +${G.practice}P` : '');
   $('stMissed').textContent = G.missed;
-  { const gb = $('gradeBox'); if (gb) { const L = G.ac.filter(a => a.phase === 'app' && a.st !== 'dep').map(a => `${a.cs.padEnd(8)} P${Math.min(a.cycle || 1, APP_MAX_PARS)} ` + GRADE_TASKS.map(([k]) => (a.tasks || {})[k] ? '✓' : '·').join('') + ` +${a.pts10 || 0}`);
-    const t = 'GRADING  1 stgr 2 rc 3 alt 4 cca 5 btn 6 pos 7 co 8 slow\n' + (L.length ? L.join('\n') : '(no traffic)') + `\nSCORE ${G.score}`; if (gb.textContent !== t) gb.textContent = t; } }
   const tot = G.callsGood + G.callsBad;
   $('stAcc').textContent = tot ? Math.round(100 * G.callsGood / tot) + '%' : '--';
   const a = G.selected;
@@ -2174,11 +2213,58 @@ $('sMic').onclick = () => {
 /* ===================== start / end ===================== */
 let chosenDiff = 'training';
 document.querySelectorAll('.diff').forEach(el => { el.onclick = () => { chosenDiff = el.dataset.d; document.querySelectorAll('.diff').forEach(x => x.classList.toggle('on', x === el)); }; });
+function mcParseMin(raw) {
+  const s = String(raw == null ? '' : raw).trim();
+  if (!/^\d{1,4}$/.test(s)) return null;
+  const n = (+s) % 100;
+  return (n >= 0 && n <= 59) ? n : null;
+}
+function mcSetEatRef(raw) {
+  const n = mcParseMin(raw);
+  if (n == null || !G) return false;
+  const eat1 = ((n - 6) % 60 + 60) % 60;
+  G.eatRef = n; G.eatBase = eat1; G.eatAwait = false;
+  const ep = $('eatPrompt'); if (ep) ep.classList.add('hidden');
+  log('sys', `Entered :${String(n).padStart(2, '0')} → 1st Expected Approach Time is :${String(eat1).padStart(2, '0')} (6 min prior). First marshal bird commences at 030/2 at :${String(eat1).padStart(2, '0')}; each marshal bird commences at the EAT you assign.`);
+  refreshPanel(true);
+  return true;
+}
+function mcOpenEatPrompt() {
+  const ep = $('eatPrompt'), ei = $('eatIn'), ev = $('eatPreview');
+  if (!MC || !G || !ep || !ei) return;
+  G.eatAwait = true;
+  ep.classList.remove('hidden');
+  ei.value = G.eatRef != null ? String(G.eatRef).padStart(2, '0') : '';
+  if (ev) ev.textContent = G.eatBase != null ? `Time :${String(G.eatRef).padStart(2, '0')} → 1st Marshal EAT :${String(G.eatBase).padStart(2, '0')} (6 min prior)` : 'Example: type 18 + Enter → 1st EAT :12 (commences at 030/2 at :12)';
+  setTimeout(() => { if (helpOv.classList.contains('hidden')) ei.focus(); }, 30);
+}
+if ($('eatForm')) {
+  const ei = $('eatIn'), ev = $('eatPreview'), ep = $('eatPrompt');
+  ei.addEventListener('input', () => {
+    const n = mcParseMin(ei.value);
+    if (n == null) { ev.textContent = 'Example: type 18 + Enter → 1st EAT :12 (commences at 030/2 at :12)'; return; }
+    const eat1 = ((n - 6) % 60 + 60) % 60;
+    ev.textContent = `Time :${String(n).padStart(2, '0')} → 1st Marshal EAT :${String(eat1).padStart(2, '0')} (commences at 030/2 at :${String(eat1).padStart(2, '0')})`;
+  });
+  ei.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); if (G) G.eatAwait = false; ep.classList.add('hidden'); ei.blur(); refreshPanel(true); }
+  });
+  $('eatForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const n = mcParseMin(ei.value);
+    if (n == null) { ev.textContent = 'Enter a minute from 00 to 59 (for example 18).'; ei.focus(); return; }
+    Sound.ensure();
+    mcSetEatRef(n);
+    ei.blur();
+  });
+}
 function startGame(diff, opts) {
   Sound.ensure(); startOv.classList.add('hidden'); endOv.classList.add('hidden'); helpOv.classList.add('hidden');
   uiPaused = false; newGame(diff, opts || {}); initVoiceStatus();
   let seen = false; try { seen = localStorage.getItem('mc_tut_seen') === '1'; } catch (e) {}
   if (!opts && diff === 'training' && !seen) openTutorial(0);
+  if (MC && (!opts || (!opts.skipEatPrompt && opts.eatRef == null))) mcOpenEatPrompt();
 }
 let linkChoice = localStorage.getItem('stingerLink') === '1';
 const paintLink = () => { $('bLinkOn').classList.toggle('on', linkChoice); $('bLinkOff').classList.toggle('on', !linkChoice); };
@@ -2196,10 +2282,24 @@ function endGame() {
   const avg = landedRes.length ? Math.round(landedRes.reduce((s, r) => s + r.score, 0) / landedRes.length) : 0;
   $('endTitle').textContent = G.failMsg ? '✖ APPROACH FAILED' : 'Session complete';
   $('endTitle').style.color = G.failMsg ? 'var(--red)' : '';
-  $('endGrade').innerHTML = G.failMsg ? `<span style="color:var(--red)">${esc(G.failMsg)}</span><br><span style="font-size:14px;color:#cfcce6">Watch the lower safety limit line and call "${ph('wave off', 'go around')}" early.</span>` : (landedRes.length ? `${landedRes.length} landed.` : 'No landings this time. Keep practicing!');
-  const rows = [['Level', G.d.name], ...(G.appConf != null || G.confPlan ? [[`Conflicts (−${SEP_STANDARDS.penalty} each)`, G.appConf || 0], ...(G.confDetail || []).slice(0, 6).map((t, i) => [`  ${i + 1}.`, t])] : []), ['Landed', G.landed], ...(G.practice ? [['Practice approaches', G.practice]] : []), ['Missed approaches / failures', G.missed], ['Crashes', G.crashes], ...((G.shipTurns || []).length ? [[`Ship turns (+${SHIP_TURN.bonus} per correct 99 call)`, `${G.shipTurns.length} turn(s), bonus +${G.shipBonus || 0}`], ...G.shipTurns.map((r, i) => [`  turn ${i + 1}: ${r.dir} ${r.deg}° → BRC ${h3z(r.to)}`, `turn call ${r.turnCall || 'missed'}, steady call ${r.steadyCall || 'missed'}`])] : []), ['Separation losses', G.sepLoss], ['Call accuracy', tot ? `${Math.round(100 * G.callsGood / tot)}% (${G.callsGood}/${tot})` : '--']];
-  $('endTable').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
-  $('endList').innerHTML = '<table class="st">' + G.results.map(r => `<tr><td>${esc(r.cs)} · ${r.landed ? ph('on deck', 'landed') : r.practice ? 'practice approach' : esc(r.reason)}<br><span style="color:var(--dim);font-size:11px">tolerance ${r.tol}% · ${r.good} good / ${r.bad} bad calls · ${r.gaps} gaps · ${r.missedRange} missed range calls</span></td><td></td></tr>`).join('') + '</table>';
+  const epEnd = $('eatPrompt'); if (epEnd) epEnd.classList.add('hidden'); G.eatAwait = false;
+  if (MC) {
+    const gr = G.mcGraded || [], pts = gr.filter(x => x.mcTasks && x.mcTasks.wx99).length;
+    G.mcPts = pts;
+    $('endGrade').innerHTML = `Marshal Grading: <b>${pts} / ${gr.length}</b> point${gr.length === 1 ? '' : 's'} <span style="font-size:13px;color:var(--dim)">(99 weather per marshal aircraft)</span>`;
+    const mcRows = [['Level', G.d.name], ['Points (99 weather)', `${pts} / ${gr.length}`], ...(G.eatBase != null ? [['Entered time → 1st EAT', `:${String(G.eatRef).padStart(2, '0')} → :${String(G.eatBase).padStart(2, '0')}`]] : []), ['Marshal birds', gr.length]];
+    $('endTable').innerHTML = mcRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+    $('endList').innerHTML = '<table class="st">' + gr.map(x => {
+      const ok = !!(x.mcTasks && x.mcTasks.wx99);
+      const eatTxt = x.mar && x.mar.eat != null ? ` · EAT :${String(x.mar.eat).padStart(2, '0')}${x.mar.eatDone ? ' (commenced)' : ''}` : '';
+      return `<tr><td><b>${esc(x.cs)}</b> (${esc(x.type)})${eatTxt}</td><td style="text-align:right;color:${ok ? 'var(--green,#78ff8c)' : 'var(--red,#ff6b6b)'}">${ok ? '✓ 99 weather (+1 pt)' : '✗ Missed 99 weather (0 pt)'}</td></tr>`;
+    }).join('') + '</table>';
+  } else {
+    $('endGrade').innerHTML = G.failMsg ? `<span style="color:var(--red)">${esc(G.failMsg)}</span><br><span style="font-size:14px;color:#cfcce6">Watch the lower safety limit line and call "${ph('wave off', 'go around')}" early.</span>` : (landedRes.length ? `${landedRes.length} landed.` : 'No landings this time. Keep practicing!');
+    const rows = [['Level', G.d.name], ...(G.appConf != null || G.confPlan ? [[`Conflicts (−${SEP_STANDARDS.penalty} each)`, G.appConf || 0], ...(G.confDetail || []).slice(0, 6).map((t, i) => [`  ${i + 1}.`, t])] : []), ['Landed', G.landed], ...(G.practice ? [['Practice approaches', G.practice]] : []), ['Missed approaches / failures', G.missed], ['Crashes', G.crashes], ...((G.shipTurns || []).length ? [[`Ship turns (+${SHIP_TURN.bonus} per correct 99 call)`, `${G.shipTurns.length} turn(s), bonus +${G.shipBonus || 0}`], ...G.shipTurns.map((r, i) => [`  turn ${i + 1}: ${r.dir} ${r.deg}° → BRC ${h3z(r.to)}`, `turn call ${r.turnCall || 'missed'}, steady call ${r.steadyCall || 'missed'}`])] : []), ['Separation losses', G.sepLoss], ['Call accuracy', tot ? `${Math.round(100 * G.callsGood / tot)}% (${G.callsGood}/${tot})` : '--']];
+    $('endTable').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+    $('endList').innerHTML = '<table class="st">' + G.results.map(r => `<tr><td>${esc(r.cs)} · ${r.landed ? ph('on deck', 'landed') : r.practice ? 'practice approach' : esc(r.reason)}<br><span style="color:var(--dim);font-size:11px">tolerance ${r.tol}% · ${r.good} good / ${r.bad} bad calls · ${r.gaps} gaps · ${r.missedRange} missed range calls</span></td><td></td></tr>`).join('') + '</table>';
+  }
   endOv.classList.remove('hidden');
 }
 
@@ -2304,7 +2404,7 @@ TUT.splice(0, TUT.length,
 const tutPage = i => TUT[i];
 let tutIdx = 0;
 function openTutorial(i) { tutIdx = i; uiPaused = true; helpOv.classList.remove('hidden'); renderTut(); }
-function closeTutorial() { helpOv.classList.add('hidden'); uiPaused = !setOv.classList.contains('hidden'); try { localStorage.setItem('mc_tut_seen', '1'); } catch (e) {} }
+function closeTutorial() { helpOv.classList.add('hidden'); uiPaused = !setOv.classList.contains('hidden'); try { localStorage.setItem('mc_tut_seen', '1'); } catch (e) {} if (MC && G && G.eatAwait && $('eatIn')) setTimeout(() => $('eatIn').focus(), 20); }
 function tutGo(d) { tutIdx = clamp(tutIdx + d, 0, TUT.length - 1); renderTut(); }
 function renderTut() { $('tutTitle').textContent = tutPage(tutIdx)[0]; $('tutBody').innerHTML = tutPage(tutIdx)[1]; $('tutPage').textContent = `${tutIdx + 1} / ${TUT.length}`; $('tutPrev').disabled = tutIdx === 0; $('tutNext').disabled = tutIdx === TUT.length - 1; }
 $('tutPrev').onclick = () => tutGo(-1); $('tutNext').onclick = () => tutGo(1); $('tutClose').onclick = closeTutorial;
@@ -2809,7 +2909,7 @@ function mcArrive(spec = {}) {
   { const f = appFuelSpec(a); a.fuel0 = f[0] * rand(0.45, 0.7); a.launchT = G.t; a.souls = Math.round(rand(f[2], f[3])); }
   if (spec.lead) { a.lead = spec.lead; a.inForm = true; a.sq = false; }   // wingman: no squawk, flies formation on the leader
   if (spec.flight) { a.flight = spec.flight; a.wingCs = spec.wing || null; }
-  G.ac.push(a); appCheckIn(a, false); a.needAlt = false; a.identified = true; a.rcDone = true;
+  G.ac.push(a); mcRegisterGrade(a); appCheckIn(a, false); a.needAlt = false; a.identified = true; a.rcDone = true;
   return a;
 }
 window.__mcArrive = mcArrive;
@@ -2956,6 +3056,31 @@ function shipCallExec(sc, heard, src) {
 }
 window.__shipTurn = (dir, deg, inSec) => shipTurnSchedule(dir, deg, inSec);
 window.__shipCallParse = shipCallParse;
+function mcRegisterGrade(a) {
+  if (!MC || !G || !a || a.parArr) return;
+  G.mcGraded = G.mcGraded || [];
+  a.mcTasks = a.mcTasks || { wx99: false };
+  if (!G.mcGraded.includes(a)) G.mcGraded.push(a);
+}
+function wxCallParse(raw) {
+  let t = ' ' + String(raw).toLowerCase().replace(/[’`]/g, "'").replace(/[^a-z0-9' -]/g, ' ').replace(/-/g, ' ').replace(/\s+/g, ' ') + ' ';
+  if (!/ (99|9 9|ninety ?nine|niner niner|nine nine|ninety niner|nein nein) /.test(t)) return null;
+  if (!/ (weather|whether|wether|weathers|wx|feather|leather) /.test(t)) return null;
+  return { k: 'wx99' };
+}
+function wxCallExec(heard, src) {
+  G.mcGraded = G.mcGraded || [];
+  const onFreq = G.mcGraded.filter(a => G.ac.includes(a) && alive(a) && a.phase === 'app' && a.st === 'ctl');
+  const newly = onFreq.filter(a => !(a.mcTasks && a.mcTasks.wx99));
+  for (const a of newly) { a.mcTasks = a.mcTasks || {}; a.mcTasks.wx99 = true; }
+  G.mcPts = G.mcGraded.filter(a => a.mcTasks && a.mcTasks.wx99).length;
+  log('ctl', `ALL: "${String(heard).trim()}"${src === 'voice' ? ' 🎙' : ''}  →  99 weather`);
+  if (!onFreq.length) log('sys', '99 weather: no marshal aircraft on frequency right now.');
+  else if (!newly.length) log('sys', `99 weather: all ${onFreq.length} current marshal aircraft already received 99 weather (${G.mcPts}/${G.mcGraded.length} pts).`);
+  else log('good', `+${newly.length} pt${newly.length > 1 ? 's' : ''}: 99 weather received by ${newly.map(a => a.cs).join(', ')} (${G.mcPts}/${G.mcGraded.length} pts).`);
+  refreshPanel(true);
+}
+window.__wxCallParse = wxCallParse;
 /* ---------- sectors: "<callsign>, proceed to sector N, report established" ---------- */
 const SECTOR_CTR = { 1: 45, 2: 135, 3: 225, 4: 315 }, SECTOR_MIN_NM = 10, SECTOR_PT_NM = 12.5, SECTOR_EST_NM = 1.5, SECTOR_ORBIT_NM = 1.2;   // hold point >= 12.5 NM out, tight orbit, never inside 10 NM
 const inSector = (brg, n) => { const lo = (n - 1) * 90; return norm(brg - lo) < 90; };
@@ -3000,6 +3125,14 @@ const MAR = {
   direct(P, p) { return this.lb(P[0] - p[0], P[1] - p[1]); },
   arcH(p, R) { const b = this.lb(p[0], p[1]), rr = Math.hypot(p[0], p[1]); return b + 90 + this.cl((rr - R) * 40, 40); },   // clockwise arc
   eatMin() { return Math.floor((36000 + Math.floor(G.t)) / 60) % 60; },
+  calcEatAt(eat) {
+    if (eat == null || !isFinite(eat)) return null;
+    const e = ((Math.round(eat) % 60) + 60) % 60;
+    const cur = (36000 + G.t) % 3600, tgt = e * 60;
+    let dt = tgt - cur;
+    if (dt <= -60) dt += 3600;
+    return G.t + dt;
+  },
   infer(a, R, D) {   // approach type from a marshal radial/DME when none has been assigned
     const near = (x, y) => Math.abs(angDiff(x, y)) <= 5;
     if (!isHelo(a)) return near(R, 30) ? (D != null && D >= 3 ? 'LH1' : 'LH2') : near(R, 180) ? 'LH3' : null;
@@ -3069,12 +3202,16 @@ const MAR = {
     { const b = s.match(/\bbrc\s+(\d{1,3})\b/); if (b) out.brc = +b[1] % 360 || 360; }
     const lh = s.match(/\blh\s+([1-5])\b/); if (lh) out.type = 'LH' + lh[1];
     if (/\bemergency\s+(?:marshal|approach)/.test(s)) out.type = 'EMER';
+    { const em = s.match(/\b(?:(?:expected|expect)\s+approach\s+time|eat)\s*(?:is\s+|at\s+|of\s+)?(\d{1,4})\b/);
+      if (em) { const ev = (+em[1]) % 100; if (ev >= 0 && ev <= 59) out.eat = ev; } }
     if (/\b(?:marshal+|martial)\b/.test(s)) {
       const post = s.slice(s.search(/\b(?:marshal+|martial)\b/));
       const r = post.match(/(\d{1,3})\s*(?:radial|r\b)/) || post.match(/radial\s*(\d{1,3})/) || post.match(/^(?:marshal+|martial)\s+(?:on\s+(?:the\s+)?)?(\d{1,3})\b/), d = post.match(/(\d+(?:\.\d+)?)\s*(?:miles?|mi|nm|dme)\b/) || post.match(/\bat\s+(\d+(?:\.\d+)?)\b/);
       const an = post.match(/angels?\s*(\d+(?:\.\d+)?)/), ft = post.match(/(\d{4,5})\s*(?:feet|ft)\b/);
-      const e = post.match(/(?:expected|expect)\s+approach\s+time\s*(\d{1,2})\b/) || post.match(/\beat\s*(\d{1,2})\b/);
-      out.marshal = { R: r ? +r[1] % 360 : null, Rabs: r ? +r[1] % 360 : null, D: d ? +d[1] : null, alt: an ? Math.round(+an[1] * 1000) : ft ? +ft[1] : null, eat: e ? +e[1] : null };
+      const e = post.match(/(?:expected|expect)\s+approach\s+time\s*(?:is\s+|at\s+|of\s+)?(\d{1,4})\b/) || post.match(/\beat\s*(?:is\s+|at\s+|of\s+)?(\d{1,4})\b/);
+      const eatM = e ? (+e[1]) % 100 : (out.eat != null ? out.eat : null);
+      if (eatM != null && eatM >= 0 && eatM <= 59) out.eat = eatM;
+      out.marshal = { R: r ? +r[1] % 360 : null, Rabs: r ? +r[1] % 360 : null, D: d ? +d[1] : null, alt: an ? Math.round(+an[1] * 1000) : ft ? +ft[1] : null, eat: (eatM != null && eatM >= 0 && eatM <= 59) ? eatM : null };
     }
     if (/\breport\s+commenc/.test(s)) { out.cleared = true; out.rptComm = true; }
     else if (/\bcommenc(?:e|ing)\b(?!\s+(?:your\s+)?descen)/.test(s)) out.commence = true;
@@ -3084,9 +3221,9 @@ const MAR = {
     { const g = s.match(/\bgo(?:\s+(?:to|2))?\s+(purple|purpel|copper|cooper|coper|silver|sliver|silvar|blue|red|read|redd)(?:\s+(?:buttons?|for\s+final|to\s+final|final|approach|marshal+))?\b/); if (g) { let f = g[1]; if (/^purp|^people|^pupil/i.test(f)) f = 'purple'; else if (/^cop|^coop/i.test(f)) f = 'copper'; else if (/^sil|^sliv|^blue/i.test(f)) f = 'silver'; else if (/^red|^read/i.test(f)) f = 'red'; if (f === 'silver') { out.hoApp = true; out.hoFreq = 'silver'; } else if (f === 'red') { out.hoMar = true; out.hoFreq = 'red'; } else { out.hoFinal = true; out.hoFreq = f; } } }
     if (/\b(?:execute\s+)?missed\s+approach\b/.test(s) && !out.marshal) out.missed = true;
     if (out.marshal && out.marshal.R != null) out.marshal.R = norm(out.marshal.R - BRC) % 360;   // spoken radial is BRC + relative value
-    return (out.type || out.marshal || out.cleared || out.commence || out.missed || out.rpt3 || out.hoFinal || out.hoApp || out.hoMar) ? out : null;
+    return (out.type || out.marshal || out.eat != null || out.cleared || out.commence || out.missed || out.rpt3 || out.hoFinal || out.hoApp || out.hoMar) ? out : null;
   },
-  trigger: /\b(?:go(?:\s+(?:to|too|two))?\s+(?:purple|copper|silver|sliver|blue|red|read|redd)\b|report\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound|report\s+commenc|cleared\s+(?:for\s+)?(?:the\s+)?approach|(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?(?:final|approach)|case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery|marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
+  trigger: /\b(?:go(?:\s+(?:to|too|two))?\s+(?:purple|copper|silver|sliver|blue|red|read|redd)\b|report\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound|report\s+commenc|cleared\s+(?:for\s+)?(?:the\s+)?approach|(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?(?:final|approach)|case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery|(?:expected|expect)\s+approach\s+time|\beat\s+(?:is\s+|at\s+)?(?:\d|zero|oh|one|two|three|four|five|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)|marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
   say(a, txt, say) { if (a.st === 'mfinal') return; pilotSay(a, `${a.tel}, ${txt}.`, `${a.telSay}, ${say || txt}.`); },
   dg(v) { return String(v).split('').map(c => c === '.' ? 'point' : DIGW[+c]).join(' '); },
   exec(m, a, heard, src) {
@@ -3114,13 +3251,28 @@ const MAR = {
       if (dup) { G.score -= this.PEN; log('bad', `−${this.PEN}: ${a.cs} assigned angels ${appAngels(k.alt)}, already used in marshal by ${dup.cs}.`); Sound.buzz(); }
       if (bad.length) { G.score -= this.PEN; log('bad', `−${this.PEN}: marshal for ${a.cs}${type ? ' (' + this.T[type].name + ')' : ''}: ${bad.join('; ')}.`); Sound.buzz(); }
       else if (!dup) { award(a, 'mar', `marshal ${h3z(k.R)}/${k.D} angels ${appAngels(k.alt)}${type ? ' (' + this.T[type].name + ')' : ''}`); }
-      Object.assign(M, { R: k.R, D: k.D, alt: k.alt, eat: k.eat, inMar: true, ph: 'toMar', leg: null, est: false, eatSaid: false, typeInf: type });
+      mcRegisterGrade(a);
+      let eatAssign = k.eat != null ? k.eat : (m.eat != null ? m.eat : null);
+      if (eatAssign == null && G.eatBase != null && !G.firstEatUsed && M.eat == null) {
+        eatAssign = G.eatBase; G.firstEatUsed = true;
+      } else if (eatAssign != null && !G.firstEatUsed) {
+        G.firstEatUsed = true;
+      }
+      const finalEat = eatAssign != null ? eatAssign : (M.eat != null ? M.eat : null);
+      Object.assign(M, { R: k.R, D: k.D, alt: k.alt, eat: finalEat, eatAt: finalEat != null ? this.calcEatAt(finalEat) : null, eatDone: false, inMar: true, ph: 'toMar', leg: null, est: false, eatSaid: false, typeInf: type });
       a.tgtAlt = k.alt; a.turnDir = null;
-      parts.push(`marshal ${h3z(k.R)} radial, ${k.D} miles, angels ${appAngels(k.alt)}${k.eat != null ? ', expected approach time ' + String(k.eat).padStart(2, '0') : ''}`);
-      says.push(`marshal ${this.dg(h3z(k.R))} radial, ${k.D >= 10 ? sayTwo(Math.round(k.D)) : this.dg(k.D)} miles, angels ${appAngelsSay(k.alt)}${k.eat != null ? ', expected approach time ' + this.dg(String(k.eat).padStart(2, '0')) : ''}`);
-      log('sys', `${a.cs} proceeding to marshal ${h3z(k.R)}R (bearing ${h3z(BRC + k.R)}) ${k.D} NM, angels ${appAngels(k.alt)}.`);
+      parts.push(`marshal ${h3z(k.R)} radial, ${k.D} miles, angels ${appAngels(k.alt)}${finalEat != null ? ', expected approach time ' + String(finalEat).padStart(2, '0') : ''}`);
+      says.push(`marshal ${this.dg(h3z(k.R))} radial, ${k.D >= 10 ? sayTwo(Math.round(k.D)) : this.dg(k.D)} miles, angels ${appAngelsSay(k.alt)}${finalEat != null ? ', expected approach time ' + this.dg(String(finalEat).padStart(2, '0')) : ''}`);
+      log('sys', `${a.cs} proceeding to marshal ${h3z(k.R)}R (bearing ${h3z(BRC + k.R)}) ${k.D} NM, angels ${appAngels(k.alt)}${finalEat != null ? ', EAT :' + String(finalEat).padStart(2, '0') + ' (will report commencing at ' + h3z(BRC + k.R) + '/' + k.D + ' at :' + String(finalEat).padStart(2, '0') + ')' : ''}.`);
       const ob = this.outbound();
       if (m.outbound == null) { G.score -= this.PEN; log('bad', `−${this.PEN}: ${a.cs} marshal instruction missing the outbound bearing (${h3z(ob)}).`); Sound.buzz(); }
+    }
+    if (!m.marshal && m.eat != null) {
+      if (!G.firstEatUsed) G.firstEatUsed = true;
+      M.eat = m.eat; M.eatAt = this.calcEatAt(m.eat); M.eatDone = false; M.eatSaid = false;
+      parts.push(`expected approach time ${String(m.eat).padStart(2, '0')}`);
+      says.push(`expected approach time ${this.dg(String(m.eat).padStart(2, '0'))}`);
+      log('sys', `${a.cs} expected approach time set to :${String(m.eat).padStart(2, '0')} (will commence and report commencing at :${String(m.eat).padStart(2, '0')}).`);
     }
     if (m.outbound != null) { const ob = this.outbound(); M.outbound = m.outbound;
       if (Math.abs(angDiff(m.outbound, ob)) > 2) { G.score -= this.PEN; log('bad', `−${this.PEN}: ${a.cs} outbound bearing ${h3z(m.outbound)} is wrong: should be ${h3z(ob)} (DWH ${h3z(norm(BRC + 180))} + 30).`); Sound.buzz(); }
@@ -3236,8 +3388,14 @@ const MAR = {
         if (d <= 0.30) {
           M.inMar = true; M.t0 = G.t;
           const alignedIn = Math.abs(angDiff(this.hdgL(a), cin)) <= 35;
-          if (M.cleared && (M.type || M.typeInf) && alignedIn) {
-            const sayC = !!M.rptComm; M.rptComm = false; this.commence(a, M.type || M.typeInf); if (sayC) this.say(a, 'commencing');
+          const canEatPush = M.eatAt != null && G.t >= M.eatAt - 10 && alignedIn;
+          const canClrPush = M.eatAt == null && M.cleared && (M.type || M.typeInf) && alignedIn;
+          if (canEatPush || canClrPush) {
+            const pushType = M.type || M.typeInf || (isHelo(a) ? 'LH5' : 'LH2');
+            const sayC = canEatPush || !!M.rptComm;
+            M.rptComm = false; if (canEatPush) M.eatDone = true;
+            this.commence(a, pushType);
+            if (sayC) { const rFix = h3z(BRC + (M.R != null ? M.R : 30)), dFix = M.D != null ? M.D : 2; this.say(a, `commencing`); log('good', `${a.cs} commencing in marshal ${rFix} at ${dFix}${M.eat != null ? ' at :' + String(M.eat).padStart(2, '0') : ''}.`); }
           } else {
             M.ph = 'hold';
             M.leg = alignedIn ? 'tOut' : 'out';   // aligned inbound -> left 180 turn onto SE outbound leg; arriving from SW/other -> join SE outbound leg, turn left inbound to cross F on cin
@@ -3254,15 +3412,31 @@ const MAR = {
         if (M.leg === 'in') {
           const al = this.along(F, cin, p);
           this.setH(a, (dF <= 0.8 || al > 0) ? this.direct(F, p) : this.track(F, cin, p));
-          if (dF <= 0.32 && al >= -0.25) {
-            if (M.cleared && (M.type || M.typeInf)) { const sayC = !!M.rptComm; M.rptComm = false; this.commence(a, M.type || M.typeInf); if (sayC) this.say(a, 'commencing'); break; }
+          if (dF <= 0.35 && al >= -0.25) {
+            const canEatPush = M.eatAt != null && G.t >= M.eatAt - 10;
+            const canClrPush = M.eatAt == null && M.cleared && (M.type || M.typeInf);
+            if (canEatPush || canClrPush) {
+              const pushType = M.type || M.typeInf || (isHelo(a) ? 'LH5' : 'LH2');
+              const sayC = canEatPush || !!M.rptComm;
+              M.rptComm = false; if (canEatPush) M.eatDone = true;
+              this.commence(a, pushType);
+              if (sayC) { const rFix = h3z(BRC + (M.R != null ? M.R : 30)), dFix = M.D != null ? M.D : 2; this.say(a, 'commencing'); log('good', `${a.cs} commencing in marshal ${rFix} at ${dFix}${M.eat != null ? ' at :' + String(M.eat).padStart(2, '0') : ''}.`); }
+              break;
+            }
             M.leg = 'tOut'; M.t0 = G.t;
           }
         }
         if (M.leg === 'tOut') { this.setH(a, cout, 'L'); if (Math.abs(angDiff(this.hdgL(a), cout)) < 6) { M.leg = 'out'; M.t0 = G.t; } }
-        else if (M.leg === 'out') { this.setH(a, this.track(Fout, cout, p, 25)); if (-this.along(F, cin, p) >= (isHelo(a) ? 2.5 : 4.0)) M.leg = 'tIn'; }
+        else if (M.leg === 'out') {
+          this.setH(a, this.track(Fout, cout, p, 25));
+          const distOut = Math.max(0, -this.along(F, cin, p)), stdOut = isHelo(a) ? 2.5 : 4.0;
+          if (M.eatAt != null) {
+            const vNmS = Math.max(0.025, (a.gs || a.ias || 250) * ((MC && !isHelo(a)) ? 0.96 : 1) / 3600);
+            const tRet = 53 + distOut / vNmS, remAtF = (M.eatAt - G.t) - tRet;
+            if ((distOut >= 0.25 && remAtF <= 1.5) || (distOut >= stdOut && remAtF >= 135) || distOut >= stdOut + 5.5) M.leg = 'tIn';
+          } else if (distOut >= stdOut) M.leg = 'tIn';
+        }
         else if (M.leg === 'tIn') { this.setH(a, cin, 'L'); if (Math.abs(angDiff(this.hdgL(a), cin)) < 15) M.leg = 'in'; }
-        if (M.eat != null && !M.eatSaid && this.eatMin() === M.eat) { M.eatSaid = true; log('sys', `${a.cs}: expected approach time ${String(M.eat).padStart(2, '0')} (say "commence").`); }
         break;
       }
       case 'out1': {   // LH-1: outbound on outbound bearing (210) from marshal fix through mother, descend to 1/3 marshal alt, turn left at 12 NM / 3 min
@@ -3629,12 +3803,12 @@ function appReadout(a) {
   return `${a.cs} ${a.type} "${a.tel}"
 RANGE ${appRng(a).toFixed(1)} NM  BRG ${hdg3(Math.round(appBrg(a)))} FROM ${SHIP_NAME.toUpperCase()}
 HDG ${hdg3(Math.round(a.hdg))}${Math.abs(angDiff(a.tgtHdg, a.hdg)) > 0.5 ? ' → ' + hdg3(Math.round(a.tgtHdg)) : ''}   ALT ${fmtAlt(Math.round(a.alt))}${tgt(a.alt, a.tgtAlt, fmtAlt)} FT
-IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Math.round(a.gs)} KT${a.mar && a.mar.R != null ? `\nMARSHAL ${h3z(a.mar.R)}R/${a.mar.D} A${appAngels(a.mar.alt)}${a.mar.eat != null ? ' EAT ' + String(a.mar.eat).padStart(2, '0') : ''} ${(MAR.T[a.mar.run || a.mar.type || a.mar.typeInf] || {}).name || ''} ${a.mar.ph ? a.mar.ph.toUpperCase() : ''}` : ''}`;
+IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Math.round(a.gs)} KT${MC && !a.parArr ? `   99 WX ${a.mcTasks && a.mcTasks.wx99 ? '✓' : '–'}` : ''}${a.mar && a.mar.R != null ? `\nMARSHAL ${h3z(a.mar.R)}R/${a.mar.D} A${appAngels(a.mar.alt)}${a.mar.eat != null ? ' EAT :' + String(a.mar.eat).padStart(2, '0') + (a.mar.eatDone ? ' (COMMENCED)' : '') : ''} ${(MAR.T[a.mar.run || a.mar.type || a.mar.typeInf] || {}).name || ''} ${a.mar.ph ? a.mar.ph.toUpperCase() : ''}` : ''}`;
 }
 function appPanel() {
   const hint = $('hint');
   hint.style.display = G.d.hints ? 'block' : 'none';
-  if (G.d.hints && MC) hint.innerHTML = `💡 A flight of two checks in for marshal. Click a target to accept it, assign a marshal ("<b>${G.selected ? G.selected.tel : 'Venom two one'}</b>, Case three recovery, LH2 approach with CCA final, marshal 030 at 2, angels 2, BRC ${BRC3}, outbound bearing ${h3z(MAR.outbound())}"). The pilot answers with the callsign only; say "<b>cleared for LH2 approach, report commencing</b>" when ready to push. Jets: LH-1 030/4, LH-2 030/2, LH-3 180/angels+15; helos: LH-4 090/7, LH-5 030/2 (radials = BRC + value). Outbound bearing = DWH + 30. See ? Help.`;
+  if (G.d.hints && MC) { const eEx = G.eatBase != null ? String(G.eatBase).padStart(2, '0') : '12'; hint.innerHTML = `💡 Click a target to accept it, assign marshal + EAT ("<b>${G.selected ? G.selected.tel : 'Venom two one'}</b>, Case three recovery, LH2 approach with CCA final, marshal 030 at 2, angels 2, BRC ${BRC3}, outbound bearing ${h3z(MAR.outbound())}, expected approach time ${eEx}"), and broadcast "<b>99 weather</b>" (1 pt per marshal bird; repeat when new birds arrive). Each marshal bird commences from 030 at 2 at the EAT you assign.`; }
   else if (G.d.hints) hint.innerHTML = `💡 Vector your launches onto the final approach course (FB ${BRC3}, inbound from ${hdg3(norm(BRC + 180))}) and descend them to 3,000 ft or below inside 3 NM to hand them to ${SHIP_NAME} Final. Aircraft launch from ${SHIP_NAME} one at a time (every 4–6 min), fly up to ${APP_MAX_PARS} practice PARs (low approach, then back to you) and recover full stop on the last. After each check-in, your first altitude must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets (−5 if not). Call <b>radar contact</b> within 2 NM of the ship (−5 if later). To slow down: ${G.selected && G.selected.phase === 'app' ? (isHelo(G.selected) ? `${G.selected.tel} (helo): "<b>perform landing checks</b>"` : `${G.selected.tel} (jet): "<b>dirty up</b>"`) : 'helos "<b>perform landing checks</b>", jets "<b>dirty up</b>"'}.`;
   $('scopeStatus').textContent = `${MC ? 'MARSHAL' : 'APPROACH'} · ${SHIP_NAME.toUpperCase()} · RED · FB ${BRC3} · ${APP_RANGE} NM · WIND ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   $('stLanded').textContent = G.landed; $('stLanded').nextElementSibling.textContent = MC ? 'Approaches' : 'Handed off';
@@ -3777,7 +3951,9 @@ window.PAR = {
   hit(cs) { const a = G && G.ac.find(x => x.cs === cs); return a ? { e: a.hitE, az: a.hitA } : null; },
   selected() { return G && G.selected ? G.selected.cs : null; },
   deselect() { selectAc(null); },
-  summary() { return G ? { t: Math.round(G.t), score: G.score, landed: G.landed, practice: G.practice, missed: G.missed, crashes: G.crashes, sepLoss: G.sepLoss, good: G.callsGood, bad: G.callsBad, over: G.over, fail: G.failMsg, results: G.results } : null; },
+  say(txt, src = 'typed') { return handleTranscript(txt, src); },
+  setEatRef(n) { return mcSetEatRef(n); },
+  summary() { return G ? { t: Math.round(G.t), score: G.score, mcPts: G.mcPts || 0, mcMaxPts: (G.mcGraded || []).length, eatRef: G.eatRef, eatBase: G.eatBase, eatAwait: !!G.eatAwait, landed: G.landed, practice: G.practice, missed: G.missed, crashes: G.crashes, sepLoss: G.sepLoss, good: G.callsGood, bad: G.callsBad, over: G.over, fail: G.failMsg, results: G.results } : null; },
   log() { return logEl.innerText; },
 };
 
@@ -3818,7 +3994,8 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   const tick = () => {
     const t = (typeof G !== 'undefined' && G && isFinite(G.t)) ? G.t : 0, W = (typeof G !== 'undefined' && G && G.wind) || { dir: 250, spd: 25, gust: 0 }, secs = 36000 + Math.floor(t);
     const hh = Math.floor(secs / 3600) % 24, mm = Math.floor(secs / 60) % 60, ss = secs % 60;
-    const txt = 'Time: ' + String(hh).padStart(2, '0') + String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0') + '\nFREQ RED · FB ' + h3z(FB()) + ' DWH ' + h3z(DWH()) + ' BRC ' + h3z(TBRC) + ' ' + fmtMV() + '\n' + String(W.dir).padStart(3, '0') + String(W.spd).padStart(2, '0') + (W.gust ? 'G' + String(W.spd + W.gust).padStart(2, '0') : '') + 'KT 2NM -SN BKN007 AA 29.92';
+    const eatLine = (typeof G !== 'undefined' && G && G.eatBase != null) ? '\nREF :' + String(G.eatRef).padStart(2, '0') + ' · 1ST EAT :' + String(G.eatBase).padStart(2, '0') : '';
+    const txt = 'Time: ' + String(hh).padStart(2, '0') + String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0') + eatLine + '\nFREQ RED · FB ' + h3z(FB()) + ' DWH ' + h3z(DWH()) + ' BRC ' + h3z(TBRC) + ' ' + fmtMV() + '\n' + String(W.dir).padStart(3, '0') + String(W.spd).padStart(2, '0') + (W.gust ? 'G' + String(W.spd + W.gust).padStart(2, '0') : '') + 'KT 2NM -SN BKN007 AA 29.92';
     if (ib.textContent !== txt) ib.textContent = txt;
   };
   const safeTick = () => { try { tick(); } catch (e) { console.error('info block', e); } };
