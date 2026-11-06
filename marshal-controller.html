@@ -2930,16 +2930,17 @@ function mcSpawnFlight(rel) {   // flight of 2 jets (same callsign word, consecu
     mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: rRel, rng: i ? r0 + 0.5 : r0, lead: ld ? ld.uid : null, flight: i ? null : 2, wing: i ? null : al.icao + nums[1] });
   }
 }
+function instPlan() { if (!G.instPlan) { const w2 = 10 + rand(150, 180); G.instPlan = { w1: 10, w2, w3: w2 + rand(150, 180) }; } return G.instPlan; }   // pre-rolled wave times (Instructor roster)
 function mcArrivals(want) {   // 3-wave Marshal sequence: Wave 1 flight (10 NM) -> Wave 2 single bird (6 NM right) -> Wave 3 flight (10 NM)
   if (G.mcWave == null) {
     if (G.t < 10) return;
     mcSpawnFlight(240);
-    G.mcWave = 1; G.nextWaveAt = G.t + rand(150, 180);   // Wave 2 ~2.5-3 min after Wave 1
+    G.mcWave = 1; G.nextWaveAt = instPlan().w2;   // Wave 2 ~2.5-3 min after Wave 1
     return;
   }
   if (G.mcWave === 1 && G.t >= G.nextWaveAt) {
     G.parSpawned = true; mcParArrive();
-    G.mcWave = 2; G.nextWaveAt = G.t + rand(150, 180);   // Wave 3 ~2.5-3 min after Wave 2
+    G.mcWave = 2; G.nextWaveAt = instPlan().w3;   // Wave 3 ~2.5-3 min after Wave 2
     return;
   }
   if (G.mcWave === 2 && G.t >= G.nextWaveAt) {
@@ -3972,11 +3973,12 @@ function drawApp(now) {
     if (!a.code) a.code = '4' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 8)).join('');   // octal Mode 3/A code
     const sel = a === G.selected, fin = a.st === 'final' || a.st === 'mfinal' || a.st === 'purple' || a.st === 'lowout', Q = P(a.e, a.n);
     if (a.sq === false) {   // no squawk: primary (raw) return only, no data block
+      if (a.priCut) { a.hitR = null; continue; }   // instructor cut primary + no squawk: nothing on the scope
       ctx.fillStyle = sel ? 'rgba(220,255,225,0.95)' : ppiCol(0.75); ctx.fillRect(Q[0] - 2.5, Q[1] - 1.5, 5, 3);
       if (sel) { ctx.strokeStyle = 'rgba(220,255,225,0.8)'; ctx.strokeRect(Q[0] - 6, Q[1] - 5, 12, 10); }
       a.hitR = appCtl(a) ? { x: Q[0], y: Q[1] } : null; continue; }
     const col = a.conflict ? ((now / 400 | 0) % 2 ? 'rgba(255,90,70,1)' : 'rgba(255,190,60,1)') : sel ? 'rgba(220,255,225,1)' : fin ? ppiCol(0.4) : ppiCol(0.9);
-    ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 4.5; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 4.5, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;   // simple target blip (no lines)
+    if (a.priCut) ctx.globalAlpha = 0; ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 4.5; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 4.5, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1; ctx.globalAlpha = 1;   // simple target blip (no lines; hidden when the instructor cuts primary radar)
     const bx = Q[0] + 14 + (a.dbx || 0), by = Q[1] - 22 + (a.dby || 0);
     if (a.dbx || a.dby) { ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(Q[0], Q[1]); ctx.lineTo(bx - 2, by + 4); ctx.stroke(); ctx.globalAlpha = 1; }   // leader line to a moved data block
     const l1 = (a.st === 'purple' || a.phase === 'withFinal' || a.phase === 'withApp') ? a.cs + ' ' + freqTag(a.hoffFreq || a.button || (a.phase === 'withApp' ? 'silver' : 'purple')) : a.cs, l2 = `${String(Math.round(a.alt / 100)).padStart(3, '0')} ${String(Math.round(a.gs / 10)).padStart(2, '0')} ${a.code}`;
@@ -4101,6 +4103,126 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   window.__star = { open: sOpen, close: sClose };
   const init = () => { place(ib, keys.infoBlk, defs.infoBlk); place(tb, keys.tbBlk, defs.tbBlk); place(sb, 'mc_starPos', sDef); };
   init(); window.addEventListener('resize', init); window.addEventListener('load', init);
+})();
+/* AATCC Instructor link hook (BroadcastChannel 'stinger-link'). Loaded by Marshal, Approach and Final.
+   Always listening (independent of the position's own Link toggle). Messages:
+   inst-hello {links:[...]} -> reply inst-state; inst-cmd {to, uid, cs, text, op} -> run on this scope; inst-state / inst-ack out. */
+(function () {
+  if (!('BroadcastChannel' in window)) return;
+  const PAGE = /final-controller/.test(location.pathname) ? 'FINAL' : (typeof MC !== 'undefined' && MC) ? 'MARSHAL' : 'APPROACH';
+  const FIN = PAGE === 'FINAL', NMFT = 6076.12, D2R = Math.PI / 180;
+  const ch = new BroadcastChannel('stinger-link');
+  let peerT = 0, wanted = false, lastSend = 0;
+  const g = () => (typeof G !== 'undefined' ? G : null);
+  const alv = a => !['landed', 'crashed', 'gone'].includes(a.phase);
+  const nrm = x => ((x % 360) + 360) % 360;
+  function acOut(a) {
+    const o = { uid: a.uid, cs: a.cs, tel: a.tel, type: a.type, helo: !!(a.T && a.T.helo), phase: a.phase, st: a.st || null,
+      hdg: Math.round(a.hdg || 0), tgtHdg: a.tgtHdg != null ? Math.round(a.tgtHdg) : null, ias: Math.round(a.ias || 0), tgtSpd: a.tgtSpd != null ? Math.round(a.tgtSpd) : null,
+      gs: Math.round(a.gs || a.ias || 0), sq: a.sq !== false, priCut: !!a.priCut, buster: !!a.buster || (a.tgtSpd >= 450),
+      freq: a.button || a.hoffFreq || (FIN ? 'purple' : PAGE === 'MARSHAL' ? 'red' : 'silver'), lead: a.lead || null, flight: a.flight || null, wingCs: a.wingCs || null,
+      mar: a.mar ? (a.mar.radial != null ? a.mar.radial + '/' + (a.mar.dme || '') : 'yes') : null, onScope: true };
+    if (FIN) {   // course frame -> plan view relative to the ship (final course BRC, aircraft r NM behind touchdown, yft right of course)
+      const brc = typeof BRC !== 'undefined' ? BRC : 360, r = a.r || 0, y = (a.yft || 0) / NMFT;
+      o.e = r * Math.sin((brc + 180) * D2R) + y * Math.sin((brc + 90) * D2R); o.n = r * Math.cos((brc + 180) * D2R) + y * Math.cos((brc + 90) * D2R);
+      o.alt = Math.round(a.z || 0); o.tgtAlt = a.levelAlt != null ? Math.round(a.levelAlt) : null; o.rng = +r.toFixed(2);
+      o.onScope = a.phase !== 'queue';
+    } else {
+      o.e = +(a.e || 0).toFixed(3); o.n = +(a.n || 0).toFixed(3); o.alt = Math.round(a.alt || 0); o.tgtAlt = a.tgtAlt != null ? Math.round(a.tgtAlt) : null;
+      o.onScope = a.phase === 'app' && a.st !== 'dep' ? true : a.phase === 'app';
+    }
+    return o;
+  }
+  function roster(G) {
+    const out = [], t = G.t;
+    if (PAGE === 'MARSHAL') {
+      const p = G.instPlan || (typeof instPlan === 'function' ? instPlan() : null); if (!p) return out;
+      const sp = [['Wave 1 · flight of 2 jets', p.w1, '10 NM · 240R', 1], ['Wave 2 · single CCA arrival', p.w2, '6 NM · 080–100R', 2], ['Wave 3 · flight of 2 jets', p.w3, '10 NM · 150–250R', 3]];
+      for (const [lbl, at, loc, w] of sp) {
+        const done = (G.mcWave || 0) >= w;
+        const acs = (G.instWaveCs && G.instWaveCs[w]) || [];
+        if (done && acs.length) acs.forEach((x, i) => out.push({ label: lbl, at, loc, cs: x.cs, type: x.type, tag: x.tag, spawned: true }));
+        else if (done) out.push({ label: lbl, at, loc, spawned: true });
+        else if (w === 2) out.push({ label: lbl, at, loc, cs: 'TBD', type: 'jet/helo', spawned: false, wave: w });
+        else ['LEAD', 'WING'].forEach(tag => out.push({ label: lbl, at, loc, cs: 'TBD', type: 'jet', tag, spawned: false, wave: w }));
+      }
+    } else if (PAGE === 'APPROACH') {
+      try { if (!G.instPlan && typeof instLaunchPlan === 'function') instLaunchPlan(0); } catch (e) {}
+      const plan = G.instPlan || [10];
+      plan.slice(0, 12).forEach((at, i) => out.push({ label: 'Launch ' + (i + 1), at, loc: 'Launch · Mother', spawned: t >= at && (G.launches || 0) > i, cs: (G.instLaunchCs || [])[i] || 'TBD', type: (G.instLaunchType || [])[i] || '' }));
+    } else {
+      if (G.linked) return out;
+      try { if (!G.instPlan && typeof instSpawnPlan === 'function') instSpawnPlan(0); } catch (e) {}
+      const plan = G.instPlan || [0];
+      for (let i = 0; i < G.toSpawn; i++) out.push({ label: 'PAR arrival ' + (i + 1), at: plan[i] != null ? plan[i] : null, loc: 'PAR queue', spawned: i < G.spawned, cs: (G.instSpawnCs || [])[i] || 'TBD' });
+    }
+    return out;
+  }
+  function track(G) {   // remember which callsigns each wave / launch produced
+    if (PAGE === 'MARSHAL') {
+      G.instWaveCs = G.instWaveCs || {}; G.instSeen = G.instSeen || new Set();
+      for (const a of G.ac) if (!G.instSeen.has(a.uid)) { G.instSeen.add(a.uid); const w = G.mcWave || 1; (G.instWaveCs[w] = G.instWaveCs[w] || []).push({ cs: a.cs, type: a.type, tag: a.lead ? 'WING' : a.flight ? 'LEAD' : '' }); }
+    } else if (PAGE === 'APPROACH') {
+      G.instSeen = G.instSeen || new Set(); G.instLaunchCs = G.instLaunchCs || []; G.instLaunchType = G.instLaunchType || [];
+      for (const a of G.ac) if (!G.instSeen.has(a.uid)) { G.instSeen.add(a.uid); if (a.st === 'dep' || a.launchT != null) { G.instLaunchCs.push(a.cs); G.instLaunchType.push(a.type); } }
+    } else {
+      G.instSeen = G.instSeen || new Set(); G.instSpawnCs = G.instSpawnCs || [];
+      for (const a of G.ac) if (!G.instSeen.has(a.uid)) { G.instSeen.add(a.uid); if (!a.link) G.instSpawnCs.push(a.cs); }
+    }
+  }
+  function send() {
+    const G = g(); lastSend = Date.now();
+    const m = { type: 'inst-state', src: PAGE, ts: Date.now(), running: !!(G && !G.over), paused: !!(G && G.paused) };
+    if (G) {
+      track(G);
+      Object.assign(m, { t: Math.round(G.t * 10) / 10, scale: G.scale || 1, brc: typeof BRC !== 'undefined' ? BRC : null, wind: G.wind ? { dir: G.wind.dir, spd: G.wind.spd } : null, diff: G.d && G.d.name,
+        ac: G.ac.filter(alv).map(acOut), roster: roster(G) });
+    }
+    try { ch.postMessage(m); } catch (e) {}
+  }
+  function find(G, m) { return G.ac.find(a => alv(a) && ((m.uid != null && a.uid === m.uid) || a.cs === m.cs)); }
+  function ack(m, ok, text) { try { ch.postMessage({ type: 'inst-ack', src: PAGE, id: m.id, cs: m.cs, ok, text }); } catch (e) {} }
+  function sysLog(s) { try { log('sys', '[Instructor] ' + s); } catch (e) {} }
+  function cmd(m) {
+    const G = g(); if (!G || G.over) return ack(m, false, PAGE + ' not running');
+    if (m.op === 'spawn') {
+      try {
+        if (PAGE === 'MARSHAL') { G.nextWaveAt = G.t; if (G.mcWave == null) G.t = Math.max(G.t, 10); if (G.instPlan) { const k = 'w' + ((G.mcWave || 0) + 1); G.instPlan[k] = G.t; } }
+        else if (PAGE === 'APPROACH') { G.nextLaunch = G.t; if (G.instPlan) { const i = (G.launches || 0); G.instPlan[i] = G.t; } }
+        else { G.nextSpawn = G.t; if (G.instPlan) G.instPlan[G.spawned] = G.t; }
+        sysLog('spawn-now requested'); return ack(m, true, 'next scheduled aircraft spawning now');
+      } catch (e) { return ack(m, false, String(e)); }
+    }
+    const a = find(G, m); if (!a) return ack(m, false, (m.cs || '?') + ' not on ' + PAGE);
+    const raw = String(m.text || '').trim(), s = raw.toLowerCase();
+    const parts = []; let rest = s;
+    const rule = (re, fn, label) => { if (re.test(rest)) { fn(); parts.push(label); rest = rest.replace(re, ' '); } };
+    rule(/\b(cut|kill|lose|fail)\s+(the\s+)?primary(\s+radar)?\b|\bprimary(\s+radar)?\s+(off|cut|fail(ed)?)\b/, () => a.priCut = true, 'PRIMARY CUT');
+    rule(/\b(restore|return)\s+(the\s+)?primary(\s+radar)?\b|\bprimary(\s+radar)?\s+(on|restored?)\b/, () => a.priCut = false, 'PRIMARY ON');
+    rule(/\b(cut|kill|lose|fail)\s+(the\s+)?secondary(\s+radar)?\b|\bsecondary(\s+radar)?\s+(off|cut)\b|\bsquawk\s+(off|standby)\b/, () => a.sq = false, 'SECONDARY CUT');
+    rule(/\b(restore|return)\s+(the\s+)?secondary(\s+radar)?\b|\bsecondary(\s+radar)?\s+on\b/, () => a.sq = true, 'SECONDARY ON');
+    rest = rest.replace(/^[\s,.;]+|[\s,.;]+$/g, '');
+    let res = null;
+    if (rest) {
+      const isBuster = /\b(signal\s+)?buster\b/.test(rest);
+      if (!FIN) { a.accepted = true; if (a.phase === 'app' && a.st === 'dep') { /* departing: still accept */ } }
+      try { res = handleTranscript(a.cs + ', ' + raw.replace(/\b(cut|restore)\s+(primary|secondary)(\s+radar)?\b/gi, '').trim(), 'instructor'); } catch (e) { return ack(m, false, 'error: ' + e.message); }
+      if (FIN && isBuster) { a.tgtSpd = 500; a.buster = true; }
+      if (isBuster) a.buster = true;
+    }
+    if (parts.length) sysLog(`${a.cs}: ${parts.join(', ')}`);
+    ack(m, true, [parts.join(', '), res && (res.str || (res.cmds && res.cmds.join(', ')))].filter(Boolean).join(' · ') || 'sent');
+    send();
+  }
+  ch.onmessage = e => {
+    const m = e.data || {};
+    if (m.type === 'inst-hello') { peerT = Date.now(); wanted = !m.links || m.links.includes(PAGE) || FIN; if (wanted) send(); }
+    else if (m.type === 'inst-cmd' && (m.to === PAGE || m.to === 'ANY')) { peerT = Date.now(); cmd(m); }
+    else if (m.type === 'inst-bye') peerT = 0;
+  };
+  setInterval(() => { if (wanted && Date.now() - peerT < 8000 && Date.now() - lastSend > 200) send(); }, 220);
+  try { ch.postMessage({ type: 'inst-state', src: PAGE, ts: Date.now(), running: false, hello: true }); } catch (e) {}
+  window.__INST = { send, cmd, PAGE }; window.__instStart = (d, o) => startGame(d, o); window.__instScale = s => { try { setScale(s); } catch (e) {} };
 })();
 })();
 </script>
