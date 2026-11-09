@@ -1,7 +1,7 @@
 {
   "id": "./approach-controller.html",
-  "name": "Wasp Approach",
-  "short_name": "Wasp Approach",
+  "name": "Approach",
+  "short_name": "Approach",
   "start_url": "./approach-controller.html",
   "scope": "./",
   "display": "standalone",

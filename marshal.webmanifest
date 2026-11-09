@@ -1,7 +1,7 @@
 {
   "id": "./marshal-controller.html",
-  "name": "Wasp Marshal",
-  "short_name": "Wasp Marshal",
+  "name": "Marshal",
+  "short_name": "Marshal",
   "start_url": "./marshal-controller.html",
   "scope": "./",
   "display": "standalone",
