@@ -23,6 +23,10 @@ h3{margin:2px 0;font-size:12px;color:var(--dim);font-weight:normal;letter-spacin
 #selName{color:var(--cyan);font-size:15px}#selInfo{color:var(--dim);font-size:12px;margin:3px 0 6px}
 .row{display:flex;gap:5px;flex-wrap:wrap}
 #bText{font-weight:bold;color:#eaf9fb;border-color:var(--cyan);background:#123f4a}
+#altBump{display:none;margin-top:7px;padding-top:7px;border-top:1px dashed #2a2350}#altBump.open{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+#altBump .lbl{color:var(--dim);font-size:11px;width:100%}
+#bDesc{color:#ff8a9a;border-color:#ff5a6e}#bAsc{color:#6dff8c;border-color:#3a9a55}
+#bDesc:hover,#bAsc:hover{filter:brightness(1.15)}
 .tog.cut{color:var(--red);border-color:var(--red)}
 #txBar{display:none;margin-top:7px}#txBar.open{display:block}
 #txTo{color:var(--amber);font-size:12px;margin-bottom:4px}
@@ -61,12 +65,16 @@ td{padding:3px 4px;border-top:1px solid #241d44;vertical-align:top}tr.act{cursor
     <div class="row"><button data-l="MARSHAL" class="lk">Marshal</button><button data-l="APPROACH" class="lk">Approach</button><button data-l="BOTH" class="lk">Marshal + Approach</button></div>
     <div style="color:var(--dim);font-size:12px">The Instructor screen does not run a simulation. Start Marshal / Approach / Final in their own tabs (each has its own ▶ START button); this screen connects automatically and lets you command their aircraft.</div>
     <div class="row"><button id="ovClose" class="on">Open Instructor scope →</button></div>
-    <div style="color:var(--dim);font-size:12px">Click an aircraft (scope or list) → <b>Text</b> (or press T / Enter) to type an instruction. Arrow keys move the selected data block. Mouse wheel zooms.</div>
+    <div style="color:var(--dim);font-size:12px">Click an aircraft (scope or list) → <b>Text</b> (or press T / Enter) to type an instruction. On final: <b>Climb / Descend</b> (or PgUp / PgDn) for a silent glidepath offset. Arrow keys move the selected data block. Mouse wheel zooms. Instructor actions never get a pilot readback.</div>
    </div></div>
   </div>
   <div id="panel">
    <div id="selBox"><h3>SELECTED AIRCRAFT</h3><div id="selName">— click an aircraft —</div><div id="selInfo"></div>
     <div class="row"><button id="bText">⌨ Text</button><button id="bPO" class="tog" title="Student sees only the moving target (data block hidden)">Primary Only</button><button id="bSO" class="tog" title="Student sees only the data block (target hidden)">Secondary Only</button><button id="bNR" class="tog on" title="Target + data block">Normal Radar</button><button id="bBus" class="tog">Buster (500 kt)</button></div>
+    <div id="altBump"><span class="lbl">ON FINAL · glidepath offset (silent · PgUp / PgDn)</span>
+     <select id="altStep" title="Altitude step"><option value="100">100 ft</option><option value="200" selected>200 ft</option><option value="500">500 ft</option></select>
+     <button id="bDesc" title="Push below glidepath / lower (hold to repeat)">▼ Descend</button>
+     <button id="bAsc" title="Push above glidepath / raise (hold to repeat)">▲ Climb</button></div>
     <div id="txBar"><div id="txTo"></div><form id="txForm" class="row" style="flex-wrap:nowrap"><input id="txIn" autocomplete="off" placeholder="turn left heading 180, angels 3"><button id="txSend" class="on">Send</button></form>
      <div class="chips" id="chips"></div></div>
    </div>
@@ -130,7 +138,7 @@ $('chips').innerHTML = CHIPS.map(c => `<span>${esc(c)}</span>`).join('');
 $('chips').onclick = e => { if (e.target.tagName === 'SPAN') { $('txIn').value = e.target.textContent; $('txIn').focus(); } };
 function renderSel() {
   const a = selAc(); $('selBox').classList.toggle('has', !!a);
-  if (!a) { $('selName').textContent = '— click an aircraft —'; $('selInfo').textContent = ''; $('txTo').textContent = ''; return; }
+  if (!a) { $('selName').textContent = '— click an aircraft —'; $('selInfo').textContent = ''; $('txTo').textContent = ''; $('altBump').classList.remove('open'); return; }
   const f = freqOf(a);
   $('selName').innerHTML = `${esc(a.tel || a.cs)} <span style="color:var(--dim);font-size:12px">${esc(a.cs)} · ${esc(a.type)}</span> <span class="ft f-${f}">${FREQ_TAG[f]}</span>${{ PO: ' <span class="ft f-red">PRI ONLY</span>', SO: ' <span class="ft f-red">SEC ONLY</span>', OFF: ' <span class="ft f-red">RADAR OFF</span>', NR: '' }[radarMode(a)]}`;
   const rng = Math.hypot(a.e, a.n), brg = h3(Math.atan2(a.e, a.n) / DEG);
@@ -138,14 +146,31 @@ function renderSel() {
   const mode = radarMode(a); $('bPO').classList.toggle('cut', mode === 'PO'); $('bSO').classList.toggle('cut', mode === 'SO'); $('bNR').classList.toggle('on', mode === 'NR');
   $('bBus').classList.toggle('on', !!a.buster);
   $('txTo').textContent = `To: ${a.tel || a.cs} (${a.type} · ${FREQ_TAG[f]})`;
+  $('altBump').classList.toggle('open', onFinal(a));
 }
 function openText() { const a = selAc(); if (!a) { log('s', 'Select an aircraft first (click it on the scope or in the list).'); return; } $('txBar').classList.add('open'); renderSel(); $('txIn').focus(); }
 $('bText').onclick = openText;
 let cmdId = 0;
-function sendCmd(a, text, op) {
-  if (!a) return; const m = { type: 'inst-cmd', to: a.src, uid: a.uid, cs: a.cs, text, op, id: ++cmdId };
+function sendCmd(a, text, op, extra) {
+  if (!a) return; const m = Object.assign({ type: 'inst-cmd', to: a.src, uid: a.uid, cs: a.cs, text, op, id: ++cmdId }, extra || {});
   try { ch.postMessage(m); } catch (e) {}
-  log('i', `INSTRUCTOR → ${a.cs} (${a.src}): "${text || op}"`);
+  log('i', `INSTRUCTOR → ${a.cs} (${a.src}): "${text || (op === 'altBump' ? ((extra && extra.ft > 0 ? 'climb ' : 'descend ') + Math.abs(extra && extra.ft || 0) + ' ft') : op)}"`);
+}
+function onFinal(a) {
+  if (!a) return false;
+  if (a.src === 'FINAL') return ['final', 'descent', 'linkin', 'visual'].includes(a.phase);
+  return a.st === 'final' || !!a.onFinal || a.phase === 'withFinal';
+}
+function altBump(dir) {
+  const a = selAc(); if (!a || !onFinal(a)) { log('s', 'Select an aircraft on final first.'); return; }
+  const ft = dir * (+$('altStep').value || 200);
+  sendCmd(a, null, 'altBump', { ft });
+}
+function holdBtn(btn, dir) {
+  let t = null, first = null;
+  const go = () => altBump(dir);
+  const stop = () => { clearTimeout(first); clearInterval(t); first = t = null; window.removeEventListener('pointerup', stop); window.removeEventListener('pointercancel', stop); };
+  btn.addEventListener('pointerdown', e => { e.preventDefault(); go(); first = setTimeout(() => { t = setInterval(go, 220); }, 380); window.addEventListener('pointerup', stop); window.addEventListener('pointercancel', stop); });
 }
 $('txForm').onsubmit = e => { e.preventDefault(); const v = $('txIn').value.trim(); if (!v) return; sendCmd(selAc(), v); $('txIn').value = ''; };
 function radarMode(a) { return a.priCut && !a.sq ? 'OFF' : a.priCut ? 'SO' : !a.sq ? 'PO' : 'NR'; }
@@ -153,6 +178,7 @@ $('bPO').onclick = () => { const a = selAc(); if (a) sendCmd(a, radarMode(a) ===
 $('bSO').onclick = () => { const a = selAc(); if (a) sendCmd(a, radarMode(a) === 'SO' ? 'normal radar' : 'secondary only'); };
 $('bNR').onclick = () => { const a = selAc(); if (a) sendCmd(a, 'normal radar'); };
 $('bBus').onclick = () => { const a = selAc(); if (a) sendCmd(a, 'signal buster'); };
+holdBtn($('bDesc'), -1); holdBtn($('bAsc'), +1);
 /* ---------- roster ---------- */
 function renderRoster() {
   const rows = [], acs = allAc();
@@ -252,6 +278,7 @@ addEventListener('keydown', e => {
   const st = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] }[e.key];
   if (st) { e.preventDefault(); const d = I.db[I.sel] || (I.db[I.sel] = { x: 0, y: 0 }); d.x += st[0]; d.y += st[1]; }
   else if (e.key === 't' || e.key === 'T' || e.key === 'Enter') { e.preventDefault(); openText(); }
+  else if (e.key === 'PageDown' || e.key === 'PageUp') { e.preventDefault(); altBump(e.key === 'PageUp' ? 1 : -1); }
 });
 /* ---------- pause / resume (linked sims only; Instructor never runs a sim) ---------- */
 function anyPaused() { return links().some(x => live(x) && I.src[x].running && I.src[x].paused); }

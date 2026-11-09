@@ -1254,7 +1254,8 @@ function updatePar(a, dt) {
     const target = clamp((a.levelAlt - a.z) * 3, -1500, 1500) * -1;
     a.vs += (target - a.vs) * Math.min(1, dt / 2);
   } else if (a.phase === 'visual') {
-    const target = nom + (a.z - gpAlt(a.r)) * 3;
+    const want = gpAlt(a.r) + (a.instGpOff != null ? a.instGpOff : 0);
+    const target = nom + (a.z - want) * 3;
     a.vs += (target - a.vs) * Math.min(1, dt / 1.5);
   } else if (OUT_PHASES.includes(a.phase)) {
     const target = clamp((a.z - a.gaAlt) * 3, -1500, 1800) * -1;
@@ -1661,6 +1662,7 @@ function execute(p, src) {
       case 'onCourse': judge(a, courseAccepts(a, 'on'), 'on course', actualCourse(a)); break;
       case 'trendCourse': judge(a, (c.side === 'R' ? a.latRate : -a.latRate) > 3, `going ${c.side === 'L' ? 'left' : 'right'} of course`, `drifting ${a.latRate > 0 ? 'right' : 'left'} at ${Math.abs(a.latRate).toFixed(0)} ft/s`); break;
       case 'gp': case 'onGp': case 'trendGp': {
+        a.instGpOff = null;   // trainee correction takes over from any instructor altitude offset
         if (c.k === 'gp') {
           // pixel categories on the elevation panel: slightly / plain ("above glidepath") / well; side must match
           const want = c.q || 'plain', ok = gpSide(a) === c.side && gpAccepts(a, want);
@@ -1678,6 +1680,7 @@ function execute(p, src) {
         if (isShip() && !a.apprBonus && a.phase === 'final') { const tt = ttiGp(a); if (tt >= APPR_WIN[0] && tt <= APPR_WIN[1]) { a.apprBonus = true; addPts(a, 1, `★ "Approaching glidepath" bonus for ${a.cs}: ${Math.round(tt)} s before intercept`, 'good'); } } judge(a, a.phase === 'final' && gap >= -60 && gap <= 450, 'approaching glidepath', a.phase !== 'final' ? 'already descending' : `${Math.round(gap)} ft below the glidepath`); break; }
       case 'beginDescent': {
         if (a.phase !== 'final') break;
+        a.instGpOff = null;
         const diff = a.z - gpAlt(a.r);
         if (Math.abs(diff) <= 130) { a.pts += 3; log('good', `Good timing on "begin descent" for ${a.cs} (+3).`); }
         else addPts(a, -5, `"Begin descent" was ${diff < 0 ? 'early' : 'late'} for ${a.cs}: it was ${Math.abs(Math.round(diff))} ft ${diff < 0 ? 'below' : 'above'} the glidepath.`, 'warn');
@@ -1686,6 +1689,7 @@ function execute(p, src) {
         break; }
       case 'adjDescent':
         if (a.phase !== 'descent') break;
+        a.instGpOff = null;
         if (c.v === 'adjust') a.corr += (dev > 0 ? 120 : -120);
         else a.corr += c.v === 'increase' ? 120 : -120;
         break;
@@ -1940,6 +1944,7 @@ function ttsNext() {
   ttsWatch = setTimeout(poll, 300);
 }
 function pilotSay(a, text, say, force, routine, prio) {
+  if (window.__INST_SILENT) return;   // Instructor actions: no pilot TTS / readback line
   log('plt', text);
   sayLog.push({ t: G ? G.t : 0, cs: a && a.cs, text, routine: !!routine, prio: !!prio });
   if (!S.voiceOut || !TTS || (pttDown && !prio)) return;   // priority calls are queued even while the mic is keyed
@@ -1971,6 +1976,7 @@ const startOv = $('startOv'), helpOv = $('helpOv'), setOv = $('setOv'), endOv = 
 let uiPaused = false;
 function log(cls, text) {
   if (!G) return;
+  if (window.__INST_SILENT && (cls === 'plt' || cls === 'ctl')) return;
   const d = document.createElement('div'); d.className = cls;
   d.innerHTML = `<span class="t">${mmss(G.t)}</span> ${esc(text)}`;
   logEl.appendChild(d);
@@ -2799,6 +2805,27 @@ window.PAR = {
   function cmd(m) {
     const G = g(); if (!G || G.over) return ack(m, false, PAGE + ' not running');
     if (m.op === 'pause' || m.op === 'resume') { try { setPaused(m.op === 'pause'); } catch (e) { G.paused = m.op === 'pause'; } sysLog(m.op === 'pause' ? 'paused by instructor' : 'resumed by instructor'); send(); return ack(m, true, m.op === 'pause' ? 'PAUSED' : 'RESUMED'); }
+    if (m.op === 'altBump') {
+      const a = find(G, m); if (!a) return ack(m, false, (m.cs || '?') + ' not on ' + PAGE);
+      const d = Math.round(+m.ft || 0); if (!d) return ack(m, false, 'no altitude step');
+      if (FIN) {
+        if (!['final', 'descent', 'linkin', 'visual'].includes(a.phase)) return ack(m, false, a.cs + ' not on final');
+        a.z = Math.max(50, (a.z || 0) + d); a.corr = 0;
+        if (a.phase === 'final' || a.phase === 'linkin') a.levelAlt = a.z;
+        else if (typeof gpAlt === 'function') a.instGpOff = a.z - gpAlt(a.r);   // hold offset (visual seeks GP; descent stays parallel with corr=0)
+        else a.instGpOff = (a.instGpOff || 0) + d;
+        sysLog(`${a.cs}: instructor ${d > 0 ? 'climb' : 'descend'} ${Math.abs(d)} ft → ${Math.round(a.z)} ft (silent)`);
+        send(); return ack(m, true, `${d > 0 ? '+' : ''}${d} ft → ${Math.round(a.z)}`);
+      }
+      // Approach / Marshal: only when the aircraft is on a final-like leg
+      const onFin = a.st === 'final' || !!a.onFinal || a.phase === 'withFinal' || (a.st === 'purple' && a.onFinal);
+      if (!onFin) return ack(m, false, a.cs + ' not on final');
+      a.alt = Math.max(50, (a.alt || 0) + d);
+      a.instAltOff = (a.instAltOff || 0) + d;
+      a.tgtAlt = a.alt;
+      sysLog(`${a.cs}: instructor ${d > 0 ? 'climb' : 'descend'} ${Math.abs(d)} ft → ${Math.round(a.alt)} ft (silent)`);
+      send(); return ack(m, true, `${d > 0 ? '+' : ''}${d} ft → ${Math.round(a.alt)}`);
+    }
     if (m.op) return ack(m, false, 'Instructor can only command aircraft');
     const a = find(G, m); if (!a) return ack(m, false, (m.cs || '?') + ' not on ' + PAGE);
     const raw = String(m.text || '').trim(), s = raw.toLowerCase();
@@ -2817,7 +2844,9 @@ window.PAR = {
     if (rest) {
       const isBuster = /\b(signal\s+)?buster\b/.test(rest);
       if (!FIN) { a.accepted = true; if (a.phase === 'app' && a.st === 'dep') { /* departing: still accept */ } }
-      try { res = handleTranscript(a.cs + ', ' + raw.replace(/\b(cut|restore)\s+(primary|secondary)(\s+radar)?\b/gi, '').trim(), 'instructor'); } catch (e) { return ack(m, false, 'error: ' + e.message); }
+      window.__INST_SILENT = true;   // Instructor text cmds move the jet with no pilot readback / TTS
+      try { res = handleTranscript(a.cs + ', ' + raw.replace(/\b(cut|restore)\s+(primary|secondary)(\s+radar)?\b/gi, '').trim(), 'instructor'); } catch (e) { window.__INST_SILENT = false; return ack(m, false, 'error: ' + e.message); }
+      window.__INST_SILENT = false;
       if (FIN && isBuster) { a.tgtSpd = 500; a.buster = true; }
       if (isBuster) a.buster = true;
     }

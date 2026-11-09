@@ -1649,6 +1649,7 @@ function ttsNext() {
   ttsWatch = setTimeout(poll, 300);
 }
 function pilotSay(a, text, say, force, routine, prio) {
+  if (window.__INST_SILENT) return;   // Instructor actions: no pilot TTS / readback line
   log('plt', text);
   sayLog.push({ t: G ? G.t : 0, cs: a && a.cs, text, routine: !!routine, prio: !!prio });
   if (!S.voiceOut || !TTS || (pttDown && !prio)) return;   // priority calls are queued even while the mic is keyed
@@ -1680,6 +1681,7 @@ const startOv = $('startOv'), helpOv = $('helpOv'), setOv = $('setOv'), endOv = 
 let uiPaused = false;
 function log(cls, text) {
   if (!G) return;
+  if (window.__INST_SILENT && (cls === 'plt' || cls === 'ctl')) return;
   const d = document.createElement('div'); d.className = cls;
   d.innerHTML = `<span class="t">${mmss(G.t)}</span> ${esc(text)}`;
   logEl.appendChild(d);
@@ -2737,7 +2739,7 @@ function appStep(dt) {
       if (!a.lowDone) {
         const brgTo = norm(Math.atan2(-a.e, -a.n) / DEG);
         a.tgtHdg = rng0 < 0.4 ? a.tgtHdg : brgTo; a.turnDir = null;
-        a.tgtAlt = Math.max(300, Math.min(a.tgtAlt, Math.round(rng0 * 320)));
+        { const base = Math.max(300, Math.min(a.tgtAlt, Math.round(rng0 * 320))); a.tgtAlt = Math.max(50, base + (a.instAltOff || 0)); }
         if (rng0 < 0.25) {
           if (a.pars >= APP_MAX_PARS) { a.phase = 'gone'; a.removeAt = G.t; log('good', `${a.cs} full stop, recovered aboard ${SHIP_NAME}.`); continue; }
           a.lowDone = true; a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = a.T.feed + APP_SPD_BONUS; a.turnDir = null; let coSpd = null;
@@ -2760,7 +2762,7 @@ function appStep(dt) {
       } else {
         const [le, ln] = toLoc(a.e, a.n);
         a.tgtHdg = Math.round(norm(BRC + Math.max(-30, Math.min(30, le * 40))));
-        a.tgtAlt = Math.min(1500, Math.max(0, Math.round(Math.max(0, ln) * 320))); a.tgtSpd = vapp;
+        a.tgtAlt = Math.max(50, Math.min(1500, Math.max(0, Math.round(Math.max(0, ln) * 320))) + (a.instAltOff || 0)); a.tgtSpd = vapp;
         if (rng0 < 0.25) {
           a.appCount = (a.appCount || 0) + 1;
           if (a.appCount >= APP_MAX_PARS) { a.phase = 'gone'; a.removeAt = G.t; log('good', `${a.cs} ${isHelo(a) ? 'landed aboard' : 'recovered aboard'} ${SHIP_NAME} (practice PAR ${a.appCount}/${APP_MAX_PARS}, full stop).`); continue; }
@@ -2957,10 +2959,10 @@ function appExecute(p, src) {
       rb.push(`${t} ${hdg3(c.v)}`); rbSay.push(`${t} ${sayDigits(hdg3(c.v))}`);
     } else if (c.k === 'alt' && c.angels) {
       if (c.v < 1000 || c.v > (isHelo(a) ? 12000 : 30000)) { rb.push(`unable angels ${appAngels(c.v)}`); rbSay.push(`unable angels ${appAngelsSay(c.v)}`); continue; }
-      a.tgtAlt = c.v; rb.push(`angels ${appAngels(c.v)}`); rbSay.push(`angels ${appAngelsSay(c.v)}`);
+      a.tgtAlt = c.v; a.instAltOff = null; rb.push(`angels ${appAngels(c.v)}`); rbSay.push(`angels ${appAngelsSay(c.v)}`);
     } else if (c.k === 'alt') {
       if (c.v < 1000 || c.v > (isHelo(a) ? 12000 : 30000)) { rb.push(`unable ${fmtAlt(c.v)}`); rbSay.push(`unable ${sayAlt(c.v)}`); continue; }
-      const v = c.v > a.alt ? 'climb' : 'descend'; a.tgtAlt = c.v;
+      const v = c.v > a.alt ? 'climb' : 'descend'; a.tgtAlt = c.v; a.instAltOff = null;
       rb.push(`${v} and maintain ${fmtAlt(c.v)}`); rbSay.push(`${v} and maintain ${sayAlt(c.v)}`);
     } else if (c.k === 'buster') { a.tgtSpd = 500; rb.push('ack'); rbSay.push('ack');   // max speed, callsign-only readback
     } else if (c.k === 'spd') {
@@ -3297,6 +3299,27 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   function cmd(m) {
     const G = g(); if (!G || G.over) return ack(m, false, PAGE + ' not running');
     if (m.op === 'pause' || m.op === 'resume') { try { setPaused(m.op === 'pause'); } catch (e) { G.paused = m.op === 'pause'; } sysLog(m.op === 'pause' ? 'paused by instructor' : 'resumed by instructor'); send(); return ack(m, true, m.op === 'pause' ? 'PAUSED' : 'RESUMED'); }
+    if (m.op === 'altBump') {
+      const a = find(G, m); if (!a) return ack(m, false, (m.cs || '?') + ' not on ' + PAGE);
+      const d = Math.round(+m.ft || 0); if (!d) return ack(m, false, 'no altitude step');
+      if (FIN) {
+        if (!['final', 'descent', 'linkin', 'visual'].includes(a.phase)) return ack(m, false, a.cs + ' not on final');
+        a.z = Math.max(50, (a.z || 0) + d); a.corr = 0;
+        if (a.phase === 'final' || a.phase === 'linkin') a.levelAlt = a.z;
+        else if (typeof gpAlt === 'function') a.instGpOff = a.z - gpAlt(a.r);   // hold offset (visual seeks GP; descent stays parallel with corr=0)
+        else a.instGpOff = (a.instGpOff || 0) + d;
+        sysLog(`${a.cs}: instructor ${d > 0 ? 'climb' : 'descend'} ${Math.abs(d)} ft → ${Math.round(a.z)} ft (silent)`);
+        send(); return ack(m, true, `${d > 0 ? '+' : ''}${d} ft → ${Math.round(a.z)}`);
+      }
+      // Approach / Marshal: only when the aircraft is on a final-like leg
+      const onFin = a.st === 'final' || !!a.onFinal || a.phase === 'withFinal' || (a.st === 'purple' && a.onFinal);
+      if (!onFin) return ack(m, false, a.cs + ' not on final');
+      a.alt = Math.max(50, (a.alt || 0) + d);
+      a.instAltOff = (a.instAltOff || 0) + d;
+      a.tgtAlt = a.alt;
+      sysLog(`${a.cs}: instructor ${d > 0 ? 'climb' : 'descend'} ${Math.abs(d)} ft → ${Math.round(a.alt)} ft (silent)`);
+      send(); return ack(m, true, `${d > 0 ? '+' : ''}${d} ft → ${Math.round(a.alt)}`);
+    }
     if (m.op) return ack(m, false, 'Instructor can only command aircraft');
     const a = find(G, m); if (!a) return ack(m, false, (m.cs || '?') + ' not on ' + PAGE);
     const raw = String(m.text || '').trim(), s = raw.toLowerCase();
@@ -3315,7 +3338,9 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
     if (rest) {
       const isBuster = /\b(signal\s+)?buster\b/.test(rest);
       if (!FIN) { a.accepted = true; if (a.phase === 'app' && a.st === 'dep') { /* departing: still accept */ } }
-      try { res = handleTranscript(a.cs + ', ' + raw.replace(/\b(cut|restore)\s+(primary|secondary)(\s+radar)?\b/gi, '').trim(), 'instructor'); } catch (e) { return ack(m, false, 'error: ' + e.message); }
+      window.__INST_SILENT = true;   // Instructor text cmds move the jet with no pilot readback / TTS
+      try { res = handleTranscript(a.cs + ', ' + raw.replace(/\b(cut|restore)\s+(primary|secondary)(\s+radar)?\b/gi, '').trim(), 'instructor'); } catch (e) { window.__INST_SILENT = false; return ack(m, false, 'error: ' + e.message); }
+      window.__INST_SILENT = false;
       if (FIN && isBuster) { a.tgtSpd = 500; a.buster = true; }
       if (isBuster) a.buster = true;
     }
