@@ -1931,8 +1931,8 @@ $('cmdForm').addEventListener('submit', e => { e.preventDefault(); const v = $('
 $('cmdInput').addEventListener('keydown', e => { if (e.key === 'Escape') $('cmdInput').blur(); });
 
 /* ===================== panel ===================== */
-function setScale(s) { s = s === 3 ? 3 : 1; try { localStorage.setItem('ac_simSpeed', String(s)); } catch (e) {} if (!G) return; G.scale = s; $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 3); }
-const savedScale = () => { try { return localStorage.getItem('ac_simSpeed') === '3' ? 3 : 1; } catch (e) { return 1; } };
+function setScale(s) { s = s === 3 ? 3 : 1; if (!G) return; G.scale = s; $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 3); }
+const savedScale = () => { try { localStorage.removeItem('ac_simSpeed'); } catch (e) {} return 1; };   // always start at 1x like Marshal (3x is not remembered)
 function setPaused(p) { if (!G) return; G.paused = p; $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p); }
 function selectAc(a) { if (!G) return; G.selected = a; refreshPanel(true); }
 let lastPanel = 0;
