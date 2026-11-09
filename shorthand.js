@@ -1,6 +1,7 @@
 /* AATCC shorthand typing (typed input only, all three scopes).
+   Only codes for things the pilot/aircraft actually DOES (turn, climb, slow, switch, clearances, wave off...); information-only calls have no code.
    Shorthand.expand(text, ctx) turns compact codes into the full phraseology the scope parsers already understand:
-     "lt21 l270 d1.2 cca"  ->  "Lightning 21, turn left heading 270, descend and maintain angels 1.2, vectors for CCA approach"
+     "lt21 l270 d1.2 du"  ->  "Lightning 21, turn left heading 270, descend and maintain angels 1.2, dirty up"
    Only input that LOOKS like shorthand is expanded (at least one code and no more plain words than codes);
    full sentences pass through untouched. Voice input never goes through here.
    Shorthand.attach({scope, accent, ctx}) adds the live preview line + the "⌨ Shorthand" cheat sheet under #cmdInput,
@@ -9,16 +10,12 @@
 'use strict';
 const SC = ['marshal', 'approach', 'final'];
 const MA = ['marshal', 'approach'], M = ['marshal'], A = ['approach'], F = ['final'];
-const DIR = { n: 'north', ne: 'northeast', e: 'east', se: 'southeast', s: 'south', sw: 'southwest', w: 'west', nw: 'northwest' };
-const BOUND = { n: 'northbound', ne: 'northeast bound', e: 'eastbound', se: 'southeast bound', s: 'southbound', sw: 'southwest bound', w: 'westbound', nw: 'northwest bound' };
 // two-letter callsign prefixes (plus any unique start of a callsign name, and the ICAO codes the parser knows)
 const CS_ALIAS = { lt: 'Lightning', li: 'Lightning', nh: 'Nighthawk', vp: 'Viper', vi: 'Viper', vn: 'Venom', ve: 'Venom', ea: 'Eagle', eg: 'Eagle',
   rd: 'Ridge', ri: 'Ridge', gf: 'Gunfighter', gu: 'Gunfighter', ch: 'Charger', cg: 'Charger', kn: 'Knight', kt: 'Knight' };
 const h3 = v => String(+v).padStart(3, '0');
 const NUM = '(\\d+(?:\\.\\d+)?)';
 const angOrFt = (n, sc) => { n = parseFloat(n); if (sc === 'final') return (n < 100 ? Math.round(n * 1000) : n) + ' feet'; return n < 100 ? 'angels ' + n : n + ' feet'; };
-const range = n => { const v = parseFloat(n); if (v === 0.5) return 'half mile'; if (v === 0.75) return 'three quarter mile';
-  if (v % 1 === 0.5) return Math.floor(v) + ' and a half miles'; return v === 1 ? '1 mile from touchdown' : v + ' miles from touchdown'; };
 
 /* code table: [regex (whole token), scopes, (match, state) => phrase, code label, meaning] */
 const CODES = [
@@ -33,7 +30,7 @@ const CODES = [
   [new RegExp('^c' + NUM + '$'), SC, (m, s) => `climb and maintain ${angOrFt(m[1], s.sc)}`, 'c3', 'climb and maintain angels 3 (c1500 = feet)'],
   [new RegExp('^d' + NUM + '$'), SC, (m, s) => `descend and maintain ${angOrFt(m[1], s.sc)}`, 'd1.2', 'descend and maintain angels 1.2'],
   [/^s(\d{2,3})$/, SC, m => `maintain ${m[1]} knots`, 's250', 'maintain 250 knots'],
-  [/^bu$|^buster$/, SC, () => 'signal buster', 'bu', 'signal buster'],
+  [/^bu$|^sb$|^buster$/, SC, () => 'signal buster', 'bu / sb', 'signal buster'],
   // ---- frequencies (permanent colors) ----
   [/^gr$/, SC, () => 'go red', 'gr', 'go red (Marshal)'],
   [/^gs$/, SC, () => 'go silver', 'gs', 'go silver (Approach)'],
@@ -41,45 +38,16 @@ const CODES = [
   [/^gc$/, MA, () => 'go copper', 'gc', 'go copper (Final)'],
   [/^cf$/, M, () => 'contact final controller', 'cf', 'contact final controller'],
   [/^twr$/, SC, () => 'contact tower', 'twr', 'contact tower'],
-  // ---- housekeeping (shared) ----
-  [/^r$/, SC, () => 'roger', 'r', 'roger'],
-  [/^hm$/, SC, () => 'how do you hear me', 'hm', 'how do you hear me'],
-  [/^scs$/, SC, () => 'say callsign', 'scs', 'say callsign'],
-  [/^cor$/, SC, () => 'correction', 'cor', 'correction'],
-  [/^sa$/, MA, () => 'say angels', 'sa', 'say angels'],
-  [/^ss$/, MA, () => 'say state', 'ss', 'say state'],
+  // ---- wave off / missed approach (shared) ----
   [/^sqn$/, M, () => 'squawk normal', 'sqn', 'squawk normal'],
   [/^wo$/, SC, () => 'wave off, wave off', 'wo', 'wave off, wave off'],
   [/^ma$/, SC, () => 'execute missed approach', 'ma', 'execute missed approach'],
   [/^du$/, MA, () => 'dirty up', 'du', 'dirty up (jets)'],
   [/^lc$/, MA, () => 'perform landing checks', 'lc', 'perform landing checks (helos)'],
   // traffic: tf2/5/w/a3/f35 = clock / miles / direction of travel / altitude / type (fields optional, in order)
-  [/^tf([a-z0-9.\/]*)$/, SC, m => {
-    const f = m[1].split('/'); const out = ['traffic'];
-    if (f[0]) out.push(`${f[0]} o'clock`); if (f[1]) out.push(`${f[1]} miles`); if (f[2]) out.push(BOUND[f[2]] || f[2]);
-    if (f[3]) out.push('altitude ' + (/^a\d/.test(f[3]) ? 'angels ' + f[3].slice(1) : f[3])); if (f[4]) out.push('type ' + f[4].toUpperCase());
-    return out.join(', '); }, 'tf2/5/w/a3/f35', "traffic, 2 o'clock, 5 miles, westbound, altitude angels 3, type F35"],
-  // ---- Marshal + Approach: radar / CCA setup / pattern ----
-  [/^rc$/, MA, () => 'radar contact', 'rc', 'radar contact'],
-  [/^rc(\d+(?:\.\d+)?)(n|ne|e|se|s|sw|w|nw)$/, MA, m => `radar contact, ${m[1]} miles ${DIR[m[2]]} of mother`, 'rc6e', 'radar contact, 6 miles east of mother'],
-  [/^vri$/, MA, () => 'vectors for radar identification', 'vri', 'vectors for radar identification'],
-  [/^cca$/, MA, () => 'vectors for CCA approach', 'cca', 'vectors for CCA approach'],
-  [/^bp$/, MA, () => 'expect final button purple', 'bp', 'expect final button purple'],
-  [/^bc$/, MA, () => 'expect final button copper', 'bc', 'expect final button copper'],
+  // ---- Marshal + Approach: slow-down / sectors / climbout ----
   [/^sec([1-4])$/, MA, m => `proceed to sector ${m[1]}, report established`, 'sec2', 'proceed to sector 2, report established'],
-  [/^up$/, MA, () => 'on the upwind', 'up', 'on the upwind'],
-  [/^cw$/, MA, () => 'on the crosswind', 'cw', 'on the crosswind'],
-  [/^dw$/, MA, () => 'on the downwind', 'dw', 'on the downwind'],
-  [/^ab$/, MA, () => 'abeam', 'ab', 'abeam'],
-  [/^dl$/, MA, () => 'dogleg', 'dl', 'dogleg'],
-  [/^bs$/, MA, () => 'on base', 'bs', 'on base'],
-  [/^mf$/, MA, () => 'mark your father', 'mf', 'mark your father'],
   [/^co(1)?$/, MA, (m, s) => { s.climbout = true; s.coHdr = true; return m[1] ? 'your climbout instructions are at one mile' : 'your climbout instructions are'; }, 'co1 a2 l270', 'climbout: at one mile take angels 2, turn left heading 270'],
-  // 99 ship calls (whole line, no callsign)
-  [/^99(p|s)$/, MA, (m, s) => { s.nocs = true; return `99, mother is in a ${m[1] === 'p' ? 'port' : 'starboard'} turn, standby for expected BRC`; }, '99p / 99s', '99, mother is in a port/starboard turn, standby for expected BRC'],
-  [/^99(p|s)(\d{2,3})$/, MA, (m, s) => { s.nocs = true; return `99, mother is in a ${m[1] === 'p' ? 'port' : 'starboard'} turn, BRC ${h3(m[2])}`; }, '99p330', '99, mother is in a port turn, BRC 330'],
-  [/^99m(\d{2,3})$/, MA, (m, s) => { s.nocs = true; return `99, mother steady, BRC ${h3(m[1])}`; }, '99m330', '99, mother steady, BRC 330'],
-  [/^99wx$/, M, (m, s) => { s.nocs = true; return '99 weather'; }, '99wx', '99 weather'],
   // ---- Marshal: Case III clearance / commence ----
   [/^cr$/, M, (m, s) => { s.clr = true; return 'case three recovery'; }, 'cr', 'case three recovery'],
   [/^lh([1-5])$/, M, (m, s) => s.clr ? `LH${m[1]} approach with CCA final` : `expect LH${m[1]} approach`, 'lh2', 'LH2 approach with CCA final (alone: expect LH2 approach)'],
@@ -89,52 +57,14 @@ const CODES = [
   [/^eat(\d{1,2})$/, M, m => `expected approach time ${m[1]}`, 'eat15', 'expected approach time 15'],
   [/^cm$/, M, () => 'commence', 'cm', 'commence'],
   [/^rcm$/, M, () => 'report commencing', 'rcm', 'report commencing'],
-  [/^r3o$/, M, () => 'report 3 miles outbound', 'r3o', 'report 3 miles outbound'],
   [/^em$/, M, () => 'emergency marshal', 'em', 'emergency marshal'],
   [/^eap$/, M, () => 'emergency approach', 'eap', 'emergency approach'],
   // ---- Final / PAR ----
-  [/^ic$/, F, () => 'Stinger final, how do you hear me, wheels should be down, report see me', 'ic', 'initial contact: Stinger final, how do you hear me, wheels should be down, report see me'],
-  [/^wd$/, F, () => 'wheels should be down', 'wd', 'wheels should be down'],
-  [/^gk$/, F, () => 'check gear down', 'gk', 'check gear down'],
-  [/^rsm$/, F, () => 'report see me', 'rsm', 'report see me'],
-  [/^oc$/, F, () => 'on course', 'oc', 'on course'],
-  [/^sl$/, F, () => 'slightly left of course', 'sl', 'slightly left of course'],
-  [/^sr$/, F, () => 'slightly right of course', 'sr', 'slightly right of course'],
-  [/^lo$/, F, () => 'left of course', 'lo', 'left of course'],
-  [/^ro$/, F, () => 'right of course', 'ro', 'right of course'],
-  [/^wl$/, F, () => 'well left of course, going further left', 'wl', 'well left of course, going further left'],
-  [/^wr$/, F, () => 'well right of course, going further right', 'wr', 'well right of course, going further right'],
-  [/^gol$/, F, () => 'going left of course', 'gol', 'going left of course'],
-  [/^gor$/, F, () => 'going right of course', 'gor', 'going right of course'],
-  [/^ag$/, F, () => 'approaching glidepath', 'ag', 'approaching glidepath (own transmission)'],
   [/^bd$/, F, () => 'begin descent', 'bd', 'begin descent (own transmission)'],
-  [/^og$/, F, () => 'on glidepath', 'og', 'on glidepath'],
-  [/^sa$/, F, () => 'slightly above glidepath', 'sa', 'slightly above glidepath'],
-  [/^sb$/, F, () => 'slightly below glidepath', 'sb', 'slightly below glidepath'],
-  [/^ab$/, F, () => 'above glidepath', 'ab', 'above glidepath'],
-  [/^be$/, F, () => 'below glidepath', 'be', 'below glidepath'],
-  [/^wa$/, F, () => 'well above glidepath', 'wa', 'well above glidepath'],
-  [/^wb$/, F, () => 'well below glidepath', 'wb', 'well below glidepath'],
-  [/^goa$/, F, () => 'going above glidepath', 'goa', 'going above glidepath'],
-  [/^gob$/, F, () => 'going below glidepath', 'gob', 'going below glidepath'],
-  [/^ird$/, F, () => 'increase rate of descent', 'ird', 'increase rate of descent'],
-  [/^rrd$/, F, () => 'reduce rate of descent', 'rrd', 'reduce rate of descent'],
-  [/^ard$/, F, () => 'adjust rate of descent', 'ard', 'adjust rate of descent'],
-  [/^dna$/, F, () => 'do not acknowledge further transmissions', 'dna', 'do not acknowledge further transmissions'],
-  [/^(?:mh|m0?\.5)$/, F, () => 'half mile', 'mh', 'half mile'],
-  [/^(?:m3q|m0?\.75)$/, F, () => 'three quarter mile', 'm3q', 'three quarter mile'],
-  [/^m(\d{1,2}(?:\.5)?)$/, F, m => range(m[1]), 'm5 / m9.5', '5 miles from touchdown / 9 and a half miles'],
-  [/^dh$/, F, () => 'at decision height', 'dh', 'at decision height'],
-  [/^mins$/, F, () => 'at minimums', 'mins', 'at minimums'],
-  [/^ot$/, F, () => 'over landing threshold', 'ot', 'over landing threshold'],
-  [/^od$/, F, () => 'over the deck', 'od', 'over the deck'],
   [/^cl$/, F, () => 'cleared to land', 'cl', 'cleared to land'],
   [/^dc$/, F, () => 'deck is clear', 'dc', 'deck is clear'],
   [/^cls(\d{1,2})$/, F, m => `deck is clear, cleared to land spot ${m[1]}`, 'cls7', 'deck is clear, cleared to land spot 7'],
-  [/^w(\d{3})\/(\d{1,2})$/, F, m => `wind ${m[1]} at ${m[2]}`, 'w270/10', 'wind 270 at 10'],
-  [/^wc$/, F, () => 'winds calm', 'wc', 'winds calm'],
   [/^cb$/, F, () => 'call the ball', 'cb', 'call the ball'],
-  [/^rb$/, F, () => 'roger ball', 'rb', 'roger ball'],
   [/^gg$/, F, () => 'go green', 'gg', 'go green'],
   [/^co$/, F, () => 'execute climb outs, go silver', 'co', 'execute climb outs, go silver'],
   [/^sd$/, F, () => 'enter starboard delta, go green', 'sd', 'enter starboard delta, go green'],
@@ -146,7 +76,6 @@ const CODES = [
   [/^srt$/, F, () => 'make standard rate turns', 'srt', 'make standard rate turns'],
   [/^hsr$/, F, () => 'make half standard rate turns', 'hsr', 'make half standard rate turns'],
   [/^asr$/, F, () => 'this will be a surveillance approach', 'asr', 'this will be a surveillance approach'],
-  [/^pd$/, F, () => 'prepare to descend in one mile', 'pd', 'prepare to descend in one mile'],
   [/^mda(\d{3,4})?$/, F, m => m[1] ? `descend to your minimum descent altitude, minimum descent altitude ${m[1]}` : 'descend to your minimum descent altitude', 'mda470', 'descend to your minimum descent altitude, MDA 470'],
   [/^sm$/, F, () => 'surveillance minimums, on course, if mother not in sight, execute missed approach', 'sm', 'surveillance minimums, on course, if mother not in sight, execute missed approach'],
 ];
@@ -241,7 +170,7 @@ function attach(opt) {
   form.appendChild(bar);
   const help = document.createElement('div'); help.id = 'shHelp';
   const rows = tableFor(sc).map(c => `<tr><td>${esc(c[3])}</td><td>${esc(c[4])}</td></tr>`).join('');
-  const ex = { marshal: 'ea16 cr lh2 030/2 a2 brc360 ob210 eat15', approach: 'lt21 rc6e l180 d1.2 cca bp', final: 'h275 sl m6' }[sc];
+  const ex = { marshal: 'ea16 cr lh2 030/2 a2 brc360 ob210 eat15', approach: 'lt21 l180 d1.2 du', final: 'lt21 r090 bd' }[sc];
   help.innerHTML = `<span class="x" title="Close">✕</span><h3>⌨ Shorthand: ${esc(sc[0].toUpperCase() + sc.slice(1))}</h3>
 <p>Start with a callsign (<b>lt21</b> = Lightning 21, <b>ea16</b>, <b>vn12</b>, <b>nh34</b>, or just the digits <b>21</b>); leave it off to talk to the selected aircraft. Chain codes with spaces, e.g. <b>${esc(ex)}</b>. The full phrase is shown under the box and goes into the log. Full sentences still work as before. Type <b>?</b> + Enter to open this.</p>
 <table>${rows}</table>`;
