@@ -3,6 +3,7 @@
 <head>
 <script src="gate.js"></script>
 <script src="phrase-match.js"></script>
+<script src="shorthand.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Final</title>
@@ -2129,6 +2130,9 @@ function handleTranscript(text, src) {
   if (G && !G.over) execute(p, src);
   return { cs: p.cs, cmds: p.cmds.map(cmdStr), str: parsedStr(p), norm: p.norm };
 }
+/* shorthand typing (shorthand.js): live preview + '⌨ Shorthand' cheat sheet under the typed command box; typed codes are expanded before this page's submit handler */
+try { if (window.Shorthand) Shorthand.attach({ scope: 'final', accent: '#b07cff', accent2: '#d08a4a', ctx: () => ({ airlines: AIRLINES, selected: G && G.selected && alive(G.selected) ? telephony(G.selected.cs).text : null, callsigns: G ? G.ac.filter(alive).map(a => ({ cs: a.cs, tel: telephony(a.cs).text })) : [] }) }); } catch (e) { console.warn('shorthand', e); }
+window.__shTest = { AIRLINES, parse: (t, k) => parseSpeech(t, k), prep: t => { t = PM(t); return typeof fixSpeech === 'function' ? fixSpeech(t) : t; }, get G() { return G; }, select: a => selectAc(a), tel: cs => telephony(cs).text, alive: a => alive(a), ship: t => typeof shipCallParse === 'function' ? shipCallParse(t) : null, wx: t => typeof wxCallParse === 'function' ? wxCallParse(t) : null, mar: t => typeof MAR !== 'undefined' ? MAR.parse(t) : null };
 window.__injectTranscript = text => handleTranscript(String(text), 'voice');
 
 const pttBtn = $('ptt');
