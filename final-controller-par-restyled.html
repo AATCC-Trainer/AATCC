@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <script src="gate.js"></script>
+<script src="phrase-match.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Final Controller PAR - Precision Approach Radar Talk-Down Sim</title>
@@ -599,7 +600,9 @@ function parseSpeech(raw, known = []) {
     if (ix.length > 1) { const v = ix.map(i => cmds[i].v).find(v => v != null); cmds[ix[0]].v = v != null ? v : null; for (const i of ix.slice(1).reverse()) cmds.splice(i, 1); } }
   // practice calls: "enter starboard delta, go green" is one call; drop duplicates
   if (cmds.some(c => c.k === 'starDelta')) for (let i = cmds.length - 1; i >= 0; i--) if (cmds[i].k === 'goGreen') cmds.splice(i, 1);
-  for (const k of ['climbOut', 'starDelta']) { const ix = cmds.map((c, i) => c.k === k ? i : -1).filter(i => i >= 0); for (const i of ix.slice(1).reverse()) cmds.splice(i, 1); }
+  for (const k of ['climbOut', 'starDelta', 'ga']) { const ix = cmds.map((c, i) => c.k === k ? i : -1).filter(i => i >= 0); for (const i of ix.slice(1).reverse()) cmds.splice(i, 1); }
+  // "execute missed approach, if mother not in sight, execute missed approach": one missed approach, not an ASR minimums call
+  if (cmds.some(c => c.k === 'ga') && !cmds.some(c => c.k === 'asrMins')) for (let i = cmds.length - 1; i >= 0; i--) if (cmds[i].k === 'asrIfNot') cmds.splice(i, 1);
   // leftover words (for UI)
   let left = ''; for (let i = 0; i < s.length; i++) left += used[i] ? ' ' : s[i];
   left = left.replace(/\b(runway|27|two seven|18|one eight|and|the|is|this|your|final|controller|approach|at|of|a|to|now|then|you|are|come|ship|deck|fouled|spot|for|landing|stinger|99|\d)\b/g, ' ').replace(/\s+/g, ' ').trim();
@@ -2092,7 +2095,9 @@ function finishUtterance(id) {
 function renderTranscript(fin, inter) {
   $('transcript').innerHTML = (fin || inter) ? `${esc(fin)}<span class="interim">${esc(inter)}</span>` : '<span style="color:var(--dim)">…listening…</span>';
 }
+const PM = t => { try { return window.PhraseMatch ? window.PhraseMatch.normalize(t, { protect: AIRLINES.flatMap(a => a.words) }) : String(t); } catch (e) { return String(t); } };   // shared sound-alike matcher (phrase-match.js)
 function handleTranscript(text, src) {
+  text = PM(text);
   { const h = G && !G.over ? hoffTyped(text) : null;
     if (h) {
       $('parsed').classList.toggle('bad', !h.a);

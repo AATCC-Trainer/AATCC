@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <script src="gate.js"></script>
+<script src="phrase-match.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Wasp Marshal</title>
@@ -594,6 +595,7 @@ function parseSpeech1(raw, known = []) {
   const pre = parseSpeech0(raw.slice(0, m.index), known), post = String(raw).slice(m.index + m[0].length);
   const sub = parseSpeech0(post, []), keep = c => c.k === 'hdg' || c.k === 'alt' || c.k === 'spd' || c.k === 'goRed' || c.k === 'goSilver';
   let v = sub.cmds.filter(keep);
+  if (/\b(?:at\s+)?(?:one|won|1|a)\s+mile\b/i.test(post)) v.unshift({ k: 'mile', v: 1 });   // "... are (at) one mile take angels X, turn right heading Y": flown from 1 NM past the ship
   if (!v.some(c => c.k === 'hdg') && /\b(?:runway\s+heading|ship'?s?\s+heading|base\s+recovery\s+course|b\s*r\s*c)\b/i.test(post)) v.push({ k: 'hdg', v: BRC, dir: null });
   if (!v.some(c => c.k === 'goRed' || c.k === 'goSilver') && /\b(?:(?:button|frequency|switch(?:ing)?|contact)\s+red|marshal\s+frequency)\b/i.test(post)) v.push({ k: 'goRed' });
   const preSetup = pre.cmds.filter(c => c.k === 'radarContact' || c.k === 'cca' || c.k === 'button' || c.k === 'pos' || c.k === 'rid' || c.k === 'dirty' || c.k === 'landChk');
@@ -632,7 +634,7 @@ function parseSpeech0(raw, known = []) {
   if (wi >= 0) { const cl = cmds.find(c => c.k === 'clearLand'); if (cl) { cl.wind = cmds[wi]; cmds.splice(wi, 1); } }
   // practice calls: "enter starboard delta, go green" is one call; drop duplicates
   if (cmds.some(c => c.k === 'starDelta')) for (let i = cmds.length - 1; i >= 0; i--) if (cmds[i].k === 'goGreen') cmds.splice(i, 1);
-  for (const k of ['climbOut', 'starDelta']) { const ix = cmds.map((c, i) => c.k === k ? i : -1).filter(i => i >= 0); for (const i of ix.slice(1).reverse()) cmds.splice(i, 1); }
+  for (const k of ['climbOut', 'starDelta', 'ga']) { const ix = cmds.map((c, i) => c.k === k ? i : -1).filter(i => i >= 0); for (const i of ix.slice(1).reverse()) cmds.splice(i, 1); }
   // leftover words (for UI)
   let left = ''; for (let i = 0; i < s.length; i++) left += used[i] ? ' ' : s[i];
   left = left.replace(/\b(runway|27|two seven|18|one eight|and|the|is|this|your|final|controller|approach|marshal+|martial|at|of|a|to|now|then|you|are|come|ship|deck|fouled|spot|for|landing|stinger|99|\d)\b/g, ' ').replace(/\s+/g, ' ').trim();
@@ -688,6 +690,7 @@ function cmdStr(c) {
     case 'dirty': return 'dirty up';
     case 'landChk': return 'perform landing checks';
     case 'pos': return 'position ' + c.v;
+    case 'mile': return 'at 1 NM';
     case 'climbout': return 'climbout instructions: ' + (c.v.length ? c.v.map(cmdStr).join(', ') : '(none understood)');
     case 'cca': return 'vectors for CCA approach';
     case 'button': return 'expect final button ' + c.v;
@@ -1837,6 +1840,7 @@ function renderTranscript(fin, inter) {
   $('transcript').innerHTML = (fin || inter) ? `${esc(fin)}<span class="interim">${esc(inter)}</span>` : '<span style="color:var(--dim)">…listening…</span>';
 }
 /* ---------- recognition accuracy: normalization, fuzzy callsigns, alternative selection ---------- */
+const PM = t => { try { return window.PhraseMatch ? window.PhraseMatch.normalize(t, { protect: AIRLINES.flatMap(a => a.words) }) : String(t); } catch (e) { return String(t); } };   // shared sound-alike matcher (phrase-match.js)
 function lev(a, b) { const m = a.length, n = b.length; if (!m) return n; if (!n) return m; let pr = Array.from({ length: n + 1 }, (_, j) => j);
   for (let i = 1; i <= m; i++) { const cu = [i]; for (let j = 1; j <= n; j++) cu[j] = Math.min(pr[j] + 1, cu[j - 1] + 1, pr[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); pr = cu; } return pr[n]; }
 function phon(w) { return w.toLowerCase().replace(/[^a-z]/g, '').replace(/^kn/, 'n').replace(/ite/g, 'ight').replace(/ph/g, 'f').replace(/gh/g, '').replace(/ck|q/g, 'k').replace(/c(?=[eiy])/g, 's').replace(/c/g, 'k').replace(/z/g, 's').replace(/x/g, 'ks').replace(/(?!^)[aeiouyhw]/g, '').replace(/(.)\1+/g, '$1'); }
@@ -1883,7 +1887,7 @@ function fuzzyCallsigns(s) {   // replace 1-2 word near-misses of an active call
 const VOCAB = ['99 weather', 'ninety nine weather', 'stinger approach', 'stinger marshal', 'case three recovery', 'marshal', 'outbound bearing', 'lima hotel', 'brc', 'expected approach time', 'report commencing', 'cleared for', 'radar contact', 'take angels', 'angels', 'climb out instructions', 'climbout instructions', 'climb out', 'climbout', 'runway heading', 'dirty up', 'perform landing checks', 'expect final button', 'copper', 'purple', 'silver', 'red', 'go purple', 'go copper', 'go silver', 'go red', 'vectors for cca', 'cca approach', 'mark your father', 'upwind', 'crosswind', 'downwind', 'base', 'abeam', 'dogleg', 'heading', 'miles', 'left', 'right', 'maintain', 'knots', 'turn'];
 const VOCAB_WORDS = new Set(VOCAB.join(' ').split(' ').concat(['weather', 'ninety', 'eat', 'your', 'for', 'approach', 'final', 'button', 'take', 'expect', 'checks', 'landing', 'perform', 'contact', 'radar', 'mother', 'father', 'mark', 'climb', 'climbout', 'climbouts', 'instructions', 'instruction', 'runway', 'out', 'dirty', 'up', 'go', 'case', 'recovery', 'outbound', 'bearing', 'marshal', 'commencing', 'commence', 'cleared', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'zero']));
 function scoreAlt(t, conf) {
-  const f = ' ' + fixSpeech(MC ? mcFixSpeech(t) : t) + ' '; let sc = (conf || 0) * 2;
+  t = PM(t); const f = ' ' + fixSpeech(MC ? mcFixSpeech(t) : t) + ' '; let sc = (conf || 0) * 2;
   for (const v of VOCAB) if (f.includes(' ' + v + ' ')) sc += v.split(' ').length;
   const names = acNames();
   for (const n of names) if (f.includes(' ' + n.name.replace(/\s/g, '') + ' ')) { sc += 3 + (n.ac.accepted ? 1 : 0);
@@ -1955,7 +1959,7 @@ function csByDigits(pre, live) {   // first choice: the callsign number ("... 42
   const c = live.filter(x => x.cs.endsWith(m[1])); return c.length === 1 ? c[0] : null;
 }
 function handleTranscript(text, src) {
-  if (MC) { const raw = String(text).trim(), fx = mcFixSpeech(raw); if (G && !G.over && src === 'voice') log('sys', `🎙 Recognized: "${raw}"${fx !== raw ? `  →  read as "${fx}"` : ''}`); text = fx; }
+  { const raw = String(text).trim(), fx = MC ? mcFixSpeech(PM(raw)) : PM(raw); if (MC && G && !G.over && src === 'voice') log('sys', `🎙 Recognized: "${raw}"${fx.toLowerCase() !== raw.toLowerCase() ? `  →  read as "${fx}"` : ''}`); text = fx; }
   const known = G ? G.ac.filter(alive).map(a => a.cs) : [];
   const heard = String(text).trim(); text = fixSpeech(text);
   const sc = shipCallParse(heard) || shipCallParse(text);
@@ -2032,6 +2036,7 @@ function handleTranscript(text, src) {
     log('ctl', `${a.cs}: "${heard}"${src === 'voice' ? ' 🎙' : ''}  →  handoff`); HOFF.start(a); $('parsed').textContent = 'Understood → handoff ' + a.cs; $('parsed').classList.remove('bad');
     return { cs: a.cs, cmds: ['handoff'], str: 'handoff' };
   }
+  if (sc && !SHIP_TURNS_ON) { setHeard(heard, null); if (src === 'voice') renderTranscript(text, ''); $('parsed').textContent = 'Understood → 99 mother ' + (sc.k === 'turn' ? `in ${sc.dir || '?'} turn` : 'steady') + ' (ship turns paused: no action)'; $('parsed').classList.remove('bad'); if (G && !G.over) log('sys', `99 call heard ("${heard}"): ship turns are paused on Marshal, nothing applied.`); return { cs: null, cmds: [sc.k], str: '99 (ship turns paused)' }; }
   if (sc && SHIP_TURNS_ON) { if (src === 'voice') renderTranscript(text, ''); $('parsed').textContent = 'Understood → ' + (sc.k === 'turn' ? `99 mother in ${sc.dir || '?'} turn` : `99 mother steady, BRC ${sc.brc ?? '?'}`); $('parsed').classList.remove('bad'); if (G && !G.over) shipCallExec(sc, heard, src); return { cs: null, cmds: [sc.k], str: JSON.stringify(sc) }; }
   const cor = splitCorrection(text, known);
   if (cor) {
@@ -2832,6 +2837,19 @@ const appFuelSpec = a => APP_FUEL[a.type] || [5, 40, 2, 2];
 const appState = a => Math.max(0.1, a.fuel0 - appFuelSpec(a)[1] * (G.t - a.launchT) / 60000);
 const NUMW = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 const GRADE_TASKS = [['cs', 'Stinger Approach'], ['rc', 'radar contact'], ['alt', 'angels'], ['cca', 'vectors CCA'], ['btn', 'final button'], ['pos', 'position'], ['co', 'climbout'], ['slow', 'landing chk/dirty']];
+function coDefer(a) {   // stored climbout with "at one mile": hold the default climbout (BRC, angels 1 / 1.2) until 1 NM past the ship
+  const L = a.climbout; if (!L || !L.some(c => c.k === 'mile') || appRng(a) >= 1) return;
+  const P = { hdg: a.tgtHdg, dir: a.turnDir, alt: a.tgtAlt };
+  a.tgtHdg = BRC; a.turnDir = null; a.tgtAlt = isHelo(a) ? 1000 : 1200; P.h0 = a.tgtHdg; P.a0 = a.tgtAlt; a.coPend = P;
+  log('sys', `${a.cs} climbout: at 1 NM ${P.dir ? (P.dir === 'L' ? 'left' : 'right') + ' ' : ''}heading ${hdg3(Math.round(P.hdg))}, ${fmtAlt(P.alt)}.`);
+}
+function coStep(a) {   // 1 NM past the ship: fly the stored climbout turn and altitude (dropped if the controller re-vectors first)
+  const P = a.coPend; if (!P) return;
+  if (a.tgtHdg !== P.h0 || a.tgtAlt !== P.a0) { a.coPend = null; return; }
+  if (appRng(a) < 1) return;
+  a.tgtHdg = P.hdg; a.turnDir = P.dir || null; a.tgtAlt = P.alt; a.coPend = null;
+  log('sys', `${a.cs} 1 NM: turning ${P.dir ? (P.dir === 'L' ? 'left' : 'right') + ' ' : ''}heading ${hdg3(Math.round(P.hdg))}, climbing to ${fmtAlt(P.alt)}.`);
+}
 function award(a, key, label) {
   a.tasks = a.tasks || {}; if (a.tasks[key]) return;
   a.tasks[key] = true; a.pts10 = (a.pts10 || 0) + 10; G.score += 10;
@@ -2858,7 +2876,7 @@ const LINK = { on: localStorage.getItem('stingerLink') === '1', ch: null, lastAc
     a.phase = 'app'; a.st = 'lowout'; a.recheckAt = G.t + 20; a.onFinal = false; a.turnDir = null; [a.e, a.n] = fromLoc(0, -0.3); a.hdg = BRC;
     a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = isHelo(a) ? 200 : MC ? 250 : Math.round(rand(250, 300));
     for (const c of (a.climbout || [])) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = c.v; }
-    a.climbout = null;
+    coDefer(a); a.climbout = null;
     log('sys', `${a.cs} ${m.outcome === 'waveoff' ? 'waved off' : 'low approach'} (Final Control, PAR ${a.appCount}/${APP_MAX_PARS}), flying climbout: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}.`);
   },
   status() { const el = $('linkStat'); if (el) el.textContent = this.on ? 'Linked · Final Control: ' + (this.connected() ? 'connected' : 'not detected') : ''; },
@@ -3100,18 +3118,19 @@ function shipCallParse(raw) {
   }
   if (/ (turn|turning|turns|tern) /.test(t)) {
     const dir = / (starboard|star board|starboards|starbird|starbord|starburst|stabbed|star bored|right) /.test(t) ? 'starboard' : / (port|pork|porch|ports|portside|sport|fort|left) /.test(t) ? 'port' : null;
-    return { k: 'turn', dir };
+    const bm = t.match(/ (?:brc|b r c|bee are see|brc's|bearsy|b rc|br c) (?:is |of |now )?(.*)$/);   // "99, mother is in a port turn, BRC 090" (or "standby for expected BRC")
+    return { k: 'turn', dir, brc: bm ? scNumber(bm[1]) : null };
   }
   return null;
 }
 function shipCallExec(sc, heard, src) {
-  log('ctl', `ALL: "${String(heard).trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${sc.k === 'turn' ? `99 mother in ${sc.dir || '?'} turn` : `99 mother steady, BRC ${sc.brc != null ? String(sc.brc).padStart(3, '0') : '?'}`}`);
+  log('ctl', `ALL: "${String(heard).trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${sc.k === 'turn' ? `99 mother in ${sc.dir || '?'} turn${sc.brc != null ? ', BRC ' + String(sc.brc).padStart(3, '0') : ''}` : `99 mother steady, BRC ${sc.brc != null ? String(sc.brc).padStart(3, '0') : '?'}`}`);
   const S = G.ship, r = S && S.rec;
   if (!S || S.st === 'warn' || !r) { log('sys', 'Ninety-nine call ignored: no ship turn is in progress.'); return; }
   if (sc.k === 'turn') {
     if (r.turnCall) { log('sys', 'Ship-turn call already made for this turn.'); return; }
     if (S.st === 'steady' && G.t - S.tS > SHIP_TURN.turnCallGrace) { log('sys', 'Ship-turn call too late; mother is already steady.'); return; }
-    if (sc.dir === r.dir) { r.turnCall = 'ok'; G.score += SHIP_TURN.bonus; G.shipBonus = (G.shipBonus || 0) + SHIP_TURN.bonus; log('good', `+${SHIP_TURN.bonus} ninety-nine call: mother in ${r.dir} turn.`); }
+    if (sc.dir === r.dir) { r.turnCall = 'ok'; G.score += SHIP_TURN.bonus; G.shipBonus = (G.shipBonus || 0) + SHIP_TURN.bonus; log('good', `+${SHIP_TURN.bonus} ninety-nine call: mother in ${r.dir} turn.`); if (sc.brc != null) { const w = r.to % 360 || 360; if ((sc.brc % 360 || 360) === w) log('good', `Expected BRC ${h3z(w)} correct.`); else log('bad', `Expected BRC is ${h3z(w)}, not ${String(sc.brc).padStart(3, '0')}.`); } }
     else { r.turnCall = 'wrong'; log('bad', `Wrong ship-turn call: mother is in a ${r.dir} turn${sc.dir ? `, not ${sc.dir}` : ' (direction not heard)'}.`); Sound.buzz(); }
   } else {
     if (S.st !== 'steady') { log('sys', 'Steady call ignored: mother is still turning.'); return; }
@@ -3619,6 +3638,7 @@ function appStep(dt) {
   if (LINK.pendingHandoff) { const h = LINK.pendingHandoff; LINK.pendingHandoff = null; LINK.handoff(h.a, h.freq); }
   for (const a of G.ac) {
     if (a.phase !== 'app') continue;
+    coStep(a);
     const rng0 = appRng(a);
     if (a.st === 'final') {   // flown by Stinger Final: straight in, low approach (or full stop), then climb back out
       if (!a.lowDone) {
@@ -3631,7 +3651,7 @@ function appStep(dt) {
           if (a.climbout && a.climbout.length) {   // controller-issued climbout instructions replace the default
             for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = coSpd = c.v; }
             log('sys', `${a.cs} low approach past ${SHIP_NAME}, flying climbout instructions: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}, ${a.tgtSpd} kt.`);
-            a.climbout = null;
+            coDefer(a); a.climbout = null;
           } else log('sys', `${a.cs} low approach past ${SHIP_NAME}, climbing out on ${BRC3} to ${fmtAlt(a.tgtAlt)}.`);
           appCheckIn(a, true);   // checks back in right as it passes the ship
           if (coSpd != null) a.tgtSpd = coSpd;   // climbout speed survives the re-check-in
@@ -3659,7 +3679,7 @@ function appStep(dt) {
             for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = a.coSpd = c.v; }
             what = `flying climbout instructions: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}, ${a.tgtSpd} kt`;
           }
-          a.climbout = null;
+          coDefer(a); a.climbout = null;
           log('sys', `${a.cs} low approach past ${SHIP_NAME} (practice PAR ${a.appCount}/${APP_MAX_PARS}), ${what}.`);
         }
         if (toLoc(a.e, a.n)[1] < -0.6) a.onFinal = false;   // overshot: go around to the gate
