@@ -978,8 +978,8 @@ function handleTx(raw, src) {
     if (STEPS[cur] !== st) { txBusy = false; return; }
     if (wrongCs) { txBusy = false; addLog('sys', '(no answer)'); fail(st, `Nobody answered. You called <b>${esc(tel(p.cs))}</b>, but the aircraft is <b>${tel(a.cs)}</b>. With the wrong callsign, the right pilot ignores the call.`); return; }
     if (!p.cmds.length || p.hdgMissing) {
-      txBusy = false; addLog('plt', `${tel(a.cs)}, say again.`); speak(telSay(a.cs) + ', say again.', 'pilot');
-      fail(st, p.hdgMissing ? 'The pilot heard a turn but no usable <b>heading number</b>, so they asked you to say again. Say the heading as three digits.' : `The pilot couldn't pick out an instruction and asked you to <b>say again</b>.${src === 'voice' ? ' If the mic misheard you, speak a little slower, or type it.' : ''}`);
+      txBusy = false; addLog('plt', `${tel(a.cs)}, unable.`); speak(telSay(a.cs) + ', unable.', 'pilot');
+      fail(st, p.hdgMissing ? 'The pilot heard a turn but no usable <b>heading number</b>, so they answered <b>unable</b>. Say the heading as three digits.' : `The pilot couldn't pick out an instruction, so they answered <b>unable</b>. Try the call again.${src === 'voice' ? ' If the mic misheard you, speak a little slower, or type it.' : ''}`);
       return;
     }
     const parts = readbackParts(a, p.cmds);

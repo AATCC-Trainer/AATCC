@@ -47,6 +47,9 @@ td{padding:3px 4px;border-top:1px solid #241d44;vertical-align:top}tr.act{cursor
 #ovIn .row{margin:10px 0}
 #ciBox{border:1px solid var(--gdd);border-radius:4px;padding:7px;background:var(--panel2)}#ciBox.man{border-color:var(--amber)}
 #ciBox .seg{display:inline-flex}#ciBox .seg button{border-radius:0}#ciBox .seg button:first-child{border-radius:3px 0 0 3px}#ciBox .seg button:last-child{border-radius:0 3px 3px 0}
+.tEd{cursor:pointer;border-bottom:1px dashed var(--amber)}.tEd:hover{color:var(--cyan)}.rDel{font-size:10px;padding:0 5px;margin-left:4px;color:var(--red);border-color:#6a2a3a}
+#tIn{width:84px;font-size:12px;padding:1px 3px}
+#addBox{border:1px solid #2a2350;border-radius:4px;padding:6px;margin-top:6px;font-size:12px}#addBox .row{display:flex;flex-wrap:wrap;gap:5px;align-items:center}#addBox select,#addBox input{font-size:12px;padding:2px 3px}#adNum{width:54px}#adAt{width:84px}#addMsg{color:var(--dim);font-size:11px;margin-top:4px}
 #ciNext{color:var(--dim);font-size:12px;margin:6px 0}#ciNext b{color:var(--g)}#ciNext .cd{color:var(--amber);font-weight:bold}
 .ciGo{color:var(--amber);border-color:var(--amber);background:#2a2008;font-weight:bold}.ciGo:disabled{opacity:.45;cursor:default}
 .st-held{color:var(--amber)}
@@ -89,6 +92,12 @@ td{padding:3px 4px;border-top:1px solid #241d44;vertical-align:top}tr.act{cursor
    </div>
    <h3>SIMULATION AIRCRAFT · WHEN THEY APPEAR ON THE SCOPE</h3>
    <div id="roster"><table><thead><tr><th>Callsign / type</th><th>Pos</th><th>Appears</th><th>Status</th></tr></thead><tbody id="rBody"></tbody></table></div>
+   <div id="addBox"><div class="row"><b style="color:var(--cyan)">+ ADD AIRCRAFT</b>
+    <select id="adSrc" title="Scope it checks in on"><option value="MARSHAL">Marshal</option><option value="APPROACH">Approach</option></select>
+    <select id="adCs" title="Callsign (from the sim's callsign table)"><option value="">Auto callsign</option></select><input id="adNum" placeholder="no. (auto)" inputmode="numeric" title="Callsign number (blank = auto)">
+    <select id="adType" title="Aircraft type"><option value="">Auto type</option></select>
+    <input id="adAt" value="in 1 min" title="Start time: mm:ss of sim time, or 'in 2 min'"><button id="adGo">Add</button></div>
+    <div id="addMsg">Click a pending start time (✎) to change it: <b>mm:ss</b> of sim time or <b>in 2 min</b>. ✕ removes it before it checks in. The list re-orders by time.</div></div>
    <h3>INSTRUCTOR LOG</h3><div id="log"></div>
   </div>
  </div>
@@ -196,6 +205,7 @@ $('bBus').onclick = () => { const a = selAc(); if (a) sendCmd(a, 'signal buster'
 holdBtn($('bDesc'), -1); holdBtn($('bAsc'), +1);
 /* ---------- roster ---------- */
 function renderRoster() {
+  if (I.editing) return;   // a start-time field is open: don't redraw under it
   const rows = [], acs = allAc();
   for (const s of links()) { if (!live(s)) continue; const st = I.src[s], t = st.t || 0, f = SRC_FREQ[s];
     const onIds = new Set();
@@ -203,7 +213,7 @@ function renderRoster() {
       const a = r.cs && acs.find(x => x.src === s && x.cs === r.cs);
       if (a) onIds.add(a.key);
       const status = a ? (a.src === 'FINAL' || a.phase === 'withFinal' ? 'ON FINAL' : a.onScope ? 'ON SCOPE' : 'QUEUED') : r.spawned ? 'RECOVERED' : st.manual && s !== 'FINAL' ? 'HELD' : r.at != null ? 'IN ' + mmss(r.at - t) : '—';
-      rows.push({ key: a && a.key, cs: r.cs || 'TBD', type: r.type || '', tag: r.tag || '', f, at: r.at, loc: r.loc, label: r.label, status, src: s, spawn: !r.spawned });
+      rows.push({ key: a && a.key, cs: r.cs || 'TBD', type: r.type || '', tag: r.tag || '', f, at: r.at, loc: r.loc, label: r.label, status, src: s, spawn: !r.spawned, sid: r.sid, edit: !!(r.edit && !r.spawned && st.sched) });
     }
     for (const a of acs) if (a.src === s && !onIds.has(a.key)) rows.push({ key: a.key, cs: a.cs, type: a.type, tag: a.lead ? 'WING' : a.flight ? 'LEAD' : '', f: freqOf(a), at: null, loc: s === 'FINAL' ? 'Handoff / PAR' : '', label: '', status: s === 'FINAL' ? 'ON FINAL' : 'ON SCOPE', src: s });
   }
@@ -211,10 +221,58 @@ function renderRoster() {
   let spawnShown = new Set();
   $('rBody').innerHTML = rows.length ? rows.map(r => { const cl = r.status.startsWith('ON') ? 'st-on' : r.status.startsWith('IN') ? 'st-in' : r.status === 'HELD' ? 'st-held' : 'st-done';
     const sp = '';
-    return `<tr class="${r.key ? 'act' : ''}${r.key && r.key === I.sel ? ' sel' : ''}" ${r.key ? `data-k="${esc(r.key)}"` : ''}><td>${esc(r.cs)}${r.tag ? ` <span style="color:var(--dim)">${r.tag}</span>` : ''}<br><span style="color:var(--dim)">${esc(r.type)}${r.label ? ' · ' + esc(r.label) : ''}</span></td><td><span class="ft f-${r.f}">${FREQ_TAG[r.f]}</span></td><td>${r.status === 'HELD' ? 'manual' : r.at != null ? '@ ' + mmss(r.at) : '—'}<br><span style="color:var(--dim)">${esc(r.loc || '')}</span></td><td class="${cl}">${r.status}${sp}</td></tr>`; }).join('')
+    return `<tr class="${r.key ? 'act' : ''}${r.key && r.key === I.sel ? ' sel' : ''}" ${r.key ? `data-k="${esc(r.key)}"` : ''}><td>${esc(r.cs)}${r.tag ? ` <span style="color:var(--dim)">${r.tag}</span>` : ''}<br><span style="color:var(--dim)">${esc(r.type)}${r.label ? ' · ' + esc(r.label) : ''}</span></td><td><span class="ft f-${r.f}">${FREQ_TAG[r.f]}</span></td><td>${r.edit ? `<span class="tEd" data-src="${r.src}" data-sid="${esc(r.sid)}" data-at="${r.at}" title="Change start time">@ ${mmss(r.at)} ✎</span><button class="rDel" data-src="${r.src}" data-sid="${esc(r.sid)}" title="Remove from the schedule">✕</button>${r.status === 'HELD' ? '<br><span style="color:var(--amber)">held (manual)</span>' : ''}` : r.status === 'HELD' ? 'manual' : r.at != null ? '@ ' + mmss(r.at) : '—'}<br><span style="color:var(--dim)">${esc(r.loc || '')}</span></td><td class="${cl}">${r.status}${sp}</td></tr>`; }).join('')
     : `<tr><td colspan="4" style="color:var(--dim);padding:10px">Waiting for the ${esc(links().filter(x => x !== 'FINAL').map(x => x[0] + x.slice(1).toLowerCase()).join(' / '))} / Final simulation to start in its tab… (press ▶ START there)</td></tr>`;
 }
-$('rBody').onclick = e => { const tr = e.target.closest('tr[data-k]'); if (tr) select(tr.dataset.k); };
+$('rBody').onclick = e => {
+  const ed = e.target.closest('.tEd'), del = e.target.closest('.rDel');
+  if (del) { e.stopPropagation(); schedSend(del.dataset.src, { act: 'del', sid: del.dataset.sid }, `remove ${del.dataset.sid} from the schedule`); return; }
+  if (ed) { e.stopPropagation(); editAt(ed); return; }
+  const tr = e.target.closest('tr[data-k]'); if (tr) select(tr.dataset.k); };
+/* ---------- schedule editor: change / delete / add start (check-in) times on the linked Marshal / Approach (inst-cmd op 'sched') ---------- */
+function parseAt(str, t) {   // 'mm:ss' sim time | 'in 2 min' | '+2' | 'in 90 s' | 'now' | '5' (= 5:00)  -> sim seconds (null = invalid)
+  const v = String(str || '').trim().toLowerCase(); let m;
+  if (v === 'now') return t;
+  if ((m = /^(\d{1,3}):(\d{1,2})$/.exec(v))) return +m[1] * 60 + +m[2];
+  if ((m = /^(?:in\s*|\+\s*)(\d+(?:\.\d+)?)\s*(s|sec|secs|seconds?)$/.exec(v))) return t + +m[1];
+  if ((m = /^(?:in\s*|\+\s*)(\d+(?:\.\d+)?)\s*(m|min|mins|minutes?)?$/.exec(v))) return t + +m[1] * 60;
+  if ((m = /^(\d+(?:\.\d+)?)$/.exec(v))) return +m[1] * 60;
+  return null;
+}
+function schedSend(src, body, what) {
+  if (!live(src) || !I.src[src].running) { log('s', `${src[0] + src.slice(1).toLowerCase()} is not running: start it in its tab first.`); return false; }
+  try { ch.postMessage(Object.assign({ type: 'inst-cmd', to: src, op: 'sched', id: ++cmdId }, body)); } catch (e) {}
+  log('i', `INSTRUCTOR → ${src[0] + src.slice(1).toLowerCase()}: ${what}`); return true;
+}
+function editAt(el) {
+  const src = el.dataset.src, sid = el.dataset.sid, t0 = (I.src[src] && I.src[src].t) || 0;
+  I.editing = true; const inp = document.createElement('input'); inp.id = 'tIn'; inp.value = mmss(+el.dataset.at); inp.title = "mm:ss of sim time, or 'in 2 min'";
+  el.replaceWith(inp); inp.focus(); inp.select();
+  const done = ok => { if (!I.editing) return; I.editing = false;
+    if (ok) { const t = (I.src[src] && I.src[src].t) || t0, at = parseAt(inp.value, t);
+      if (at == null) log('b', `Start time "${inp.value}" not understood: use mm:ss (e.g. 4:30) or "in 2 min".`);
+      else { if (at < t) log('s', `${mmss(at)} is already past (T+${mmss(t)}): it checks in now.`); schedSend(src, { act: 'set', sid, at }, `${sid} start time → @ ${mmss(Math.max(at, t))}`); } }
+    renderRoster(); };
+  inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); done(true); } else if (e.key === 'Escape') { e.preventDefault(); done(false); } });
+  inp.addEventListener('blur', () => done(true));
+}
+function addFill() {   // callsign / type pickers from the sims' own callsign table
+  const st = ['MARSHAL', 'APPROACH'].map(x => live(x) ? I.src[x] : null).find(x => x && x.airlines && x.airlines.length); if (!st) return;
+  const key = st.airlines.map(a => a.icao).join(); if (addFill.key === key) return; addFill.key = key; I.airlines = st.airlines;
+  $('adCs').innerHTML = '<option value="">Auto callsign</option>' + st.airlines.map(a => `<option value="${esc(a.icao)}">${esc(a.tel)} (${esc(a.icao)})</option>`).join(''); addTypes(); }
+function addTypes() { const al = (I.airlines || []).find(a => a.icao === $('adCs').value), cur = $('adType').value;
+  $('adType').innerHTML = '<option value="">Auto type</option>' + (al ? al.types : [...new Set((I.airlines || []).flatMap(a => a.types))]).map(t => `<option${t === cur ? ' selected' : ''}>${esc(t)}</option>`).join(''); }
+$('adCs').onchange = addTypes;
+$('adGo').onclick = () => {
+  const src = $('adSrc').value, t = (I.src[src] && I.src[src].t) || 0, at = parseAt($('adAt').value, t);
+  if (!links().includes(src)) { log('s', `${src[0] + src.slice(1).toLowerCase()} is not linked here (choose it in Link).`); return; }
+  if (at == null) { log('b', `Start time "${$('adAt').value}" not understood: use mm:ss (e.g. 4:30) or "in 2 min".`); return; }
+  const pre = $('adCs').value, num = $('adNum').value.replace(/\D/g, ''), type = $('adType').value;
+  if (num && !pre) { log('b', 'Pick a callsign for that number (or clear the number for an automatic one).'); return; }
+  const al = (I.airlines || []).find(a => a.icao === pre); if (type && al && !al.types.includes(type)) { log('b', `${al.tel} flies ${al.types.join(' / ')}, not ${type}.`); return; }
+  schedSend(src, { act: 'add', cs: pre ? pre + num : '', acType: type, at }, `add ${pre ? (al ? al.tel : pre) + ' ' + (num || '(auto no.)') : 'an aircraft (auto callsign)'}${type ? ' ' + type : ''} @ ${mmss(Math.max(at, t))}`);
+};
+setInterval(() => { addFill(); const opts = ['MARSHAL', 'APPROACH'].filter(x => links().includes(x)); for (const o of $('adSrc').options) o.disabled = !opts.includes(o.value); if (!opts.includes($('adSrc').value) && opts.length) $('adSrc').value = opts[0]; }, 1000);
 /* ---------- scope drawing (Marshal/Approach look) ---------- */
 const cv = $('cv'), ctx = cv.getContext('2d'); let W = 0, H = 0, DPR = 1;
 const FONT = s => `${s}px Consolas, Menlo, "DejaVu Sans Mono", monospace`, ppi = a => `rgba(120,255,140,${a})`;

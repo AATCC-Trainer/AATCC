@@ -1358,7 +1358,7 @@ function execute(p, src) {
   a.lastTx = G.t; a.lastRealTx = G.t;
   log('ctl', `${a.cs}${p.cs ? '' : ' (selected)'}: "${p.raw.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${p.cmds.length ? p.cmds.map(cmdStr).join('; ') : '??'}`);
   if (!p.cmds.length) {
-    if (!silentBefore) pilotSay(a, `Say again, ${a.tel}.`, `Say again, ${a.telSay}.`);
+    if (!silentBefore) pilotSay(a, `${a.tel}, unable.`, `${a.telSay}, unable.`);
     else log('sys', `Not understood, and ${a.cs} won't reply (told not to acknowledge). Try again.`);
     return;
   }
@@ -2905,41 +2905,43 @@ function mcSpawnFlight(rel) {   // flight of 2 jets (same callsign word, consecu
     mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: rRel, rng: i ? r0 + 0.5 : r0, lead: ld ? ld.uid : null, flight: i ? null : 2, wing: i ? null : al.icao + nums[1] });
   }
 }
-function instPlan() { if (!G.instPlan) { const w2 = 10 + rand(150, 180); G.instPlan = { w1: 10, w2, w3: w2 + rand(150, 180) }; } return G.instPlan; }   // pre-rolled wave times (Instructor roster)
-function mcNextDue() { const w = G.mcWave; return w == null ? instPlan().w1 : (w === 1 || w === 2) ? G.nextWaveAt : (MC_MORE_ARRIVALS && G.nextArr != null ? G.nextArr : null); }
+/* ---------- arrival schedule (G.sched): Wave 1 flight -> Wave 2 single CCA bird -> Wave 3 flight; the Instructor can add / delete / retime pending entries over stinger-link ---------- */
+function instPlan() {   // pre-rolled wave times (Instructor roster)
+  if (!G.sched) { const w2 = 10 + rand(150, 180), w3 = w2 + rand(150, 180); G.schedN = 3;
+    G.sched = [{ id: 'W1', at: 10, kind: 'flight', rel: 240, label: 'Wave 1 · flight of 2 jets', loc: '10 NM · 240R' },
+      { id: 'W2', at: w2, kind: 'cca', label: 'Wave 2 · single CCA arrival', loc: '6 NM · 080–100R' },
+      { id: 'W3', at: w3, kind: 'flight', label: 'Wave 3 · flight of 2 jets', loc: '10 NM · 150–250R' }]; }
+  return G.sched;
+}
+const schedPending = () => instPlan().filter(e => !e.done).sort((x, y) => x.at - y.at);
+const schedNext = () => schedPending()[0] || null;
+function schedSpawn(e) {   // one schedule entry checks in now
+  const seen = new Set(G.ac.map(a => a.uid)); e.done = true;
+  if (e.kind === 'flight') mcSpawnFlight(e.rel);
+  else if (e.kind === 'cca') { G.parSpawned = true; mcParArrive(); }
+  else mcArrive(e.cs ? { cs: e.cs, type: e.type } : {});   // Instructor-added single arrival (10 NM, angels 5)
+  e.out = G.ac.filter(a => !seen.has(a.uid)).map(a => ({ cs: a.cs, type: a.type, tag: a.lead ? 'WING' : a.flight ? 'LEAD' : '' }));
+  G.mcWave = G.sched.filter(x => x.done).length;
+  if (!schedNext() && G.nextArr == null) G.nextArr = G.t + rand(240, 300);
+}
+function mcNextDue() { const e = schedNext(); return e ? e.at : (MC_MORE_ARRIVALS && G.nextArr != null ? G.nextArr : null); }
 function mcShift(d) {   // move every pending (not yet checked-in) arrival by d seconds
-  const p = instPlan(), w = G.mcWave || 0;
-  if (w < 1) p.w1 += d; if (w < 2) p.w2 += d; if (w < 3) p.w3 += d;
-  if ((w === 1 || w === 2) && G.nextWaveAt != null) G.nextWaveAt += d; if (G.nextArr != null) G.nextArr += d;
+  for (const e of schedPending()) e.at += d; if (G.nextArr != null) G.nextArr += d;
 }
 function instHold() { const t = G.t, d = t - (G.instHoldT != null ? G.instHoldT : t); G.instHoldT = t; if (G.instManual && d > 0) mcShift(d); }   // Instructor 'Manual': timed check-ins wait
-function instCheckInNow() {   // Instructor: next wave checks in now; later waves keep their spacing
+function instCheckInNow() {   // Instructor: next scheduled arrival checks in now; later ones keep their spacing
   if (!G || G.over) return null; const seen = new Set(G.ac.map(a => a.uid)), due = mcNextDue();
   if (due == null) { const a = mcArrive(); return a ? a.cs + ' (extra arrival)' : null; }
   mcShift(G.t - due); G.instHoldT = G.t; mcArrivals(6);
   const n = G.ac.filter(a => !seen.has(a.uid)).map(a => a.cs); return n.length ? n.join(' + ') : null;
 }
-function mcArrivals(want) {   // 3-wave Marshal sequence: Wave 1 flight (10 NM) -> Wave 2 single bird (6 NM right) -> Wave 3 flight (10 NM)
+function mcArrivals(want) {   // scheduled arrivals (default 3 waves); one entry per step when due
   instHold();
-  if (G.mcWave == null) {
-    if (G.t < instPlan().w1) return;
-    mcSpawnFlight(240);
-    G.mcWave = 1; G.nextWaveAt = instPlan().w2;   // Wave 2 ~2.5-3 min after Wave 1
-    return;
-  }
-  if (G.mcWave === 1 && G.t >= G.nextWaveAt) {
-    G.parSpawned = true; mcParArrive();
-    G.mcWave = 2; G.nextWaveAt = instPlan().w3;   // Wave 3 ~2.5-3 min after Wave 2
-    return;
-  }
-  if (G.mcWave === 2 && G.t >= G.nextWaveAt) {
-    mcSpawnFlight();   // second flight of 2 jets for marshal (inbound from 150-250 deg at 10 NM)
-    G.mcWave = 3; G.nextArr = G.t + rand(240, 300);
-    return;
-  }
+  const e = schedNext();
+  if (e) { if (G.t >= e.at) schedSpawn(e); return; }
   if (!MC_MORE_ARRIVALS) {
-    if (!G.allRecSaid && G.mcWave >= 3 && G.t > 30 && !G.ac.length) {
-      G.allRecSaid = true; log('sys', 'All aircraft recovered. All three arrival waves complete; press End to finish.');
+    if (!G.allRecSaid && G.t > 30 && !G.ac.length) {
+      G.allRecSaid = true; log('sys', 'All aircraft recovered. Every scheduled arrival is complete; press End to finish.');
     }
     return;
   }
@@ -3309,7 +3311,7 @@ const MAR = {
     }
     if (m.marshal) {
       const k = m.marshal;
-      if (k.R == null || k.D == null || k.alt == null) { this.say(a, 'say again marshal instructions'); log('sys', `${a.cs}: marshal needs radial, distance and angels. Heard: "${heard}"`); return; }
+      if (k.R == null || k.D == null || k.alt == null) { this.say(a, 'unable'); log('sys', `${a.cs}: marshal needs radial, distance and angels. Heard: "${heard}"`); return; }
       let type = M.type || this.infer(a, k.R, k.D);
       if (type === 'LH4' && !M.type && this.helo90(a, k.R, k.D, k.alt)) type = 'EMER';
       if (type === 'LH4' && M.type === 'LH4' && this.helo90(a, k.R, k.D, k.alt) && this.check(a, 'LH4', k.R, k.D, k.alt).length) type = 'EMER';
@@ -3742,10 +3744,10 @@ function appExecute(p, src) {
     pilotSay(a, `${a.tel}, tally-ho.`, `${a.telSay}, tally ho.`, true, false, false);
     return;
   }
-  if (p.hdgMissing) {   // turn/heading with no valid 3-digit heading: nothing changes, no grading, pilot asks again
+  if (p.hdgMissing) {   // turn/heading with no valid 3-digit heading: nothing changes, no grading, pilot replies 'unable'
     selectAc(a);
     log('ctl', `${a.cs}${p.cs ? '' : ' (selected)'}: "${p.raw.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  heading not understood`);
-    pilotSay(a, `${a.tel}, say again heading.`, `${a.telSay}, say again heading.`, true, false, false);
+    pilotSay(a, `${a.tel}, unable.`, `${a.telSay}, unable.`, true, false, false);
     return;
   }
   selectAc(a); a.lastTx = G.t;
@@ -3858,7 +3860,7 @@ function appExecute(p, src) {
     refreshPanel(true); return;
   }
   if (marked && !rb.length) return;
-  if (!rb.length) { pilotSay(a, `Say again, ${a.tel}.`, `Say again, ${a.telSay}.`); return; }
+  if (!rb.length) { pilotSay(a, `${a.tel}, unable.`, `${a.telSay}, unable.`); return; }
   const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
   // acknowledge with callsign only; keep "unable ..." and "loud and clear" replies
   const keep = rb.map((t, i) => /^(unable|loud and clear)/.test(t) ? i : -1).filter(i => i >= 0);
@@ -4139,21 +4141,17 @@ function shipStateMsg() { const on = !!(LAND && LAND.polys && LAND.polys.length)
   }
   function roster(G) {
     const out = [], t = G.t;
-    if (PAGE === 'MARSHAL') {
-      const p = G.instPlan || (typeof instPlan === 'function' ? instPlan() : null); if (!p) return out;
-      const sp = [['Wave 1 · flight of 2 jets', p.w1, '10 NM · 240R', 1], ['Wave 2 · single CCA arrival', p.w2, '6 NM · 080–100R', 2], ['Wave 3 · flight of 2 jets', p.w3, '10 NM · 150–250R', 3]];
-      for (const [lbl, at, loc, w] of sp) {
-        const done = (G.mcWave || 0) >= w;
-        const acs = (G.instWaveCs && G.instWaveCs[w]) || [];
-        if (done && acs.length) acs.forEach((x, i) => out.push({ label: lbl, at, loc, cs: x.cs, type: x.type, tag: x.tag, spawned: true }));
-        else if (done) out.push({ label: lbl, at, loc, spawned: true });
-        else if (w === 2) out.push({ label: lbl, at, loc, cs: 'TBD', type: 'jet/helo', spawned: false, wave: w });
-        else ['LEAD', 'WING'].forEach(tag => out.push({ label: lbl, at, loc, cs: 'TBD', type: 'jet', tag, spawned: false, wave: w }));
+    if (PAGE === 'MARSHAL' || PAGE === 'APPROACH') {   // schedule entries (G.sched): editable by the Instructor until they check in
+      if (typeof schedPending !== 'function') return out; schedPending();
+      const list = (G.sched || []).slice().sort((x, y) => x.at - y.at); let n = 0, pend = 0;
+      for (const e of list) {
+        const lbl = e.label || (e.added ? 'Added launch' : 'Launch ' + (++n));
+        if (!e.done && PAGE === 'APPROACH' && ++pend > 10) continue;   // roster shows the next 10 pending launches
+        const base = { sid: e.id, label: lbl, at: e.at, loc: e.loc || 'Launch · Mother' };
+        if (e.done) (e.out && e.out.length ? e.out : [{}]).forEach(x => out.push(Object.assign({}, base, { cs: x.cs, type: x.type, tag: x.tag, spawned: true })));
+        else if (e.kind === 'flight') ['LEAD', 'WING'].forEach((tag, i) => out.push(Object.assign({}, base, { cs: 'TBD', type: 'jet', tag, spawned: false, edit: i === 0 })));
+        else out.push(Object.assign({}, base, { cs: e.cs || 'TBD', type: e.type || (e.kind === 'cca' ? 'jet/helo' : ''), spawned: false, edit: true }));
       }
-    } else if (PAGE === 'APPROACH') {
-      try { if (!G.instPlan && typeof instLaunchPlan === 'function') instLaunchPlan(0); } catch (e) {}
-      const plan = G.instPlan || [10];
-      plan.slice(0, 12).forEach((at, i) => out.push({ label: 'Launch ' + (i + 1), at, loc: 'Launch · Mother', spawned: t >= at && (G.launches || 0) > i, cs: (G.instLaunchCs || [])[i] || 'TBD', type: (G.instLaunchType || [])[i] || '' }));
     } else {
       if (G.linked) return out;
       try { if (!G.instPlan && typeof instSpawnPlan === 'function') instSpawnPlan(0); } catch (e) {}
@@ -4162,14 +4160,9 @@ function shipStateMsg() { const on = !!(LAND && LAND.polys && LAND.polys.length)
     }
     return out;
   }
-  function track(G) {   // remember which callsigns each wave / launch produced
-    if (PAGE === 'MARSHAL') {
-      G.instWaveCs = G.instWaveCs || {}; G.instSeen = G.instSeen || new Set();
-      for (const a of G.ac) if (!G.instSeen.has(a.uid)) { G.instSeen.add(a.uid); const w = G.mcWave || 1; (G.instWaveCs[w] = G.instWaveCs[w] || []).push({ cs: a.cs, type: a.type, tag: a.lead ? 'WING' : a.flight ? 'LEAD' : '' }); }
-    } else if (PAGE === 'APPROACH') {
-      G.instSeen = G.instSeen || new Set(); G.instLaunchCs = G.instLaunchCs || []; G.instLaunchType = G.instLaunchType || [];
-      for (const a of G.ac) if (!G.instSeen.has(a.uid)) { G.instSeen.add(a.uid); if (a.st === 'dep' || a.launchT != null) { G.instLaunchCs.push(a.cs); G.instLaunchType.push(a.type); } }
-    } else {
+  function track(G) {   // Final: remember which callsigns its spawns produced (Marshal / Approach schedule entries record their own aircraft)
+    if (PAGE !== 'FINAL') return;
+    {
       G.instSeen = G.instSeen || new Set(); G.instSpawnCs = G.instSpawnCs || [];
       for (const a of G.ac) if (!G.instSeen.has(a.uid)) { G.instSeen.add(a.uid); if (!a.link) G.instSpawnCs.push(a.cs); }
     }
@@ -4180,7 +4173,7 @@ function shipStateMsg() { const on = !!(LAND && LAND.polys && LAND.polys.length)
     if (G) {
       track(G);
       Object.assign(m, { t: Math.round(G.t * 10) / 10, scale: G.scale || 1, brc: typeof BRC !== 'undefined' ? BRC : null, tbrc: typeof TBRC !== 'undefined' ? TBRC : null, dwh: typeof DWH === 'function' ? DWH() : null, wind: G.wind ? { dir: G.wind.dir, spd: G.wind.spd } : null, diff: G.d && G.d.name,
-        ac: G.ac.filter(alv).map(acOut), roster: roster(G) });
+        ac: G.ac.filter(alv).map(acOut), roster: roster(G), sched: !FIN, airlines: typeof AIRLINES !== 'undefined' ? AIRLINES.map(x => ({ icao: x.icao, tel: x.tel, types: x.types })) : [] });
     }
     try { ch.postMessage(m); } catch (e) {}
   }
@@ -4215,6 +4208,32 @@ function shipStateMsg() { const on = !!(LAND && LAND.polys && LAND.polys.length)
       let r = null; try { r = typeof instCheckInNow === 'function' ? instCheckInNow() : null; } catch (e) { return ack(m, false, 'error: ' + e.message); }
       if (!r) return ack(m, false, 'no aircraft left to check in');
       sysLog('next check-in now: ' + r); send(); return ack(m, true, 'CHECK-IN: ' + r);
+    }
+    if (m.op === 'sched') {   // Instructor schedule edit: set / del / add a pending check-in (Marshal arrivals, Approach launches)
+      if (FIN || typeof schedPending !== 'function') return ack(m, false, 'no editable schedule on ' + PAGE);
+      schedPending(); const L = G.sched, e = m.sid ? L.find(x => x.id === m.sid) : null, when = v => Math.max(G.t, isFinite(+v) ? +v : G.t);
+      const mm = t => Math.floor(t / 60) + ':' + String(Math.round(t % 60)).padStart(2, '0'), nm = x => x.label || (x.cs || x.id);
+      if (m.act === 'set' || m.act === 'del') {
+        if (!e) return ack(m, false, 'schedule entry not found');
+        if (e.done) return ack(m, false, nm(e) + ' already checked in: it can no longer be rescheduled');
+        if (m.act === 'del') { L.splice(L.indexOf(e), 1); sysLog(`schedule: removed ${nm(e)}`); send(); return ack(m, true, `REMOVED ${nm(e)}`); }
+        e.at = when(m.at); sysLog(`schedule: ${nm(e)} now checks in @ ${mm(e.at)}`); send(); return ack(m, true, `${nm(e)} → @ ${mm(e.at)}`);
+      }
+      if (m.act === 'add') {
+        let cs = String(m.cs || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), type = m.acType || null;
+        let al = cs ? AIRLINES.find(x => cs.startsWith(x.icao)) : null;
+        if (cs && !al) return ack(m, false, `unknown callsign "${m.cs}"`);
+        if (!al && type) { const c = AIRLINES.filter(x => x.types.includes(type)); if (c.length) { al = c[Math.floor(Math.random() * c.length)]; cs = al.icao; } }   // type only: a callsign that flies it
+        const taken = new Set(G.ac.map(x => x.cs).concat(L.filter(x => !x.done && x.cs).map(x => x.cs)));
+        const num = c => (String(c).match(/(\d+)$/) || [])[1], usedN = new Set([...taken].map(num).filter(Boolean));
+        if (al && !/\d/.test(cs)) { let k = 0, v; do { v = 11 + Math.floor(Math.random() * 58); } while (usedN.has(String(v)) && ++k < 60); cs = al.icao + v; }
+        if (cs && taken.has(cs)) return ack(m, false, cs + ' is already in this simulation');
+        if (al) { if (!type || !al.types.includes(type)) type = al.types[Math.floor(Math.random() * al.types.length)]; } else type = null;   // no callsign: one is generated at check-in
+        const MAR = PAGE === 'MARSHAL', id = (MAR ? 'X' : 'A') + (G.schedN = (G.schedN || L.length) + 1);
+        const ne = { id, at: when(m.at), kind: MAR ? 'single' : 'launch', cs: cs || null, type, added: true, label: MAR ? 'Added · single arrival' : 'Added launch', loc: MAR ? '10 NM · angels 5' : 'Launch · Mother' };
+        L.push(ne); sysLog(`schedule: added ${cs || 'an aircraft'} @ ${mm(ne.at)}`); send(); return ack(m, true, `ADDED ${cs || 'auto callsign'}${type ? ' ' + type : ''} @ ${mm(ne.at)}`);
+      }
+      return ack(m, false, 'unknown schedule edit');
     }
     if (m.op) return ack(m, false, 'Instructor can only command aircraft');
     const a = find(G, m); if (!a) return ack(m, false, (m.cs || '?') + ' not on ' + PAGE);
