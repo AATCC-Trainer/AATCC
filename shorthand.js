@@ -37,7 +37,6 @@ const CODES = [
   [/^gs$/, SC, () => 'go silver', 'gs', 'go silver (Approach)'],
   [/^gp$/, MA, () => 'go purple', 'gp', 'go purple (Final)'],
   [/^gc$/, MA, () => 'go copper', 'gc', 'go copper (Final)'],
-  [/^twr$/, SC, () => 'contact tower', 'twr', 'contact tower'],
   // ---- wave off / missed approach (shared) ----
   [/^sqn$/, M, () => 'squawk normal', 'sqn', 'squawk normal'],
   [/^wo$/, SC, () => 'wave off, wave off', 'wo', 'wave off, wave off'],
