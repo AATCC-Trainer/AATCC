@@ -99,7 +99,7 @@ function letterSub(src, ctx) {
   if (tableFor(sc).some(c => c[0].test(t))) return null;
   const hit = ltrOf(t, ctx); return hit ? hit.tel + ', ' + m[2] : null;
 }
-/* scope (keyboard) commands that never go out on the radio. GSP: toggle ground speed in that aircraft's data block.
+/* scope (keyboard) commands that never go out on the radio. GSP: global toggle, ground speed on every data block (a selector before/after it is accepted and ignored).
    'gsp' (selected aircraft) | 'A gsp' | 'gsp A' | 'lt21 gsp' | '21 gsp' | 'lightning 21 gsp'  ->  { cmd: 'gsp', tel | null } */
 function scopeCmd(input, ctx) {
   ctx = ctx || {}; const toks = String(input || '').trim().toLowerCase().split(/[\s,;]+/).filter(Boolean);
@@ -208,7 +208,7 @@ function attach(opt) {
   const rows = tableFor(sc).map(c => `<tr><td>${esc(c[3])}</td><td>${esc(c[4])}</td></tr>`).join('');
   const ex = { marshal: 'ea16 030/2 a2 brc360 ob210 eat15', approach: 'lt21 l180 d1.2 du', final: 'lt21 r090 bd' }[sc];
   help.innerHTML = `<span class="x" title="Close">✕</span><h3>⌨ Shorthand: ${esc(sc[0].toUpperCase() + sc.slice(1))}</h3>
-<p>Start with a callsign (<b>lt21</b> = Lightning 21, <b>ea16</b>, <b>vn12</b>, <b>nh34</b>, or just the digits <b>21</b>, or an accepted aircraft's letter: <b>A h270</b>); leave it off to talk to the selected aircraft. Chain codes with spaces, e.g. <b>${esc(ex)}</b>. The full phrase is shown under the box and goes into the log. Full sentences still work as before. Type <b>?</b> + Enter to open this.</p>${sc === 'final' ? '' : '<p><b>GSP</b>: show / hide ground speed in a data block (scope only, not a radio call): <b>A gsp</b>, <b>lt21 gsp</b>, or <b>gsp</b> for the selected aircraft.</p>'}
+<p>Start with a callsign (<b>lt21</b> = Lightning 21, <b>ea16</b>, <b>vn12</b>, <b>nh34</b>, or just the digits <b>21</b>, or an accepted aircraft's letter: <b>A h270</b>); leave it off to talk to the selected aircraft. Chain codes with spaces, e.g. <b>${esc(ex)}</b>. The full phrase is shown under the box and goes into the log. Full sentences still work as before. Type <b>?</b> + Enter to open this.</p>${sc === 'final' ? '' : '<p><b>GSP</b>: type <b>gsp</b> once to show ground speed on ALL data blocks (later arrivals too); type it again to hide it. Scope only, not a radio call; resets to off on every new sim.</p>'}
 <table>${rows}</table>`;
   document.body.appendChild(help);
   const btn = bar.querySelector('#shBtn'), prev = bar.querySelector('#shPrev');
@@ -217,7 +217,7 @@ function attach(opt) {
   help.querySelector('.x').addEventListener('click', () => toggle(false));
   help.addEventListener('keydown', e => e.stopPropagation());
   const upd = () => { const v = inp.value.trim(); if (!v) { prev.textContent = ''; return; } if (v === '?') { prev.textContent = '↵ show shorthand codes'; prev.classList.add('pass'); return; }
-    if (opt.onScope) { const q = scopeCmd(v, getCtx()); if (q) { prev.textContent = '→ GSP (ground speed on/off): ' + (q.tel || (q.bad ? q.bad + '?' : 'selected aircraft')); prev.classList.remove('pass'); return; } }
+    if (opt.onScope) { const q = scopeCmd(v, getCtx()); if (q) { prev.textContent = '→ GSP: ground speed on/off for ALL data blocks'; prev.classList.remove('pass'); return; } }
     const r = expand(v, getCtx()); prev.textContent = r.shorthand || r.letter ? '→ ' + r.text : ''; prev.classList.toggle('pass', !r.shorthand && !r.letter); };
   inp.addEventListener('input', upd);
   inp.addEventListener('keydown', e => { if (e.key === 'Escape') toggle(false); });

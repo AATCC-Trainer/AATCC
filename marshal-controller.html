@@ -2094,13 +2094,12 @@ window.__correction = { splitCorrection, undoLastTx, parse: (t, k) => parseSpeec
 /* ---- data block extras: accept letters (A, B, C ... in accept order), short callsigns, GSP ground speed toggle ---- */
 const dbName = a => a.ltr && window.Shorthand ? a.ltr + ' ' + Shorthand.shortCs(a.cs) : a.cs;   // 'A LT21' once accepted
 function syncLetters() { if (G && window.Shorthand) Shorthand.assignLetters(G, a => !!a.accepted && a.phase !== 'gone', x => x.phase !== 'gone'); }
-function gspExec(q) {   // typed 'GSP' (scope keyboard command, never a radio call): toggle ground speed in that aircraft's data block
-  if (!G || G.over) return; const live = G.ac.filter(appCtl);
-  const a = q.tel ? live.find(x => telephony(x.cs).text.toLowerCase() === q.tel.toLowerCase()) : (G.selected && appCtl(G.selected) ? G.selected : null);
-  if (!a) { log('sys', q.bad ? `GSP: no aircraft "${q.bad.toUpperCase()}".` : 'GSP: select an aircraft (click it) or type its letter / callsign first, e.g. "A GSP".'); $('parsed').textContent = 'GSP: no aircraft'; $('parsed').classList.add('bad'); return; }
-  a.gsp = !a.gsp; selectAc(a);
-  log('sys', `${dbName(a)}: ground speed ${a.gsp ? 'ON' : 'OFF'} in the data block (GSP)${a.sq === false ? '; no data block until it squawks' : ''}.`);
-  $('parsed').textContent = `GSP → ${a.cs} ground speed ${a.gsp ? 'shown' : 'hidden'}`; $('parsed').classList.remove('bad');
+function gspExec(q) {   // typed 'GSP' (scope keyboard command, never a radio call): one global toggle, ground speed on EVERY data block (also later arrivals); a letter / callsign before it is ignored
+  if (!G || G.over) return;
+  G.gsp = !G.gsp;   // lives on the sim object: off again on every new sim and on reload
+  log('sys', `Ground speed ${G.gsp ? 'ON' : 'OFF'} in all data blocks (GSP).`);
+  $('parsed').textContent = `GSP → ground speed ${G.gsp ? 'shown on all aircraft' : 'hidden'}`; $('parsed').classList.remove('bad');
+  refreshPanel(true);
 }
 /* one primary-only arrival per simulation: no transponder, no data block; "squawk normal" / "squawk 4521" (sqn / sq4521) brings secondary back */
 const PRI_ONLY_POOL = 3;   // the primary-only aircraft is one of the first 3 arrivals, picked at random each sim
@@ -3873,7 +3872,7 @@ function appReadout(a) {
   return `${a.cs} ${a.type} "${a.tel}"
 RANGE ${appRng(a).toFixed(1)} NM  BRG ${hdg3(Math.round(appBrg(a)))} FROM ${SHIP_NAME.toUpperCase()}
 HDG ${hdg3(Math.round(a.hdg))}${Math.abs(angDiff(a.tgtHdg, a.hdg)) > 0.5 ? ' → ' + hdg3(Math.round(a.tgtHdg)) : ''}   ALT ${fmtAlt(Math.round(a.alt))}${tgt(a.alt, a.tgtAlt, fmtAlt)} FT
-${a.gsp ? `IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Math.round(a.gs)} KT` : 'SPD --- (type GSP)'}${MC && !a.parArr ? `   99 WX ${a.mcTasks && a.mcTasks.wx99 ? '✓' : '–'}` : ''}${a.mar && a.mar.R != null ? `\nMARSHAL ${h3z(a.mar.R)}R/${a.mar.D} A${appAngels(a.mar.alt)}${a.mar.eat != null ? ' EAT :' + String(a.mar.eat).padStart(2, '0') + (a.mar.eatDone ? ' (COMMENCED)' : '') : ''} ${(MAR.T[a.mar.run || a.mar.type || a.mar.typeInf] || {}).name || ''} ${a.mar.ph ? a.mar.ph.toUpperCase() : ''}` : ''}`;
+${G.gsp ? `IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Math.round(a.gs)} KT` : 'SPD --- (type GSP)'}${MC && !a.parArr ? `   99 WX ${a.mcTasks && a.mcTasks.wx99 ? '✓' : '–'}` : ''}${a.mar && a.mar.R != null ? `\nMARSHAL ${h3z(a.mar.R)}R/${a.mar.D} A${appAngels(a.mar.alt)}${a.mar.eat != null ? ' EAT :' + String(a.mar.eat).padStart(2, '0') + (a.mar.eatDone ? ' (COMMENCED)' : '') : ''} ${(MAR.T[a.mar.run || a.mar.type || a.mar.typeInf] || {}).name || ''} ${a.mar.ph ? a.mar.ph.toUpperCase() : ''}` : ''}`;
 }
 function appPanel() {
   const hint = $('hint');
@@ -3883,7 +3882,7 @@ function appPanel() {
   $('scopeStatus').textContent = `${MC ? 'MARSHAL' : 'APPROACH'} · ${SHIP_NAME.toUpperCase()} · RED · FB ${BRC3} · ${APP_RANGE} NM · WIND ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   $('stLanded').textContent = G.landed; $('stLanded').nextElementSibling.textContent = MC ? 'Approaches' : 'Handed off';
   const list = G.ac.filter(appCtl).sort((p, q) => appRng(p) - appRng(q));
-  const html = list.map((x, i) => `<div class="strip${x === G.selected ? ' sel' : ''}" data-uid="${x.uid}"><span>${x.ltr || i + 1}</span><span>${x.cs} ${x.type}</span><span>${appRng(x).toFixed(0)}NM ${String(Math.round(x.alt / 100)).padStart(3, '0')}</span><span>${hdg3(Math.round(x.hdg))}${x.gsp ? ' ' + Math.round(x.gs) + 'KT' : ''}</span></div>`).join('');   // speed only after GSP
+  const html = list.map((x, i) => `<div class="strip${x === G.selected ? ' sel' : ''}" data-uid="${x.uid}"><span>${x.ltr || i + 1}</span><span>${x.cs} ${x.type}</span><span>${appRng(x).toFixed(0)}NM ${String(Math.round(x.alt / 100)).padStart(3, '0')}</span><span>${hdg3(Math.round(x.hdg))}${G.gsp ? ' ' + Math.round(x.gs) + 'KT' : ''}</span></div>`).join('');   // speed only after GSP
   if (stripsEl.innerHTML !== html) stripsEl.innerHTML = html;
 }
 /* AATCC-style PPI (SPN-43 air search look): black scope, green phosphor, 4 s sweep, TPX-42 style beacon blocks. Visual only. */
@@ -3977,7 +3976,7 @@ function drawApp(now) {
     if (a.priCut) ctx.globalAlpha = 0; ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 4.5; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 4.5, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1; ctx.globalAlpha = 1;   // simple target blip (no lines; hidden when the instructor cuts primary radar)
     const bx = Q[0] + 14 + (a.dbx || 0), by = Q[1] - 22 + (a.dby || 0);
     if (a.dbx || a.dby) { ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(Q[0], Q[1]); ctx.lineTo(bx - 2, by + 4); ctx.stroke(); ctx.globalAlpha = 1; }   // leader line to a moved data block
-    const l1 = (a.st === 'purple' || a.phase === 'withFinal' || a.phase === 'withApp') ? dbName(a) + ' ' + freqTag(a.hoffFreq || a.button || (a.phase === 'withApp' ? 'silver' : 'purple')) : dbName(a), l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')}${a.gsp ? ' ' + String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0') : ''} ${a.code}`;   // ground speed only after GSP
+    const l1 = (a.st === 'purple' || a.phase === 'withFinal' || a.phase === 'withApp') ? dbName(a) + ' ' + freqTag(a.hoffFreq || a.button || (a.phase === 'withApp' ? 'silver' : 'purple')) : dbName(a), l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')}${G.gsp ? ' ' + String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0') : ''} ${a.code}`;   // ground speed only after GSP
     ctx.fillStyle = col; if (a.hoff && !((now / 350 | 0) % 2)) ctx.globalAlpha = 0.3; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12); ctx.globalAlpha = 1;
     { const tags = (a.identified ? ' ID' : '');   // ownership / handoff tags
       if (a.hoff) { if ((now / 350 | 0) % 2) { ctx.fillStyle = 'rgba(255,235,120,1)'; ctx.fillText(' ' + (a.hoff.dir === 'out' ? 'APP' : 'FIN') + (a.identified ? ' ID' : ''), bx + ctx.measureText(l1).width, by); ctx.fillStyle = col; } }
@@ -4008,7 +4007,7 @@ requestAnimationFrame(frame);
 window.PAR = {
   priOnly(k = 0) { if (!G) return null; G.priAt = (G.priN || 0) + k; return G.priAt; },   // test: the k-th next arrival is the primary-only one
   priState() { return G ? { priAt: G.priAt, priN: G.priN, pri: G.ac.filter(a => a.priStart).map(a => ({ cs: a.cs, sq: a.sq !== false })) } : null; },
-  letters() { syncLetters(); return G ? G.ac.filter(a => a.ltr).map(a => ({ cs: a.cs, ltr: a.ltr, db: dbName(a), gsp: !!a.gsp })) : []; },
+  letters() { syncLetters(); return G ? G.ac.filter(a => a.ltr).map(a => ({ cs: a.cs, ltr: a.ltr, db: dbName(a), gsp: !!G.gsp })) : []; },
   launchTimes() { return G ? (G.launchLog || []).slice() : []; },
   start(diff = 'training', opts = {}) { startGame(diff, opts); return true; },
   parse(text, known) { const p = parseSpeech(text, known || (G ? G.ac.filter(alive).map(a => a.cs) : [])); return parsedStr(p); },
