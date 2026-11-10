@@ -889,6 +889,7 @@ function newGame(diffKey, opts = {}) {
   log('sys', `${d.name}: ${'Marshal, ' + SHIP_NAME + ', BRC ' + BRC3}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? (MC_MORE_ARRIVALS ? 'Arrivals check in for marshal every 4–5 min;' : 'Three waves: flight of two at 20 NM, single CCA arrival at 10 NM (270–090), then a second flight of two at 20 NM;') + ' press End to finish.' : G.toSpawn + ' arrivals.'}`);
   if (d.hints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
   if (MC && opts.eatRef != null) mcSetEatRef(opts.eatRef);
+  priOnlyInit(opts);
   selectAc(null);
   refreshPanel(true);
 }
@@ -1975,17 +1976,18 @@ function handleTranscript(text, src) {
     $('parsed').classList.remove('bad');
     return { cs: null, cmds: ['wx99'], str: '99 weather', pts: G.mcPts || 0, maxPts: (G.mcGraded || []).length };
   }
-  const sqm = /\bsq(?:u|w)?a+w?c?k?s?\s*,?\s*normal\b/i.exec(heard);
+  const sqm = /\bsq(?:u|w)?a+w?c?k?s?\s*,?\s*(normal|[0-7]{4})\b/i.exec(heard);
   if (G && !G.over && sqm) {   // "squawk normal": a wingman with no squawk starts squawking (data block appears)
     const pre = heard.slice(0, sqm.index), pp = pre.trim() ? parseSpeech(pre, known) : null, live = G.ac.filter(appCtl), up = pre.toUpperCase().replace(/[\s,]+/g, '');
     let a = csByDigits(pre, live) || (pp && pp.cs && live.find(x => x.cs === pp.cs)) || (up && live.find(x => up.includes(x.cs))) || (!pre.trim() && G.selected && appCtl(G.selected) ? G.selected : null);
     setHeard(heard, null); if (src === 'voice') renderTranscript(text, '');
     if (!a) { log('sys', `Squawk normal: say the callsign. Heard: "${heard}"`); return { cs: null, cmds: [], str: 'squawk?' }; }
+    const sqCode = /^\d/.test(sqm[1]) ? sqm[1] : null; if (sqCode) a.code = sqCode;
     a.sq = true; a.lastTx = G.t; selectAc(a);
-    log('ctl', `${a.cs}: "${heard.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  squawk normal`);
+    log('ctl', `${a.cs}: "${heard.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  squawk ${sqCode || 'normal'}`);
     pilotSay(a, `${a.tel}.`, `${a.telSay}.`);
-    $('parsed').textContent = 'Understood → ' + a.cs + ' squawk normal'; $('parsed').classList.remove('bad');
-    return { cs: a.cs, cmds: ['squawk'], str: 'squawk normal' };
+    $('parsed').textContent = 'Understood → ' + a.cs + ' squawk ' + (sqCode || 'normal'); $('parsed').classList.remove('bad');
+    return { cs: a.cs, cmds: ['squawk'], str: 'squawk ' + (sqCode || 'normal') };
   }
   const bst = /\b(?:signal|single|signals|cigna|sig)?\s*bust(?:er|ers|ed|a|ah|in)\b/i.exec(heard);
   if (G && !G.over && MC && bst) {   // "<callsign>, signal buster": accelerate to 500 kt, callsign-only readback
@@ -2089,8 +2091,23 @@ function undoLastTx(cs) {
   refreshPanel(true); return true;
 }
 window.__correction = { splitCorrection, undoLastTx, parse: (t, k) => parseSpeech(t, k), cmdStr: c => cmdStr(c), handle: (t, src) => handleTranscript(t, src || 'voice'), get G() { return G; }, appCtl: a => appCtl(a), isHelo: a => isHelo(a), select: a => selectAc(a) };
+/* ---- data block extras: accept letters (A, B, C ... in accept order), short callsigns, GSP ground speed toggle ---- */
+const dbName = a => a.ltr && window.Shorthand ? a.ltr + ' ' + Shorthand.shortCs(a.cs) : a.cs;   // 'A LT21' once accepted
+function syncLetters() { if (G && window.Shorthand) Shorthand.assignLetters(G, a => !!a.accepted && a.phase !== 'gone', x => x.phase !== 'gone'); }
+function gspExec(q) {   // typed 'GSP' (scope keyboard command, never a radio call): toggle ground speed in that aircraft's data block
+  if (!G || G.over) return; const live = G.ac.filter(appCtl);
+  const a = q.tel ? live.find(x => telephony(x.cs).text.toLowerCase() === q.tel.toLowerCase()) : (G.selected && appCtl(G.selected) ? G.selected : null);
+  if (!a) { log('sys', q.bad ? `GSP: no aircraft "${q.bad.toUpperCase()}".` : 'GSP: select an aircraft (click it) or type its letter / callsign first, e.g. "A GSP".'); $('parsed').textContent = 'GSP: no aircraft'; $('parsed').classList.add('bad'); return; }
+  a.gsp = !a.gsp; selectAc(a);
+  log('sys', `${dbName(a)}: ground speed ${a.gsp ? 'ON' : 'OFF'} in the data block (GSP)${a.sq === false ? '; no data block until it squawks' : ''}.`);
+  $('parsed').textContent = `GSP → ${a.cs} ground speed ${a.gsp ? 'shown' : 'hidden'}`; $('parsed').classList.remove('bad');
+}
+/* one primary-only arrival per simulation: no transponder, no data block; "squawk normal" / "squawk 4521" (sqn / sq4521) brings secondary back */
+const PRI_ONLY_POOL = 3;   // the primary-only aircraft is one of the first 3 arrivals, picked at random each sim
+function priOnlyInit(opts) { G.priN = 0; G.priAt = opts && opts.priAt != null ? opts.priAt : Math.floor(Math.random() * PRI_ONLY_POOL); }   // Math.random: leaves seeded sims unchanged
+function priOnlyMark(a) { if (G.priAt == null) return; if (G.priN++ === G.priAt) { a.sq = false; a.priStart = true; } }
 /* shorthand typing (shorthand.js): live preview + '⌨ Shorthand' cheat sheet under the typed command box; typed codes are expanded before this page's submit handler */
-try { if (window.Shorthand) Shorthand.attach({ scope: 'marshal', accent: '#ff5a6e', accent2: '#ff8a96', ctx: () => ({ airlines: AIRLINES, selected: G && G.selected && alive(G.selected) ? telephony(G.selected.cs).text : null, callsigns: G ? G.ac.filter(alive).map(a => ({ cs: a.cs, tel: telephony(a.cs).text })) : [] }) }); } catch (e) { console.warn('shorthand', e); }
+try { if (window.Shorthand) Shorthand.attach({ scope: 'marshal', accent: '#ff5a6e', accent2: '#ff8a96', ctx: () => ({ airlines: AIRLINES, selected: G && G.selected && alive(G.selected) ? telephony(G.selected.cs).text : null, callsigns: G ? G.ac.filter(alive).map(a => ({ cs: a.cs, tel: telephony(a.cs).text, ltr: a.ltr || null })) : [] }), onScope: gspExec }); } catch (e) { console.warn('shorthand', e); }
 window.__shTest = { AIRLINES, parse: (t, k) => parseSpeech(t, k), prep: t => { t = PM(t); return typeof fixSpeech === 'function' ? fixSpeech(t) : t; }, get G() { return G; }, select: a => selectAc(a), tel: cs => telephony(cs).text, alive: a => alive(a), ship: t => typeof shipCallParse === 'function' ? shipCallParse(t) : null, wx: t => typeof wxCallParse === 'function' ? wxCallParse(t) : null, mar: t => typeof MAR !== 'undefined' ? MAR.parse(t) : null };
 window.__injectTranscript = text => handleTranscript(String(text), 'voice');
 
@@ -2942,6 +2959,7 @@ function mcArrive(spec = {}) {
   if (MC) alt = 5000;   // Marshal: every arrival checks in at angels 5
   a.alt = a.tgtAlt = alt; a.ias = a.tgtSpd = helo ? 120 : 250; a.trail = []; a.trailT = 0; a.lastTx = G.t;
   { const f = appFuelSpec(a); a.fuel0 = f[0] * rand(0.45, 0.7); a.launchT = G.t; a.souls = Math.round(rand(f[2], f[3])); }
+  if (!spec.lead) priOnlyMark(a);   // one primary-only arrival per sim (wingmen never squawk anyway)
   if (spec.lead) { a.lead = spec.lead; a.inForm = true; a.sq = false; }   // wingman: no squawk, flies formation on the leader
   if (spec.flight) { a.flight = spec.flight; a.wingCs = spec.wing || null; }
   G.ac.push(a); mcRegisterGrade(a); appCheckIn(a, false); a.needAlt = false; a.identified = true; a.rcDone = true;
@@ -2963,7 +2981,7 @@ function mcParArrive() {
   a.hdg = a.tgtHdg = Math.round(norm(b + 180));   // inbound toward mother
   a.alt = a.tgtAlt = helo ? 2000 : 3000; a.trail = []; a.trailT = 0; a.lastTx = G.t;
   { const f = appFuelSpec(a); a.fuel0 = f[0] * rand(0.45, 0.7); a.launchT = G.t; a.souls = Math.round(rand(f[2], f[3])); }
-  G.ac.push(a); appCheckIn(a, false);
+  priOnlyMark(a); G.ac.push(a); appCheckIn(a, false);
   log('sys', `${a.cs} (${a.type}) checking in ${R.toFixed(1)} NM out, angels ${appAngels(a.alt)}, requesting CCA approach.`);
   return a;
 }
@@ -3855,7 +3873,7 @@ function appReadout(a) {
   return `${a.cs} ${a.type} "${a.tel}"
 RANGE ${appRng(a).toFixed(1)} NM  BRG ${hdg3(Math.round(appBrg(a)))} FROM ${SHIP_NAME.toUpperCase()}
 HDG ${hdg3(Math.round(a.hdg))}${Math.abs(angDiff(a.tgtHdg, a.hdg)) > 0.5 ? ' → ' + hdg3(Math.round(a.tgtHdg)) : ''}   ALT ${fmtAlt(Math.round(a.alt))}${tgt(a.alt, a.tgtAlt, fmtAlt)} FT
-IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Math.round(a.gs)} KT${MC && !a.parArr ? `   99 WX ${a.mcTasks && a.mcTasks.wx99 ? '✓' : '–'}` : ''}${a.mar && a.mar.R != null ? `\nMARSHAL ${h3z(a.mar.R)}R/${a.mar.D} A${appAngels(a.mar.alt)}${a.mar.eat != null ? ' EAT :' + String(a.mar.eat).padStart(2, '0') + (a.mar.eatDone ? ' (COMMENCED)' : '') : ''} ${(MAR.T[a.mar.run || a.mar.type || a.mar.typeInf] || {}).name || ''} ${a.mar.ph ? a.mar.ph.toUpperCase() : ''}` : ''}`;
+${a.gsp ? `IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Math.round(a.gs)} KT` : 'SPD --- (type GSP)'}${MC && !a.parArr ? `   99 WX ${a.mcTasks && a.mcTasks.wx99 ? '✓' : '–'}` : ''}${a.mar && a.mar.R != null ? `\nMARSHAL ${h3z(a.mar.R)}R/${a.mar.D} A${appAngels(a.mar.alt)}${a.mar.eat != null ? ' EAT :' + String(a.mar.eat).padStart(2, '0') + (a.mar.eatDone ? ' (COMMENCED)' : '') : ''} ${(MAR.T[a.mar.run || a.mar.type || a.mar.typeInf] || {}).name || ''} ${a.mar.ph ? a.mar.ph.toUpperCase() : ''}` : ''}`;
 }
 function appPanel() {
   const hint = $('hint');
@@ -3865,7 +3883,7 @@ function appPanel() {
   $('scopeStatus').textContent = `${MC ? 'MARSHAL' : 'APPROACH'} · ${SHIP_NAME.toUpperCase()} · RED · FB ${BRC3} · ${APP_RANGE} NM · WIND ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   $('stLanded').textContent = G.landed; $('stLanded').nextElementSibling.textContent = MC ? 'Approaches' : 'Handed off';
   const list = G.ac.filter(appCtl).sort((p, q) => appRng(p) - appRng(q));
-  const html = list.map((x, i) => `<div class="strip${x === G.selected ? ' sel' : ''}" data-uid="${x.uid}"><span>${i + 1}</span><span>${x.cs} ${x.type}</span><span>${appRng(x).toFixed(0)}NM ${String(Math.round(x.alt / 100)).padStart(3, '0')}</span><span>${hdg3(Math.round(x.hdg))} ${Math.round(x.gs)}KT</span></div>`).join('');
+  const html = list.map((x, i) => `<div class="strip${x === G.selected ? ' sel' : ''}" data-uid="${x.uid}"><span>${x.ltr || i + 1}</span><span>${x.cs} ${x.type}</span><span>${appRng(x).toFixed(0)}NM ${String(Math.round(x.alt / 100)).padStart(3, '0')}</span><span>${hdg3(Math.round(x.hdg))}${x.gsp ? ' ' + Math.round(x.gs) + 'KT' : ''}</span></div>`).join('');   // speed only after GSP
   if (stripsEl.innerHTML !== html) stripsEl.innerHTML = html;
 }
 /* AATCC-style PPI (SPN-43 air search look): black scope, green phosphor, 4 s sweep, TPX-42 style beacon blocks. Visual only. */
@@ -3945,7 +3963,7 @@ function drawApp(now) {
   const MC_PATTERN_OVERLAY = false;   // LH / marshal pattern overlay removed from the scope (set true + Settings box to bring it back)
   if (MC_PATTERN_OVERLAY && S.pat) MAR.draw(P, sc);
   // TPX-42 style beacon data blocks (computer generated: live position, no fade)
-  ctx.textAlign = 'left'; ctx.font = FONT(11);
+  ctx.textAlign = 'left'; ctx.font = FONT(11); syncLetters();
   for (const a of G.ac) {
     if (a.phase !== 'app' || a.st === 'dep') continue;   // not shown until checked in
     if (!a.code) a.code = '4' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 8)).join('');   // octal Mode 3/A code
@@ -3959,7 +3977,7 @@ function drawApp(now) {
     if (a.priCut) ctx.globalAlpha = 0; ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 4.5; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 4.5, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1; ctx.globalAlpha = 1;   // simple target blip (no lines; hidden when the instructor cuts primary radar)
     const bx = Q[0] + 14 + (a.dbx || 0), by = Q[1] - 22 + (a.dby || 0);
     if (a.dbx || a.dby) { ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(Q[0], Q[1]); ctx.lineTo(bx - 2, by + 4); ctx.stroke(); ctx.globalAlpha = 1; }   // leader line to a moved data block
-    const l1 = (a.st === 'purple' || a.phase === 'withFinal' || a.phase === 'withApp') ? a.cs + ' ' + freqTag(a.hoffFreq || a.button || (a.phase === 'withApp' ? 'silver' : 'purple')) : a.cs, l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')} ${String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0')} ${a.code}`;
+    const l1 = (a.st === 'purple' || a.phase === 'withFinal' || a.phase === 'withApp') ? dbName(a) + ' ' + freqTag(a.hoffFreq || a.button || (a.phase === 'withApp' ? 'silver' : 'purple')) : dbName(a), l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')}${a.gsp ? ' ' + String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0') : ''} ${a.code}`;   // ground speed only after GSP
     ctx.fillStyle = col; if (a.hoff && !((now / 350 | 0) % 2)) ctx.globalAlpha = 0.3; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12); ctx.globalAlpha = 1;
     { const tags = (a.identified ? ' ID' : '');   // ownership / handoff tags
       if (a.hoff) { if ((now / 350 | 0) % 2) { ctx.fillStyle = 'rgba(255,235,120,1)'; ctx.fillText(' ' + (a.hoff.dir === 'out' ? 'APP' : 'FIN') + (a.identified ? ' ID' : ''), bx + ctx.measureText(l1).width, by); ctx.fillStyle = col; } }
@@ -3988,6 +4006,9 @@ requestAnimationFrame(frame);
 
 /* ===================== test hooks ===================== */
 window.PAR = {
+  priOnly(k = 0) { if (!G) return null; G.priAt = (G.priN || 0) + k; return G.priAt; },   // test: the k-th next arrival is the primary-only one
+  priState() { return G ? { priAt: G.priAt, priN: G.priN, pri: G.ac.filter(a => a.priStart).map(a => ({ cs: a.cs, sq: a.sq !== false })) } : null; },
+  letters() { syncLetters(); return G ? G.ac.filter(a => a.ltr).map(a => ({ cs: a.cs, ltr: a.ltr, db: dbName(a), gsp: !!a.gsp })) : []; },
   launchTimes() { return G ? (G.launchLog || []).slice() : []; },
   start(diff = 'training', opts = {}) { startGame(diff, opts); return true; },
   parse(text, known) { const p = parseSpeech(text, known || (G ? G.ac.filter(alive).map(a => a.cs) : [])); return parsedStr(p); },

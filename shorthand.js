@@ -38,7 +38,8 @@ const CODES = [
   [/^gp$/, MA, () => 'go purple', 'gp', 'go purple (Final)'],
   [/^gc$/, MA, () => 'go copper', 'gc', 'go copper (Final)'],
   // ---- wave off / missed approach (shared) ----
-  [/^sqn$/, M, () => 'squawk normal', 'sqn', 'squawk normal'],
+  [/^sqn$/, MA, () => 'squawk normal', 'sqn', 'squawk normal (primary-only target: data block comes back)'],
+  [/^sq([0-7]{4})$/, MA, m => `squawk ${m[1]}`, 'sq4521', 'squawk 4521 (primary-only target: data block comes back on that code)'],
   [/^wo$/, SC, () => 'wave off, wave off', 'wo', 'wave off, wave off'],
   [/^ma$/, SC, () => 'execute missed approach', 'ma', 'execute missed approach'],
   [/^du$/, MA, () => 'dirty up', 'du', 'dirty up (jets)'],
@@ -72,6 +73,52 @@ const CODES = [
 
 function tableFor(sc) { return CODES.filter(c => c[1].includes(sc)); }
 
+/* ---- short callsigns + accept letters (data blocks on Marshal / Approach) ---- */
+const SHORT = { LTNG: 'LT', NHWK: 'NH', VIPR: 'VP', VENM: 'VN', EGLE: 'EA', RDGE: 'RD', GUNF: 'GF', CHGR: 'CH' };   // same prefixes the typed shorthand accepts (lt21, vp12 ...)
+function shortCs(cs) { const m = /^([A-Z]+)(\d+)$/.exec(String(cs || '')); if (!m) return String(cs || ''); return (SHORT[m[1]] || m[1].slice(0, 2)) + m[2]; }
+const ABC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+/* letters A, B, C ... in the order aircraft are accepted; per scope and per simulation (state lives on the sim object G).
+   After Z it starts over at A, skipping letters still on the scope. */
+function assignLetters(G, accepted, onScope) {
+  if (!G || !G.ac) return;
+  for (const a of G.ac) {
+    if (a.ltr || !accepted(a)) continue;
+    const used = new Set(G.ac.filter(x => x.ltr && onScope(x)).map(x => x.ltr));
+    let L = null, n = G.ltrN || 0;
+    for (let k = 0; k < 26; k++) { const c = ABC[(n + k) % 26]; if (!used.has(c)) { L = c; G.ltrN = (n + k + 1) % 26; break; } }
+    if (!L) { let i = 0; do { L = ABC[Math.floor(i / 26) % 26] + ABC[i % 26]; i++; } while (used.has(L)); }   // 26 on the scope at once: AA, AB ...
+    a.ltr = L;
+  }
+}
+const ltrOf = (tok, ctx) => { if (!/^[a-z]{1,2}$/.test(tok)) return null; const U = tok.toUpperCase(); const hit = (ctx.callsigns || []).find(x => x.ltr === U); return hit || null; };
+/* 'A h270' / 'b descend and maintain angels 3': a leading accept letter selects that aircraft (typed input only).
+   Only a token that is exactly a letter some aircraft holds, followed by more text, and never a code of this scope. */
+function letterSub(src, ctx) {
+  const m = /^\s*([a-z]{1,2})[\s,]+(\S[\s\S]*)$/i.exec(src); if (!m) return null;
+  const t = m[1].toLowerCase(), sc = SC.includes(ctx.scope) ? ctx.scope : 'approach';
+  if (tableFor(sc).some(c => c[0].test(t))) return null;
+  const hit = ltrOf(t, ctx); return hit ? hit.tel + ', ' + m[2] : null;
+}
+/* scope (keyboard) commands that never go out on the radio. GSP: toggle ground speed in that aircraft's data block.
+   'gsp' (selected aircraft) | 'A gsp' | 'gsp A' | 'lt21 gsp' | '21 gsp' | 'lightning 21 gsp'  ->  { cmd: 'gsp', tel | null } */
+function scopeCmd(input, ctx) {
+  ctx = ctx || {}; const toks = String(input || '').trim().toLowerCase().split(/[\s,;]+/).filter(Boolean);
+  const i = toks.indexOf('gsp'); if (i < 0) return null;
+  const rest = toks.filter((_, k) => k !== i); if (rest.length > 2) return null;
+  if (!rest.length) return { cmd: 'gsp', tel: null };
+  const als = ctx.airlines || [], list = ctx.callsigns || [];
+  let tel = null;
+  if (rest.length === 1) {
+    const L = ltrOf(rest[0], ctx);
+    if (L) tel = L.tel;
+    else if (/^\d{1,4}$/.test(rest[0])) { const b = byDigits(rest[0], ctx); tel = b !== rest[0] ? b : null; }
+    else tel = csToken(rest[0], ctx);
+  } else if (/^\d{1,4}$/.test(rest[1])) { const al = als.find(a => (a.words || [a.tel.toLowerCase()]).includes(rest[0])); if (al) tel = al.tel + ' ' + rest[1]; }
+  if (!tel) return { cmd: 'gsp', tel: null, bad: rest.join(' ') };
+  const hit = list.find(x => String(x.tel).toLowerCase() === tel.toLowerCase());
+  return { cmd: 'gsp', tel: hit ? hit.tel : tel };
+}
+
 function csToken(tok, ctx) {   // 'lt21' / 'ltng21' / 'light21' -> 'Lightning 21'
   const m = /^([a-z]{2,10})(\d{1,4})$/.exec(tok); if (!m) return null;
   const als = (ctx.airlines || []);
@@ -90,8 +137,9 @@ function byDigits(d, ctx) {   // bare '21' -> 'Lightning 21' when exactly one li
 /* returns { shorthand: bool, text, codes: n } */
 function expand(input, ctx) {
   ctx = ctx || {}; const sc = SC.includes(ctx.scope) ? ctx.scope : 'approach';
-  const src = String(input || '').trim();
+  let src = String(input || '').trim();
   if (!src) return { shorthand: false, text: src, codes: 0 };
+  const lsub = letterSub(src, Object.assign({}, ctx, { scope: sc })); if (lsub) src = lsub;   // 'A h270' -> 'Lightning 21, h270'
   let toks = src.toLowerCase().split(/[\s,;]+/).filter(Boolean);
   let cs = null;
   const als = ctx.airlines || [];
@@ -115,8 +163,8 @@ function expand(input, ctx) {
     codes++;
     parts.push({ p: hit });
   }
-  if (!codes && !(cs && !toks.length)) return { shorthand: false, text: src, codes: 0 };
-  if (words > codes) return { shorthand: false, text: src, codes: 0 };
+  if (!codes && !(cs && !toks.length)) return { shorthand: false, text: src, codes: 0, letter: !!lsub };
+  if (words > codes) return { shorthand: false, text: src, codes: 0, letter: !!lsub };
   // render: consecutive plain words stay together; phrases are comma-separated
   const out = []; let wb = [];
   const fl = () => { if (wb.length) { out.push(wb.join(' ')); wb = []; } };
@@ -127,7 +175,7 @@ function expand(input, ctx) {
   if (st.laa) text = 'Low altitude alert' + (cs ? ', ' + cs : '') + ', ' + out.join(', ');
   else text = (cs && !st.nocs ? cs + ', ' : '') + out.join(', ');
   text = text.replace(/^([a-z])/, (x) => x.toUpperCase());
-  return { shorthand: true, text, codes };
+  return { shorthand: true, text, codes, letter: !!lsub };
 }
 
 /* ---------------- UI ---------------- */
@@ -160,7 +208,7 @@ function attach(opt) {
   const rows = tableFor(sc).map(c => `<tr><td>${esc(c[3])}</td><td>${esc(c[4])}</td></tr>`).join('');
   const ex = { marshal: 'ea16 030/2 a2 brc360 ob210 eat15', approach: 'lt21 l180 d1.2 du', final: 'lt21 r090 bd' }[sc];
   help.innerHTML = `<span class="x" title="Close">✕</span><h3>⌨ Shorthand: ${esc(sc[0].toUpperCase() + sc.slice(1))}</h3>
-<p>Start with a callsign (<b>lt21</b> = Lightning 21, <b>ea16</b>, <b>vn12</b>, <b>nh34</b>, or just the digits <b>21</b>); leave it off to talk to the selected aircraft. Chain codes with spaces, e.g. <b>${esc(ex)}</b>. The full phrase is shown under the box and goes into the log. Full sentences still work as before. Type <b>?</b> + Enter to open this.</p>
+<p>Start with a callsign (<b>lt21</b> = Lightning 21, <b>ea16</b>, <b>vn12</b>, <b>nh34</b>, or just the digits <b>21</b>, or an accepted aircraft's letter: <b>A h270</b>); leave it off to talk to the selected aircraft. Chain codes with spaces, e.g. <b>${esc(ex)}</b>. The full phrase is shown under the box and goes into the log. Full sentences still work as before. Type <b>?</b> + Enter to open this.</p>${sc === 'final' ? '' : '<p><b>GSP</b>: show / hide ground speed in a data block (scope only, not a radio call): <b>A gsp</b>, <b>lt21 gsp</b>, or <b>gsp</b> for the selected aircraft.</p>'}
 <table>${rows}</table>`;
   document.body.appendChild(help);
   const btn = bar.querySelector('#shBtn'), prev = bar.querySelector('#shPrev');
@@ -169,7 +217,8 @@ function attach(opt) {
   help.querySelector('.x').addEventListener('click', () => toggle(false));
   help.addEventListener('keydown', e => e.stopPropagation());
   const upd = () => { const v = inp.value.trim(); if (!v) { prev.textContent = ''; return; } if (v === '?') { prev.textContent = '↵ show shorthand codes'; prev.classList.add('pass'); return; }
-    const r = expand(v, getCtx()); prev.textContent = r.shorthand ? '→ ' + r.text : ''; prev.classList.toggle('pass', !r.shorthand); };
+    if (opt.onScope) { const q = scopeCmd(v, getCtx()); if (q) { prev.textContent = '→ GSP (ground speed on/off): ' + (q.tel || (q.bad ? q.bad + '?' : 'selected aircraft')); prev.classList.remove('pass'); return; } }
+    const r = expand(v, getCtx()); prev.textContent = r.shorthand || r.letter ? '→ ' + r.text : ''; prev.classList.toggle('pass', !r.shorthand && !r.letter); };
   inp.addEventListener('input', upd);
   inp.addEventListener('keydown', e => { if (e.key === 'Escape') toggle(false); });
   // runs in the capture phase on document, i.e. BEFORE the page's own submit handler on the form
@@ -177,12 +226,13 @@ function attach(opt) {
     if (e.target !== form) return;
     const v = inp.value.trim();
     if (v === '?' || v.toLowerCase() === 'help') { e.preventDefault(); e.stopImmediatePropagation(); inp.value = ''; prev.textContent = ''; toggle(true); return; }
+    if (opt.onScope) { const q = scopeCmd(v, getCtx()); if (q) { e.preventDefault(); e.stopImmediatePropagation(); inp.value = ''; prev.textContent = ''; try { opt.onScope(q); } catch (err) { console.warn('scope cmd', err); } return; } }
     const r = expand(v, getCtx());
-    if (r.shorthand) inp.value = r.text;
+    if (r.shorthand || r.letter) inp.value = r.text;
     prev.textContent = '';
   }, true);
 }
-const api = { expand, attach, table: sc => tableFor(sc).map(c => ({ code: c[3], meaning: c[4] })), CODES };
+const api = { expand, attach, scopeCmd, shortCs, assignLetters, letterSub, table: sc => tableFor(sc).map(c => ({ code: c[3], meaning: c[4] })), CODES };
 if (typeof window !== 'undefined') window.Shorthand = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -848,6 +848,7 @@ function newGame(diffKey, opts = {}) {
   setScale(savedScale()); setPaused(false);
   log('sys', `${d.name}: ${ph('PAR to ' + SHIP_NAME + ', BRC ' + BRC3, 'PAR runway ' + RWY_NUM)}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? 'Launches every 4–6 min; press End to finish.' : G.toSpawn + ' arrivals.'}`);
   if (d.hints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
+  priOnlyInit(opts);
   selectAc(null);
   refreshPanel(true);
 }
@@ -1856,6 +1857,20 @@ function handleTranscript(text, src) {
     $('parsed').textContent = 'Marshal call: ignored here (use the Marshal scope)'; $('parsed').classList.remove('bad');
     return { cs: null, cmds: [], str: 'marshal-ignored' };
   }
+  const sqm = /\bsq(?:u|w)?a+w?c?k?s?\s*,?\s*(normal|[0-7]{4})\b/i.exec(heard);
+  if (G && !G.over && sqm) {   // "squawk normal" / "squawk 4521": a primary-only target starts squawking (data block appears), same as Marshal
+    const pre = heard.slice(0, sqm.index), pp = pre.trim() ? parseSpeech(pre, known) : null, live = G.ac.filter(appCtl), up = pre.toUpperCase().replace(/[\s,]+/g, ''), dg = (pre.match(/\b(\d{2,3})\b/) || [])[1];
+    const byD = dg ? live.filter(x => x.cs.replace(/^\D+/, '') === dg) : [];
+    const a = (byD.length === 1 ? byD[0] : null) || (pp && pp.cs && live.find(x => x.cs === pp.cs)) || (up && live.find(x => up.includes(x.cs))) || (!pre.trim() && G.selected && appCtl(G.selected) ? G.selected : null);
+    setHeard(heard, null); if (src === 'voice') renderTranscript(text, '');
+    if (!a) { log('sys', `Squawk: say the callsign. Heard: "${heard}"`); return { cs: null, cmds: [], str: 'squawk?' }; }
+    const sqCode = /^\d/.test(sqm[1]) ? sqm[1] : null; if (sqCode) a.code = sqCode;
+    a.sq = true; a.lastTx = G.t; selectAc(a);
+    log('ctl', `${a.cs}: "${heard.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  squawk ${sqCode || 'normal'}`);
+    pilotSay(a, `${a.tel}.`, `${a.telSay}.`);
+    $('parsed').textContent = 'Understood → ' + a.cs + ' squawk ' + (sqCode || 'normal'); $('parsed').classList.remove('bad');
+    return { cs: a.cs, cmds: ['squawk'], str: 'squawk ' + (sqCode || 'normal') };
+  }
   const sc = shipCallParse(heard) || shipCallParse(text);
   if (/\b(hndoff|handoff|hand off|hdoff)\b/i.test(heard) && G && !G.over) {
     const rest = heard.replace(/\b(hndoff|handoff|hand off|hdoff)\b/ig, ' '), pp = parseSpeech(rest, known), up = rest.toUpperCase().replace(/\s+/g, '');
@@ -1913,8 +1928,23 @@ function undoLastTx(cs) {
   refreshPanel(true); return true;
 }
 window.__correction = { splitCorrection, undoLastTx, parse: (t, k) => parseSpeech(t, k), cmdStr: c => cmdStr(c), handle: (t, src) => handleTranscript(t, src || 'voice'), get G() { return G; }, appCtl: a => appCtl(a), isHelo: a => isHelo(a), select: a => selectAc(a) };
+/* ---- data block extras: accept letters (A, B, C ... in accept order), short callsigns, GSP ground speed toggle ---- */
+const dbName = a => a.ltr && window.Shorthand ? a.ltr + ' ' + Shorthand.shortCs(a.cs) : a.cs;   // 'A LT21' once accepted
+function syncLetters() { if (G && window.Shorthand) Shorthand.assignLetters(G, a => !!a.accepted && a.phase !== 'gone', x => x.phase !== 'gone'); }
+function gspExec(q) {   // typed 'GSP' (scope keyboard command, never a radio call): toggle ground speed in that aircraft's data block
+  if (!G || G.over) return; const live = G.ac.filter(appCtl);
+  const a = q.tel ? live.find(x => telephony(x.cs).text.toLowerCase() === q.tel.toLowerCase()) : (G.selected && appCtl(G.selected) ? G.selected : null);
+  if (!a) { log('sys', q.bad ? `GSP: no aircraft "${q.bad.toUpperCase()}".` : 'GSP: select an aircraft (click it) or type its letter / callsign first, e.g. "A GSP".'); $('parsed').textContent = 'GSP: no aircraft'; $('parsed').classList.add('bad'); return; }
+  a.gsp = !a.gsp; selectAc(a);
+  log('sys', `${dbName(a)}: ground speed ${a.gsp ? 'ON' : 'OFF'} in the data block (GSP)${a.sq === false ? '; no data block until it squawks' : ''}.`);
+  $('parsed').textContent = `GSP → ${a.cs} ground speed ${a.gsp ? 'shown' : 'hidden'}`; $('parsed').classList.remove('bad');
+}
+/* one primary-only arrival per simulation: no transponder, no data block; "squawk normal" / "squawk 4521" (sqn / sq4521) brings secondary back */
+const PRI_ONLY_POOL = 3;   // the primary-only aircraft is one of the first 3 arrivals, picked at random each sim
+function priOnlyInit(opts) { G.priN = 0; G.priAt = opts && opts.priAt != null ? opts.priAt : Math.floor(Math.random() * PRI_ONLY_POOL); }   // Math.random: leaves seeded sims unchanged
+function priOnlyMark(a) { if (G.priAt == null) return; if (G.priN++ === G.priAt) { a.sq = false; a.priStart = true; } }
 /* shorthand typing (shorthand.js): live preview + '⌨ Shorthand' cheat sheet under the typed command box; typed codes are expanded before this page's submit handler */
-try { if (window.Shorthand) Shorthand.attach({ scope: 'approach', accent: '#c8ccd4', accent2: '#e6e9ee', ctx: () => ({ airlines: AIRLINES, selected: G && G.selected && alive(G.selected) ? telephony(G.selected.cs).text : null, callsigns: G ? G.ac.filter(alive).map(a => ({ cs: a.cs, tel: telephony(a.cs).text })) : [] }) }); } catch (e) { console.warn('shorthand', e); }
+try { if (window.Shorthand) Shorthand.attach({ scope: 'approach', accent: '#c8ccd4', accent2: '#e6e9ee', ctx: () => ({ airlines: AIRLINES, selected: G && G.selected && alive(G.selected) ? telephony(G.selected.cs).text : null, callsigns: G ? G.ac.filter(alive).map(a => ({ cs: a.cs, tel: telephony(a.cs).text, ltr: a.ltr || null })) : [] }), onScope: gspExec }); } catch (e) { console.warn('shorthand', e); }
 window.__shTest = { AIRLINES, parse: (t, k) => parseSpeech(t, k), prep: t => { t = PM(t); return typeof fixSpeech === 'function' ? fixSpeech(t) : t; }, get G() { return G; }, select: a => selectAc(a), tel: cs => telephony(cs).text, alive: a => alive(a), ship: t => typeof shipCallParse === 'function' ? shipCallParse(t) : null, wx: t => typeof wxCallParse === 'function' ? wxCallParse(t) : null, mar: t => typeof MAR !== 'undefined' ? MAR.parse(t) : null };
 window.__injectTranscript = text => handleTranscript(String(text), 'voice');
 
@@ -2498,6 +2528,7 @@ function appLaunch(quiet) {
   a.alt = 0; a.tgtAlt = isHelo(a) ? 1000 : 1200;   // angels 1 helos / 1.2 jets
   a.ias = a.tgtSpd = a.T.feed + APP_SPD_BONUS; a.trail = []; a.trailT = 0; a.checked = false; a.lastTx = G.t;
   { const f = appFuelSpec(a); a.fuel0 = f[0] * rand(0.92, 1); a.launchT = G.t; a.souls = Math.round(rand(f[2], f[3])); }
+  priOnlyMark(a);   // one primary-only launch per sim
   G.ac.push(a);
   if (!quiet) log('sys', `${a.cs} (${a.type}) launched from ${SHIP_NAME}, departure heading ${hdg3(Math.round(a.hdg))}, climbing to ${fmtAlt(a.tgtAlt)}.`);
   return a;
@@ -3009,7 +3040,7 @@ function appReadout(a) {
   return `${a.cs} ${a.type} "${a.tel}"
 RANGE ${appRng(a).toFixed(1)} NM  BRG ${hdg3(Math.round(appBrg(a)))} FROM ${SHIP_NAME.toUpperCase()}
 HDG ${hdg3(Math.round(a.hdg))}${Math.abs(angDiff(a.tgtHdg, a.hdg)) > 0.5 ? ' → ' + hdg3(Math.round(a.tgtHdg)) : ''}   ALT ${fmtAlt(Math.round(a.alt))}${tgt(a.alt, a.tgtAlt, fmtAlt)} FT
-IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Math.round(a.gs)} KT`;
+${a.gsp ? `IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Math.round(a.gs)} KT` : 'SPD --- (type GSP)'}`;
 }
 function appPanel() {
   const hint = $('hint');
@@ -3018,7 +3049,7 @@ function appPanel() {
   $('scopeStatus').textContent = `APPROACH · ${SHIP_NAME.toUpperCase()} · SILVER · FB ${BRC3} · ${APP_RANGE} NM · WIND ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   $('stLanded').textContent = G.landed; $('stLanded').nextElementSibling.textContent = 'Handed off';
   const list = G.ac.filter(appCtl).sort((p, q) => appRng(p) - appRng(q));
-  const html = list.map((x, i) => `<div class="strip${x === G.selected ? ' sel' : ''}" data-uid="${x.uid}"><span>${i + 1}</span><span>${x.cs} ${x.type}</span><span>${appRng(x).toFixed(0)}NM ${String(Math.round(x.alt / 100)).padStart(3, '0')}</span><span>${hdg3(Math.round(x.hdg))} ${Math.round(x.gs)}KT</span></div>`).join('');
+  const html = list.map((x, i) => `<div class="strip${x === G.selected ? ' sel' : ''}" data-uid="${x.uid}"><span>${x.ltr || i + 1}</span><span>${x.cs} ${x.type}</span><span>${appRng(x).toFixed(0)}NM ${String(Math.round(x.alt / 100)).padStart(3, '0')}</span><span>${hdg3(Math.round(x.hdg))}${x.gsp ? ' ' + Math.round(x.gs) + 'KT' : ''}</span></div>`).join('');   // speed only after GSP
   if (stripsEl.innerHTML !== html) stripsEl.innerHTML = html;
 }
 /* AATCC-style PPI (SPN-43 air search look): black scope, green phosphor, 4 s sweep, TPX-42 style beacon blocks. Visual only. */
@@ -3098,7 +3129,7 @@ function drawApp(now) {
   }
   if (!G) { ctx.textAlign = 'left'; return; }
   // TPX-42 style beacon data blocks (computer generated: live position, no fade)
-  ctx.textAlign = 'left'; ctx.font = FONT(11);
+  ctx.textAlign = 'left'; ctx.font = FONT(11); syncLetters();
   for (const a of G.ac) {
     if (a.phase !== 'app' || a.st === 'dep') continue;   // not shown until checked in
     if (!a.code) a.code = '4' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 8)).join('');   // octal Mode 3/A code
@@ -3114,7 +3145,7 @@ function drawApp(now) {
     const dbo = a.dbo || { x: 14, y: -22 }, bx = Q[0] + dbo.x, by = Q[1] + dbo.y;
     if (a.dbo) { ctx.save(); ctx.globalAlpha = 0.5; ctx.lineWidth = 1; line(Q[0], Q[1], bx + (dbo.x < 0 ? 40 : -2), by + (dbo.y < -6 ? 16 : -10)); ctx.restore(); }   // leader line when moved
     if (sel) { ctx.save(); ctx.strokeStyle = 'rgba(220,255,225,0.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(Q[0], Q[1], 10, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }   // subtle selection ring
-    const l1 = a.st === 'purple' ? a.cs + ' ' + freqTag(a.hoffFreq || a.button || 'purple') : a.cs, l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')} ${String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0')} ${a.code}`;
+    const l1 = a.st === 'purple' ? dbName(a) + ' ' + freqTag(a.hoffFreq || a.button || 'purple') : dbName(a), l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')}${a.gsp ? ' ' + String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0') : ''} ${a.code}`;   // ground speed only after GSP
     ctx.fillStyle = col; if (a.hoff && !((now / 350 | 0) % 2)) ctx.globalAlpha = 0.3; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12); ctx.globalAlpha = 1;
     { const tags = (a.identified ? ' ID' : '');   // ownership / handoff tags
       if (a.hoff) { if ((now / 350 | 0) % 2) { ctx.fillStyle = 'rgba(255,235,120,1)'; ctx.fillText(' ' + (a.hoff.dir === 'out' ? 'APP' : 'FIN') + (a.identified ? ' ID' : ''), bx + ctx.measureText(l1).width, by); ctx.fillStyle = col; } }
@@ -3143,6 +3174,9 @@ requestAnimationFrame(frame);
 
 /* ===================== test hooks ===================== */
 window.PAR = {
+  priOnly(k = 0) { if (!G) return null; G.priAt = (G.priN || 0) + k; return G.priAt; },   // test: the k-th next arrival is the primary-only one
+  priState() { return G ? { priAt: G.priAt, priN: G.priN, pri: G.ac.filter(a => a.priStart).map(a => ({ cs: a.cs, sq: a.sq !== false })) } : null; },
+  letters() { syncLetters(); return G ? G.ac.filter(a => a.ltr).map(a => ({ cs: a.cs, ltr: a.ltr, db: dbName(a), gsp: !!a.gsp })) : []; },
   launchTimes() { return G ? (G.launchLog || []).slice() : []; },
   start(diff = 'training', opts = {}) { startGame(diff, opts); return true; },
   parse(text, known) { const p = parseSpeech(text, known || (G ? G.ac.filter(alive).map(a => a.cs) : [])); return parsedStr(p); },

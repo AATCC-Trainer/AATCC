@@ -274,7 +274,7 @@ function draw() {
     if (d.x || d.y) { ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(Q[0], Q[1]); ctx.lineTo(bx - 2, by + 4); ctx.stroke(); ctx.globalAlpha = 1; }
     const l1 = a.cs + ' ' + FREQ_TAG[f], l2 = `${String(Math.round(D.alt / 100)).padStart(3, '0')} ${String(Math.round(D.gs / 10)).padStart(2, '0')} ${a.src[0]}`;
     ctx.fillStyle = col; ctx.globalAlpha = a.sq ? 1 : 0.55; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12); ctx.globalAlpha = 1;
-    const tags = ({ PO: '[PRI ONLY]', SO: '[SEC ONLY]', OFF: '[RADAR OFF]', NR: '' }[radarMode(a)]) + (a.buster ? '[BUSTER]' : '');
+    const tags = ({ PO: '[PRI]', SO: '[SEC ONLY]', OFF: '[RADAR OFF]', NR: '' }[radarMode(a)]) + (a.buster ? '[BUSTER]' : '');
     if (tags) { ctx.fillStyle = 'rgba(255,90,110,1)'; ctx.fillText(tags, bx, by + 24); }
     const tw = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width);
     a.hit = { x: Q[0], y: Q[1], bx: bx - 2, by: by - 12, bw: tw + 4, bh: 40 }; HIT[a.key] = a.hit;
