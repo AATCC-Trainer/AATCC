@@ -1,6 +1,7 @@
 /* AATCC shorthand typing (typed input only, all three scopes).
    Only codes where the aircraft acts RIGHT AWAY (turn, climb/descend, speed, switch frequency, wave off, commence, start a maneuver).
-   Advisories, expectations, clearances it flies later, climbout instructions and report requests have no code (type the full phrase).
+   Plus a few Raphael asked to keep: marshal clearance pieces (030/2, ob, eat, clh), rcm, and no-gyro ng/srt/hsr.
+   Other advisories, expectations and climbout instructions have no code (type the full phrase).
    Shorthand.expand(text, ctx) turns compact codes into the full phraseology the scope parsers already understand:
      "lt21 l270 d1.2 du"  ->  "Lightning 21, turn left heading 270, descend and maintain angels 1.2, dirty up"
    Only input that LOOKS like shorthand is expanded (at least one code and no more plain words than codes);
@@ -24,9 +25,9 @@ const CODES = [
   [/^h(\d{2,3})$/, SC, m => `fly heading ${h3(m[1])}`, 'h270', 'fly heading 270'],
   [/^l(\d{2,3})$/, SC, (m, s) => `${s.sc === 'final' ? 'come' : 'turn'} left heading ${h3(m[1])}`, 'l270', 'turn left heading 270 (Final: come left)'],
   [/^r(\d{2,3})$/, SC, (m, s) => `${s.sc === 'final' ? 'come' : 'turn'} right heading ${h3(m[1])}`, 'r090', 'turn right heading 090 (Final: come right)'],
-  [/^brc(\d{2,3})$/, SC, m => `fly base recovery course ${h3(m[1])}`, 'brc360', 'fly base recovery course 360 (turns now)'],
+  [/^brc(\d{2,3})$/, SC, (m, s) => s.clr ? `BRC ${h3(m[1])}` : `fly base recovery course ${h3(m[1])}`, 'brc360', 'fly base recovery course 360 (BRC 360 inside a marshal clearance)'],
   [/^rh$/, A, () => 'fly runway heading', 'rh', 'fly runway heading'],
-  [new RegExp('^a' + NUM + '$'), SC, (m, s) => s.sc === 'final' ? `maintain ${angOrFt(m[1], 'final')}` : `maintain angels ${m[1]}`, 'a5', 'maintain angels 5 (Final: feet)'],
+  [new RegExp('^a' + NUM + '$'), SC, (m, s) => s.sc === 'final' ? `maintain ${angOrFt(m[1], 'final')}` : s.clr ? `angels ${m[1]}` : `maintain angels ${m[1]}`, 'a5', 'maintain angels 5 (angels 5 inside a marshal clearance, Final: feet)'],
   [new RegExp('^c' + NUM + '$'), SC, (m, s) => `climb and maintain ${angOrFt(m[1], s.sc)}`, 'c3', 'climb and maintain angels 3 (c1500 = feet)'],
   [new RegExp('^d' + NUM + '$'), SC, (m, s) => `descend and maintain ${angOrFt(m[1], s.sc)}`, 'd1.2', 'descend and maintain angels 1.2'],
   [/^s(\d{2,3})$/, SC, m => `maintain ${m[1]} knots`, 's250', 'maintain 250 knots'],
@@ -43,9 +44,15 @@ const CODES = [
   [/^ma$/, SC, () => 'execute missed approach', 'ma', 'execute missed approach'],
   [/^du$/, MA, () => 'dirty up', 'du', 'dirty up (jets)'],
   [/^lc$/, MA, () => 'perform landing checks', 'lc', 'perform landing checks (helos)'],
-  // ---- Marshal + Approach: sectors / commence ----
+  // ---- Marshal + Approach: sectors ----
   [/^sec([1-4])$/, MA, m => `proceed to sector ${m[1]}, report established`, 'sec2', 'proceed to sector 2, report established'],
+  // ---- Marshal: clearance pieces / commence ----
+  [/^clh([1-5])$/, M, m => `cleared for LH${m[1]} approach, report commencing`, 'clh2', 'cleared for LH2 approach, report commencing'],
+  [/^(\d{3})\/(\d{1,2})$/, M, (m, s) => { s.clr = true; return `marshal ${m[1]} at ${m[2]}`; }, '030/2', 'marshal 030 at 2'],
+  [/^ob(\d{2,3})$/, M, (m, s) => { s.clr = true; return `outbound bearing ${h3(m[1])}`; }, 'ob210', 'outbound bearing 210'],
+  [/^eat(\d{1,2})$/, M, m => `expected approach time ${m[1]}`, 'eat15', 'expected approach time 15'],
   [/^cm$/, M, () => 'commence', 'cm', 'commence'],
+  [/^rcm$/, M, () => 'report commencing', 'rcm', 'report commencing'],
   // ---- Final / PAR ----
   [/^bd$/, F, () => 'begin descent', 'bd', 'begin descent (own transmission)'],
   [/^cl$/, F, () => 'cleared to land', 'cl', 'cleared to land'],
@@ -54,9 +61,12 @@ const CODES = [
   [/^co$/, F, () => 'execute climb outs, go silver', 'co', 'execute climb outs, go silver'],
   [/^sd$/, F, () => 'enter starboard delta, go green', 'sd', 'enter starboard delta, go green'],
   [/^laa$/, F, (m, s) => { s.laa = true; return 'check your altitude immediately, altimeter two niner niner two'; }, 'laa', 'Low altitude alert, <callsign>, check your altitude immediately, altimeter 2992'],
+  [/^ng$/, F, () => 'this will be a no gyro approach', 'ng', 'this will be a no gyro approach'],
   [/^tl$/, F, () => 'turn left', 'tl', 'turn left (no gyro)'],
   [/^tr$/, F, () => 'turn right', 'tr', 'turn right (no gyro)'],
   [/^st$/, F, () => 'stop turn', 'st', 'stop turn'],
+  [/^srt$/, F, () => 'make standard rate turns', 'srt', 'make standard rate turns'],
+  [/^hsr$/, F, () => 'make half standard rate turns', 'hsr', 'make half standard rate turns'],
   [/^mda(\d{3,4})?$/, F, m => m[1] ? `descend to your minimum descent altitude, minimum descent altitude ${m[1]}` : 'descend to your minimum descent altitude', 'mda470', 'descend to your minimum descent altitude, MDA 470'],
   [/^sm$/, F, () => 'surveillance minimums, on course, if mother not in sight, execute missed approach', 'sm', 'surveillance minimums, on course, if mother not in sight, execute missed approach'],
 ];
@@ -94,7 +104,9 @@ function expand(input, ctx) {
     else if (isWord && toks[1] && /^\d{1,4}$/.test(toks[1])) { const al = als.find(a => (a.words || []).includes(toks[0])); cs = al.tel + ' ' + toks[1]; toks = toks.slice(2); }
     else if (/^\d{2,3}$/.test(toks[0]) && toks[0] !== '99' && toks.length > 1) { cs = byDigits(toks[0], ctx); toks = toks.slice(1); }
   }
-  const st = { sc, nocs: false, laa: false };
+  const st = { sc, clr: false, nocs: false, laa: false };
+  // marshal clearance context is known up front (so 'a2' / 'brc360' read as clearance items wherever they sit)
+  st.clr = sc === 'marshal' && toks.some(t => /^(?:\d{3}\/\d{1,2}|ob\d{2,3})$/.test(t));
   const tab = tableFor(sc);
   const parts = []; let codes = 0, words = 0;
   for (const t of toks) {
@@ -147,7 +159,7 @@ function attach(opt) {
   form.appendChild(bar);
   const help = document.createElement('div'); help.id = 'shHelp';
   const rows = tableFor(sc).map(c => `<tr><td>${esc(c[3])}</td><td>${esc(c[4])}</td></tr>`).join('');
-  const ex = { marshal: 'ea16 l270 d5 s250', approach: 'lt21 l180 d1.2 du', final: 'lt21 r090 bd' }[sc];
+  const ex = { marshal: 'ea16 030/2 a2 brc360 ob210 eat15', approach: 'lt21 l180 d1.2 du', final: 'lt21 r090 bd' }[sc];
   help.innerHTML = `<span class="x" title="Close">✕</span><h3>⌨ Shorthand: ${esc(sc[0].toUpperCase() + sc.slice(1))}</h3>
 <p>Start with a callsign (<b>lt21</b> = Lightning 21, <b>ea16</b>, <b>vn12</b>, <b>nh34</b>, or just the digits <b>21</b>); leave it off to talk to the selected aircraft. Chain codes with spaces, e.g. <b>${esc(ex)}</b>. The full phrase is shown under the box and goes into the log. Full sentences still work as before. Type <b>?</b> + Enter to open this.</p>
 <table>${rows}</table>`;
