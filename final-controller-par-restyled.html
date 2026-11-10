@@ -903,6 +903,21 @@ function shipSteady() {
   log('good', `Mother steady, new BRC ${hdg3(shipBrcT())}. Call "ninety-nine, mother is steady, new BRC is ${sayDigits(hdg3(shipBrcT()))}".`);
   shipBannerSet();
 }
+// Linked ship from Marshal (source of truth) or Approach: {type:'ship-state', src, linked, tbrc, mv, fb}. Heard on the start screen (Link ON) and applied between runs only.
+let SHIP_MAR_RX = 0, SHIP_LAST = null;
+function shipSyncRecv(m) {
+  if (m.type !== 'ship-state' || !m.linked || m.tbrc == null) return;
+  if (m.src === 'MARSHAL') SHIP_MAR_RX = Date.now(); else if (Date.now() - SHIP_MAR_RX < 4000) return;   // Marshal wins while it is open
+  SHIP_LAST = Object.assign({ rx: Date.now() }, m);
+  const ck = document.getElementById('linkChk'); if (!(LINK.on || (ck && ck.checked))) return;
+  if (G && !G.over) return;   // a running PAR keeps its course; handoffs re-base it as before
+  shipStateApply(m);
+}
+function shipStateApply(m) {
+  if (!isShip()) return; const fc = linkFinalCourse(m); if (fc == null) return;
+  if (m.mv != null && isFinite(+m.mv)) SHIP_MV = +m.mv; if (m.tbrc != null && isFinite(+m.tbrc)) SHIP_BRCT = Math.round(norm(+m.tbrc)) || 360;
+  if (fc !== BRC) setBRC(fc);
+}
 // Approach link: {type:'brc', brc, fb, dwh, mv, turning}
 function shipLinkBrc(m) {
   if (!isShip()) return;
@@ -2288,6 +2303,7 @@ function startGame(diff, opts) {
   servoClear(); SERVO_LAST.E = SERVO_LAST.A = null;
   Sound.ensure(); startOv.classList.add('hidden'); endOv.classList.add('hidden'); helpOv.classList.add('hidden');
   { const ck = document.getElementById('linkChk'); if (ck && ck.checked !== LINK.on) linkSet(ck.checked); }   // link choice from the start screen applies at run start
+  try { if (LINK.on && SHIP_LAST && Date.now() - SHIP_LAST.rx < 4000) shipStateApply(SHIP_LAST); } catch (e) {}   // linked: same BRC as Marshal / Approach
   uiPaused = false; newGame(diff, opts || {}); initVoiceStatus();
   let seen = false; try { seen = localStorage.getItem('fcpar_tut_seen') === '1'; } catch (e) {}
   if (!opts && diff === 'training' && !seen) openTutorial(0);
@@ -2864,6 +2880,7 @@ window.PAR = {
   ch.onmessage = e => {
     const m = e.data || {};
     if (m.type === 'inst-hello') { peerT = Date.now(); wanted = !m.links || m.links.includes(PAGE) || FIN; if (wanted) send(); }
+    else if (m.type === 'ship-state') { if (typeof shipSyncRecv === 'function') { try { shipSyncRecv(m); } catch (e) {} } }
     else if (m.type === 'inst-cmd' && (m.to === PAGE || m.to === 'ANY')) { peerT = Date.now(); cmd(m); }
     else if (m.type === 'inst-bye') peerT = 0;
   };

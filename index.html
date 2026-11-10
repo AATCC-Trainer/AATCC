@@ -2,4 +2,97 @@
 <script src="gate.js"></script>
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="approach-192.png">
-<meta name="apple-mobile-web-app-title" content="AATCC Training Simulation Prototype"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AATCC Training Simulation Prototype</title><meta name="theme-color" content="#0b0d0b"><style>body{background:#0b0d0b;color:rgb(120,255,140);font-family:monospace;text-align:center;padding:40px}a{display:block;margin:20px auto;max-width:320px;padding:18px;border:1px solid rgb(120,255,140);color:rgb(120,255,140);text-decoration:none;font-size:20px}a.intro{border-color:#ffbf3c;color:#ffd27a;background:#1a1606;margin-bottom:34px}a.intro small{display:block;font-size:13px;opacity:.8;margin-top:4px}</style></head><body><h1>AATCC Training Simulation Prototype</h1><a class="intro" href="intro.html" target="_blank" rel="noopener">New here? Start the Intro<small>A guided first mission: the scope, the flow and phraseology</small></a><a href="instructor-controller.html" target="_blank" rel="noopener">Instructor</a><a href="final-controller-par-restyled.html" target="_blank" rel="noopener">Final</a><a href="approach-controller.html" target="_blank" rel="noopener">Approach</a><a href="marshal-controller.html" target="_blank" rel="noopener">Marshal</a></body></html>
+<meta name="apple-mobile-web-app-title" content="AATCC Training Simulation Prototype"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AATCC Training Simulation Prototype</title><meta name="theme-color" content="#0b0d0b"><style>body{background:#0b0d0b;color:rgb(120,255,140);font-family:monospace;text-align:center;padding:40px}a{display:block;margin:20px auto;max-width:320px;padding:18px;border:1px solid rgb(120,255,140);color:rgb(120,255,140);text-decoration:none;font-size:20px}a.intro{border-color:#ffbf3c;color:#ffd27a;background:#1a1606;margin-bottom:34px}a.intro small{display:block;font-size:13px;opacity:.8;margin-top:4px}
+#bHelp{display:block;margin:34px auto 0;max-width:320px;width:100%;padding:12px;background:transparent;border:1px dashed rgba(120,255,140,.6);color:rgba(160,255,175,.85);font:16px monospace;cursor:pointer}#bHelp:hover,a:hover{background:#0f1a10}
+#hov{position:fixed;inset:0;background:rgba(3,6,3,.88);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:50;padding:24px 12px}#hov.open{display:flex}
+#hp{position:relative;max-width:680px;width:100%;text-align:left;background:#0b0d0b;border:1px solid rgb(120,255,140);padding:18px 20px 20px;line-height:1.5;font-size:14px;color:rgb(190,255,200)}
+#hp h2{margin:0 0 4px;color:rgb(120,255,140);font-size:20px}#hp h3{margin:18px 0 6px;color:rgb(120,255,140);font-size:15px;border-bottom:1px solid rgba(120,255,140,.3);padding-bottom:3px}
+#hp p{margin:6px 0}#hp ul{margin:4px 0;padding-left:20px}#hp li{margin:3px 0}#hp b{color:#eaffee}#hp code{background:#142014;padding:0 4px;border:1px solid rgba(120,255,140,.3)}
+#hp a{display:inline;margin:0;padding:0;border:0;font-size:inherit;text-decoration:underline;max-width:none}
+.tabs{display:flex;gap:6px;margin:10px 0 2px}.tabs button,.act{font:14px monospace;background:#0f1a10;color:rgb(160,255,175);border:1px solid rgba(120,255,140,.55);padding:7px 12px;cursor:pointer}.tabs button.on{background:#123a18;color:#eaffee;border-color:rgb(120,255,140)}
+.act.warn{border-color:#ff5a6e;color:#ff8a9a;background:#1a0a0d}.act:hover{filter:brightness(1.2)}
+#hx{position:absolute;top:10px;right:10px;font:18px monospace;background:transparent;color:rgb(120,255,140);border:1px solid rgba(120,255,140,.5);width:34px;height:34px;cursor:pointer}
+.pos{display:inline-block;min-width:92px;font-weight:bold}.red{color:#ff5a6e}.slv{color:#c9ced6}.prp{color:#b48cff}.cop{color:#e0915a}.ins{color:#2ee6e6}
+.set{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid rgba(120,255,140,.15)}.set small{display:block;opacity:.7}
+.set input[type=checkbox]{width:22px;height:22px;accent-color:rgb(120,255,140)}#setMsg{min-height:1.4em;color:#ffd27a;margin-top:10px}
+details{margin:6px 0;border:1px solid rgba(120,255,140,.2);padding:6px 10px}summary{cursor:pointer;color:#eaffee}
+</style></head><body><h1>AATCC Training Simulation Prototype</h1><a class="intro" href="intro.html" target="_blank" rel="noopener">New here? Start the Intro<small>A guided first mission: the scope, the flow and phraseology</small></a><a href="instructor-controller.html" target="_blank" rel="noopener">Instructor</a><a href="final-controller-par-restyled.html" target="_blank" rel="noopener">Final</a><a href="approach-controller.html" target="_blank" rel="noopener">Approach</a><a href="marshal-controller.html" target="_blank" rel="noopener">Marshal</a>
+<button id="bHelp" type="button">⚙ Settings / Help</button>
+<div id="hov" role="dialog" aria-modal="true" aria-label="Settings and help"><div id="hp">
+<button id="hx" type="button" title="Close (Esc)">✕</button>
+<h2>Settings / Help</h2>
+<div class="tabs"><button type="button" data-t="help" class="on">Help</button><button type="button" data-t="set">Settings</button></div>
+<div id="tHelp">
+<h3>The positions</h3>
+<ul>
+<li><span class="pos red">Marshal</span> Red frequency. Checks arriving aircraft in, assigns marshal holding (radial, DME, angels) and expected approach times.</li>
+<li><span class="pos slv">Approach</span> Silver frequency. Aircraft launch from the ship; you take radar contact, vector them, pass traffic and hand them to Final.</li>
+<li><span class="pos prp">Final</span> <span class="prp">Purple</span> / <span class="cop">Copper</span> frequencies. Precision approach (PAR): course and glidepath calls down to the deck.</li>
+<li><span class="pos ins">Instructor</span> Watches and commands the aircraft on the other scopes, pauses the sim, cuts radar and chooses when the next aircraft checks in.</li>
+</ul>
+<h3>Linking positions</h3>
+<p>Open several positions in separate tabs or windows <b>on the same device and browser</b>. Choose <b>Link ON</b> on each start screen and they share traffic: Marshal or Approach hands aircraft to Final, and they all use the same BRC. Open the Instructor in another tab and pick Marshal, Approach or both; Final is always linked to it.</p>
+<h3>Voice and microphone</h3>
+<ul>
+<li>Use <b>Chrome</b> (desktop or Android) or <b>Safari</b> (iPhone / iPad / Mac). Other browsers may not support speech recognition.</li>
+<li>Allow the microphone when the browser asks. If you blocked it, re-enable it in the site settings (the lock or "aA" icon in the address bar).</li>
+<li>Push to talk: <b>hold SPACE</b> or the big mic button, speak the whole call, then release.</li>
+<li>Speak at a normal pace in a quiet room. Every scope also accepts typed commands.</li>
+</ul>
+<h3>Shorthand typing</h3>
+<p>In a scope's command box, type <code>?</code> and press Enter to see the shorthand cheat sheet for that position.</p>
+<h3>New to ATC?</h3>
+<p>Start with the <a href="intro.html" target="_blank" rel="noopener">Intro</a>: a guided first mission with Aero covering the scope, the flow and phraseology.</p>
+<h3>FAQ / troubleshooting</h3>
+<details><summary>How do I get the latest version?</summary><p>Refresh the page (pull down on iPhone / iPad, or Ctrl+R / Cmd+R). The app always loads the newest files when you are online.</p></details>
+<details><summary>Something still looks old or broken</summary><p>Open <b>Settings → Clear app cache and reload</b>. If that does not help, use <b>Reset all saved trainer data</b>.</p></details>
+<details><summary>Positions are not linking</summary><p>All positions must be open in the same browser on the same device, with Link ON chosen on each start screen. Reload a tab that shows "not detected".</p></details>
+<details><summary>Add it to my iPhone / iPad home screen</summary><p>In Safari tap <b>Share</b> → <b>Add to Home Screen</b>. Each position opens full screen like an app.</p></details>
+<details><summary>The microphone does not work</summary><p>Check that the browser has microphone permission, that no other app is using the mic, and that you are using Chrome or Safari. You can always type the call instead.</p></details>
+</div>
+<div id="tSet" style="display:none">
+<h3>Voice (all positions)</h3>
+<div class="set"><label for="cOut">Pilot voices (spoken readbacks)<small>Applies to Marshal, Approach and Final</small></label><input type="checkbox" id="cOut"></div>
+<div class="set"><label for="cIn">Voice input (push-to-talk)<small>Applies to Marshal, Approach and Final</small></label><input type="checkbox" id="cIn"></div>
+<h3>App data</h3>
+<div class="set"><span>Clear app cache and reload<small>Downloads fresh copies of every page (fixes an out-of-date app)</small></span><button type="button" class="act" id="bCache">Clear cache</button></div>
+<div class="set"><span>Reset all saved trainer data<small>Clears saved settings, zoom, tutorials seen and link choice on this device. You stay signed in.</small></span><button type="button" class="act warn" id="bReset">Reset</button></div>
+<div class="set"><span>Sign out<small>You will need the passcode again on this device</small></span><button type="button" class="act warn" id="bOut">Sign out</button></div>
+<div id="setMsg"></div>
+</div>
+</div></div>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); }, ov = $('hov'), GATE = 'aatccGate', SK = ['mc_settings_v1', 'fcpar_settings_v1'];
+  function tab(t) { document.querySelectorAll('.tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === t); }); $('tHelp').style.display = t === 'help' ? '' : 'none'; $('tSet').style.display = t === 'set' ? '' : 'none'; }
+  function rd(k) { try { return JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch (e) { return {}; } }
+  function cur(f) { return SK.every(function (k) { return rd(k)[f] !== false; }); }
+  function put(f, v) { SK.forEach(function (k) { var o = rd(k); o[f] = v; try { localStorage.setItem(k, JSON.stringify(o)); } catch (e) {} }); msg((f === 'voiceOut' ? 'Pilot voices ' : 'Voice input ') + (v ? 'on' : 'off') + ' for all positions. Reload any open position tab.'); }
+  function msg(s) { $('setMsg').textContent = s; }
+  function open(t) { $('cOut').checked = cur('voiceOut'); $('cIn').checked = cur('voiceIn'); msg(''); tab(t || 'help'); ov.classList.add('open'); }
+  function close() { ov.classList.remove('open'); }
+  $('bHelp').onclick = function () { open('help'); };
+  $('hx').onclick = close; ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+  addEventListener('keydown', function (e) { if (e.key === 'Escape' && ov.classList.contains('open')) close(); });
+  document.querySelectorAll('.tabs button').forEach(function (b) { b.onclick = function () { tab(b.dataset.t); }; });
+  $('cOut').onchange = function () { put('voiceOut', $('cOut').checked); };
+  $('cIn').onchange = function () { put('voiceIn', $('cIn').checked); };
+  $('bReset').onclick = function () {
+    if (!confirm('Reset all saved trainer data on this device? Settings, zoom, tutorials seen and link choice go back to defaults. You stay signed in.')) return;
+    var keep = null; try { keep = localStorage.getItem(GATE); localStorage.clear(); if (keep != null) localStorage.setItem(GATE, keep); } catch (e) {}
+    try { sessionStorage.clear(); } catch (e) {}
+    $('cOut').checked = $('cIn').checked = true; msg('Saved trainer data reset. Reload any open position tab.');
+  };
+  $('bOut').onclick = function () { if (!confirm('Sign out on this device?')) return; try { localStorage.removeItem(GATE); } catch (e) {} location.reload(); };
+  $('bCache').onclick = function () {
+    msg('Clearing cache…');
+    var p = [];
+    if (window.caches) p.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }));
+    if (navigator.serviceWorker) p.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }));
+    Promise.all(p).catch(function () {}).then(function () { location.reload(); });
+  };
+  if (location.hash === '#help' || location.hash === '#settings') open(location.hash === '#settings' ? 'set' : 'help');
+  window.__help = { open: open, close: close };
+})();
+</script>
+</body></html>

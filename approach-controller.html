@@ -2098,7 +2098,7 @@ function startGame(diff, opts) {
 let linkChoice = localStorage.getItem('stingerLink') === '1';
 const paintLink = () => { $('bLinkOn').classList.toggle('on', linkChoice); $('bLinkOff').classList.toggle('on', !linkChoice); };
 $('bLinkOn').onclick = () => { linkChoice = true; paintLink(); }; $('bLinkOff').onclick = () => { linkChoice = false; paintLink(); }; paintLink();
-$('bStart').onclick = () => { LINK.setOn(linkChoice); startGame(chosenDiff); };
+$('bStart').onclick = () => { LINK.setOn(linkChoice); try { shipSyncTick(); } catch (e) {} startGame(chosenDiff); { const ms = shipMaster(); if (G && ms) G.shipSync = { src: ms.src, turns: !!ms.turns }; } };
 $('bTut').onclick = () => openTutorial(0);
 $('bAgain').onclick = () => startGame(lastDiff);
 $('bMenu').onclick = () => { endOv.classList.add('hidden'); prepBRC(); startOv.classList.remove('hidden'); };
@@ -2474,6 +2474,18 @@ function appConflictScenario() {
   return { kind: 'pair', cs: [lead.cs] };
 }
 window.__confScenario = k => appConflictScenario(k);
+function appShift(d) {   // move every pending launch (and planned conflict launch) by d seconds
+  if (G.nextLaunch == null) G.nextLaunch = 10; if (!G.instPlan) instLaunchPlan(0);
+  const nx = G.nextLaunch - 1e-6; G.instPlan = G.instPlan.map(t => t >= nx ? t + d : t); G.nextLaunch += d;
+  if (d > 0 && G.confPlan) G.confPlan = G.confPlan.map(t => t + d);
+}
+function instHold() { const t = G.t, d = t - (G.instHoldT != null ? G.instHoldT : t); G.instHoldT = t; if (G.instManual && d > 0) appShift(d); }   // Instructor 'Manual': timed launches / check-ins wait
+function instCheckInNow() {   // Instructor: the next launch checks in now; later launches keep their spacing
+  if (!G || G.over) return null; if (G.nextLaunch == null) G.nextLaunch = 10; if (!G.instPlan) instLaunchPlan(0);
+  appShift(G.t - G.nextLaunch); G.instHoldT = G.t;
+  G.launches = (G.launches || 0) + 1; const a = appLaunch(); G.launchLog = (G.launchLog || []).concat(G.t); G.nextLaunch = instLaunchPlan(G.t);
+  return a ? a.cs : 'launch';
+}
 function instLaunchPlan(after) {   // pre-rolled launch times (Instructor roster): 10 s, then every 4-6 min
   if (!G.instPlan) { G.instPlan = [10]; while (G.instPlan.length < 16) G.instPlan.push(G.instPlan[G.instPlan.length - 1] + rand(240, 360)); }
   const nx = G.instPlan.find(t => t > after + 0.5); return nx != null ? nx : after + rand(240, 360);
@@ -2723,9 +2735,10 @@ function sectorGuide(a) {   // fly to the sector's centre radial at the held ran
 window.__sector = { inSector, SECTOR_CTR };
 function appStep(dt) {
   G.t += dt;
-  shipTurnStep();
+  if (!(G.shipSync && !G.shipSync.turns)) shipTurnStep();   // linked to a Marshal with ship turns off: BRC stays the same as Marshal
   const want = APP_COUNT[G.d.key || ''] || (G.d.name === 'Training' ? 4 : G.d.name === 'Normal' ? 6 : 8);
   if (G.nextLaunch == null) G.nextLaunch = 10;   // first launch (and check-in) at 10 s sim time
+  instHold();
   if (!G.confPlan) { const k = CONF_PLAN[G.d.key || ''] || (G.d.name === 'Training' ? 1 : G.d.name === 'Normal' ? 3 : 5), n = k === 1 ? 1 : Math.max(1, k + Math.round(rand(-1, 1)));
     G.confPlan = Array.from({ length: n }, (_, i) => 70 + (i + rand(0.1, 0.9)) * (k === 1 ? 300 : 900 / n)).sort((x, y) => x - y); G.confLog = []; G.appConfSet = new Set(); }
   if (G.confPlan.length && G.t >= G.confPlan[0]) { G.confPlan.shift(); const sc = appConflictScenario(); G.confLog.push({ t: Math.round(G.t), ...sc }); }
@@ -3160,7 +3173,8 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   const wrap = document.getElementById('scopeWrap'), ib = document.getElementById('infoBlk'), tb = document.getElementById('tbBlk');
   const geo = () => { const w = canvas.clientWidth, h = canvas.clientHeight; const v = appView(w, h); return { w, h, cx: w / 2, cy: h / 2, RX: v.RX, RY: v.RY, sc: v.sc }; };
   const clamp = (el, x, y) => { const w = wrap.clientWidth, h = wrap.clientHeight; return [Math.max(0, Math.min(w - el.offsetWidth, x)), Math.max(0, Math.min(h - el.offsetHeight, y))]; };
-  const place = (el, key, def) => { let p = null; try { p = JSON.parse(localStorage.getItem(key)); } catch (e) {} if (!p || !isFinite(p.x) || !isFinite(p.y) || p.x < 0 || p.y < 0 || p.x > wrap.clientWidth || p.y > wrap.clientHeight) p = def(); const [x, y] = clamp(el, p.x, p.y); el.style.left = x + 'px'; el.style.top = y + 'px'; };
+  const POS = {}; try { ['ac_infoBlockPos', 'ac_trackballBlockPos', 'ac_starPos'].forEach(k => localStorage.removeItem(k)); } catch (e) {}   // block positions are per session only (never saved)
+  const place = (el, key, def) => { let p = POS[key] || null; if (!p || !isFinite(p.x) || !isFinite(p.y) || p.x < 0 || p.y < 0 || p.x > wrap.clientWidth || p.y > wrap.clientHeight) p = def(); const [x, y] = clamp(el, p.x, p.y); el.style.left = x + 'px'; el.style.top = y + 'px'; };
   const defs = { infoBlk: () => ({ x: 10, y: 34 }), tbBlk: () => ({ x: 10, y: wrap.clientHeight - tb.offsetHeight - 34 }) };   // inset below/above the bearing-label bands
   const keys = { infoBlk: 'ac_infoBlockPos', tbBlk: 'ac_trackballBlockPos' };
   for (const el of [ib, tb]) {
@@ -3170,7 +3184,7 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
       const mv = ev => { if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 6) moved = true; if (!moved) return; const [x, y] = clamp(el, ev.clientX - ox, ev.clientY - oy); el.style.left = x + 'px'; el.style.top = y + 'px'; };
       const up = ev => { if (!moved && ev && ev.type === 'pointerup') { const r = canvas.getBoundingClientRect(); pickAt(ev.clientX - r.left, ev.clientY - r.top, false); }   // a tap (no drag) on the block goes through to the target under it
         el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
-        try { localStorage.setItem(keys[el.id], JSON.stringify({ x: el.offsetLeft, y: el.offsetTop })); } catch (_) {} };
+        if (moved) POS[keys[el.id]] = { x: el.offsetLeft, y: el.offsetTop }; };
       el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
     });
     el.addEventListener('click', e => e.stopPropagation());
@@ -3207,7 +3221,7 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
     const sx = e.clientX, sy = e.clientY, ox = sx - sb.offsetLeft, oy = sy - sb.offsetTop; let moved = false;
     const mv = ev => { if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return; moved = true; const [x, y] = clamp(sb, ev.clientX - ox, ev.clientY - oy); sb.style.left = x + 'px'; sb.style.top = y + 'px'; };
     const up = () => { sb.removeEventListener('pointermove', mv); sb.removeEventListener('pointerup', up); sb.removeEventListener('pointercancel', up);
-      if (moved) { try { localStorage.setItem('ac_starPos', JSON.stringify({ x: sb.offsetLeft, y: sb.offsetTop })); } catch (_) {} }
+      if (moved) POS['ac_starPos'] = { x: sb.offsetLeft, y: sb.offsetTop };
       else if (sb.classList.contains('open')) si.focus(); else sOpen(); };
     sb.addEventListener('pointermove', mv); sb.addEventListener('pointerup', up); sb.addEventListener('pointercancel', up);
   });
@@ -3221,6 +3235,31 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   const init = () => { place(ib, keys.infoBlk, defs.infoBlk); place(tb, keys.tbBlk, defs.tbBlk); place(sb, 'ac_starPos', sDef); };
   init(); window.addEventListener('resize', init); window.addEventListener('load', init);
 })();
+/* ---------- linked ship: follow Marshal's (or the Instructor's) BRC / MV / land when linked; picked up on the start screen ---------- */
+function shipPolys() { if (!LAND || !LAND.polys || !LAND.polys.length) return []; if (LAND.rp && LAND.rpSeed === LAND.seed) return LAND.rp; LAND.rpSeed = LAND.seed;
+  return (LAND.rp = LAND.polys.map(p => p.map(([e, n]) => [Math.round(e * 100) / 100, Math.round(n * 100) / 100]))); }
+const SHIPSYNC = { mar: null, inst: null, warned: '' };
+function shipSyncRecv(m) {
+  if (m.type === 'ship-state' && m.src === 'MARSHAL') SHIPSYNC.mar = Object.assign({ rx: Date.now() }, m);
+  else if (m.type === 'ship-set' && (!m.to || m.to === 'APPROACH')) SHIPSYNC.inst = Object.assign({ rx: Date.now() }, m);
+  else return; shipSyncTick();
+}
+function shipMaster() { const now = Date.now(), i = SHIPSYNC.inst, mr = SHIPSYNC.mar;
+  if (i && now - i.rx < 4000 && i.tbrc != null) return i;   // Instructor open and linked to Marshal + Approach
+  if (mr && now - mr.rx < 4000 && mr.tbrc != null && mr.linked && (LINK.on || linkChoice)) return mr;   // Marshal + Approach linked with each other
+  return null; }
+function shipSyncTick() {
+  const m = shipMaster(); if (!m) return;
+  const tb = norm(Math.round(+m.tbrc)) % 360 || 360, mv = Math.round(+m.mv || 0), seed = (+m.landSeed >>> 0) || 0, key = [tb, mv, seed, m.landOn ? 1 : 0].join('|');
+  if (Math.round(TBRC) % 360 === tb % 360 && MV === mv && LAND && LAND.syncKey === key) return;
+  if (G && !G.over) { if (SHIPSYNC.warned !== key) { SHIPSYNC.warned = key; log('warn', `Linked ${m.src === 'INSTRUCTOR' ? 'Instructor / ' : ''}Marshal ship is on BRC ${h3z(tb)}; this run uses BRC ${h3z(TBRC)}. Press End and start a new run to match it.`); } return; }
+  nextBRC = TBRC = tb; MV = mv; setBRC(norm(TBRC - MV));
+  const polys = m.landOn && Array.isArray(m.polys) ? m.polys : [];
+  LAND = { seed, mv: MV, polys, coasts: polys.length ? 1 : 0, islands: 0, stats: { frac: 0, minR: 99, brg: 0, bad: false }, key: '', syncKey: key };
+  try { applyPhrUI(); } catch (e) {}
+}
+function shipStateMsg() { const on = !!(LAND && LAND.polys && LAND.polys.length), ms = G && !G.over ? G.shipSync : shipMaster();
+  return { type: 'ship-state', src: 'APPROACH', master: false, synced: !!ms, linked: !!(LINK.on || linkChoice), running: !!(G && !G.over), tbrc: TBRC, mv: MV, fb: BRC, dwh: DWH(), landSeed: LAND ? LAND.seed : null, landOn: on, polys: on ? shipPolys() : [] }; }
 /* AATCC Instructor link hook (BroadcastChannel 'stinger-link'). Loaded by Marshal, Approach and Final.
    Always listening (independent of the position's own Link toggle). Messages:
    inst-hello {links:[...]} -> reply inst-state; inst-cmd {to, uid, cs, text, op} -> run on this scope; inst-state / inst-ack out. */
@@ -3229,7 +3268,7 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   const PAGE = /final-controller/.test(location.pathname) ? 'FINAL' : (typeof MC !== 'undefined' && MC) ? 'MARSHAL' : 'APPROACH';
   const FIN = PAGE === 'FINAL', NMFT = 6076.12, D2R = Math.PI / 180;
   const ch = new BroadcastChannel('stinger-link');
-  let peerT = 0, wanted = false, lastSend = 0;
+  let peerT = 0, wanted = false, lastSend = 0, ciManual = false;
   const g = () => (typeof G !== 'undefined' ? G : null);
   const alv = a => !['landed', 'crashed', 'gone'].includes(a.phase);
   const nrm = x => ((x % 360) + 360) % 360;
@@ -3289,7 +3328,7 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   }
   function send() {
     const G = g(); lastSend = Date.now();
-    const m = { type: 'inst-state', src: PAGE, ts: Date.now(), running: !!(G && !G.over), paused: !!(G && G.paused) };
+    const m = { type: 'inst-state', src: PAGE, ts: Date.now(), running: !!(G && !G.over), paused: !!(G && G.paused), manual: !!(G && G.instManual) };
     if (G) {
       track(G);
       Object.assign(m, { t: Math.round(G.t * 10) / 10, scale: G.scale || 1, brc: typeof BRC !== 'undefined' ? BRC : null, tbrc: typeof TBRC !== 'undefined' ? TBRC : null, dwh: typeof DWH === 'function' ? DWH() : null, wind: G.wind ? { dir: G.wind.dir, spd: G.wind.spd } : null, diff: G.d && G.d.name,
@@ -3324,6 +3363,11 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
       sysLog(`${a.cs}: instructor ${d > 0 ? 'climb' : 'descend'} ${Math.abs(d)} ft → ${Math.round(a.alt)} ft (silent)`);
       send(); return ack(m, true, `${d > 0 ? '+' : ''}${d} ft → ${Math.round(a.alt)}`);
     }
+    if (m.op === 'checkin') {   // Instructor: check the next scheduled aircraft in right now
+      let r = null; try { r = typeof instCheckInNow === 'function' ? instCheckInNow() : null; } catch (e) { return ack(m, false, 'error: ' + e.message); }
+      if (!r) return ack(m, false, 'no aircraft left to check in');
+      sysLog('next check-in now: ' + r); send(); return ack(m, true, 'CHECK-IN: ' + r);
+    }
     if (m.op) return ack(m, false, 'Instructor can only command aircraft');
     const a = find(G, m); if (!a) return ack(m, false, (m.cs || '?') + ' not on ' + PAGE);
     const raw = String(m.text || '').trim(), s = raw.toLowerCase();
@@ -3354,11 +3398,14 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   }
   ch.onmessage = e => {
     const m = e.data || {};
-    if (m.type === 'inst-hello') { peerT = Date.now(); wanted = !m.links || m.links.includes(PAGE) || FIN; if (wanted) send(); }
+    if (m.type === 'inst-hello') { peerT = Date.now(); wanted = !m.links || m.links.includes(PAGE) || FIN; ciManual = !FIN && wanted && !!m.links && m.links.includes(PAGE) && m.ciMode === 'manual'; if (wanted) send(); }
+    else if (m.type === 'ship-state' || m.type === 'ship-set') { if (m.src !== PAGE && typeof shipSyncRecv === 'function') { try { shipSyncRecv(m); } catch (e) {} } }
     else if (m.type === 'inst-cmd' && (m.to === PAGE || m.to === 'ANY')) { peerT = Date.now(); cmd(m); }
-    else if (m.type === 'inst-bye') peerT = 0;
+    else if (m.type === 'inst-bye') { peerT = 0; ciManual = false; }
   };
-  setInterval(() => { if (wanted && Date.now() - peerT < 8000 && Date.now() - lastSend > 200) send(); }, 220);
+  setInterval(() => { const G = g(); if (G) G.instManual = ciManual && Date.now() - peerT < 8000;   // Instructor 'Manual' check-ins hold the timed arrivals
+    if (wanted && Date.now() - peerT < 8000 && Date.now() - lastSend > 200) send(); }, 220);
+  setInterval(() => { if (typeof shipStateMsg === 'function') { try { ch.postMessage(shipStateMsg()); } catch (e) {} } try { if (typeof shipSyncTick === 'function') shipSyncTick(); } catch (e) {} }, 1000);   // linked ship (BRC / MV / land) for late joiners
   try { ch.postMessage({ type: 'inst-state', src: PAGE, ts: Date.now(), running: false, hello: true }); } catch (e) {}
   { const unscroll = () => { if (document.body.scrollTop) document.body.scrollTop = 0; if (document.documentElement.scrollTop) document.documentElement.scrollTop = 0; }; document.body.addEventListener('scroll', unscroll); addEventListener('scroll', unscroll); setInterval(unscroll, 1000); }   // a focused prompt must never scroll the page (it hid the top bar + Scope slider)
   window.__INST = { send, cmd, PAGE }; window.__instStart = (d, o) => startGame(d, o); window.__instScale = s => { try { setScale(s); } catch (e) {} };
