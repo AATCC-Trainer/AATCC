@@ -1920,6 +1920,7 @@ function mcFixSpeech(t) {   // forgiving marshal-flow wording: common speech-to-
   s = s.replace(/\b(?:l|el|elle|ell|al|ehl)[\s.\-]*(?:h|aitch|age|each|edge|8)[\s.\-]*(?:approach\s+)?([1-5]|one|won|two|to|too|three|tree|four|for|five)\b/gi, (m, n) => ' LH' + (isNaN(+n) ? NW[n.toLowerCase()] : n) + ' ');   // L H 2, elle h two, lh to, l8 2
   s = s.replace(/\bl(?:h|8)\s*-?\s*([1-5])\b/gi, ' LH$1 ').replace(/\blima\s+hotel\s*([1-5])\b/gi, ' LH$1 ').replace(/\b(?:lh|l8)(to|too|two)\b/gi, ' LH2 ').replace(/\bl82\b/gi, ' LH2 ');
   s = s.replace(/\b(?:angel|angles|angle|ankles|angela|angeles)\b/gi, 'angels');
+  s = s.replace(/\breport\s+(?:turning|turn|turned|turns|terning|tearing)\s+(?:in\s*-?\s*bound|inbounds|in\s+found|in\s+bond|inbond|in\s+band)\b/gi, 'report turning inbound').replace(/\breport\s+(?:arking|arcking|arching|arcin|arc\s+in|arc\s+ing|r\s+king|our\s+king|are\s+king|arcs|arc|harking|marking|parking)\b/gi, 'report arcing');
   s = s.replace(/\bout[\s\-]+bound\b|\boutbond\b|\boutbounds\b|\bout\s+found\b/gi, 'outbound');
   s = s.replace(/\breport\s+(?:commence(?:d|s|ing)?|commencin|commensing|commencement|comments?(?:\s+ing)?|come\s+and\s+sing)\b/gi, 'report commencing').replace(/\b(?:commencin|commensing|commencement|comments\s+ing|come\s+and\s+sing)\b/gi, 'commencing');
   s = s.replace(/\b(?:climb(?:ed|ing|s)?[\s\-]*(?:outs?|aut|about|up|on|all|our|hour|it)|(?:clime|claim|crime|prime|time|line|fine|find|fly|come|call)[\s\-]*outs?|timeout|climber|climate)\s+instructions?\b/gi, 'climb out instructions');
@@ -2021,14 +2022,14 @@ function handleTranscript(text, src) {
       let a = csByDigits(preRaw, pool) || csByDigits(preFx, pool) || (pp && pp.cs && pool.find(x => x.cs === pp.cs)) || (up && pool.find(x => up.includes(x.cs))) || null;
       if (!a && !(pp && pp.csUnknown) && !/\b\d{2,3}\b/.test(normalizeSpeech(preRaw))) a = G.selected && appCtl(G.selected) ? G.selected : (live.length === 1 ? live[0] : null);
       const parHasAppCmds = a && a.parArr && parseSpeech(text, known).cmds.some(c => c.k !== 'purple' && c.k !== 'goSilver' && c.k !== 'goRed');
-      const parPureHo = a && a.parArr && !parHasAppCmds && !!(mp.hoFinal || mp.hoApp || mp.hoMar) && !(mp.type || mp.marshal || mp.eat != null || mp.commence || mp.cleared || mp.rpt3 || mp.missed);
+      const parPureHo = a && a.parArr && !parHasAppCmds && !!(mp.hoFinal || mp.hoApp || mp.hoMar) && !(mp.type || mp.marshal || mp.eat != null || mp.commence || mp.cleared || mp.rpt3 || mp.rptTi || mp.rptArc || mp.missed);
       if (!(a && a.parArr) || parPureHo) {   // CCA arrival (a.parArr) is never marshalling; it uses appExecute for all Approach instructions
         if (src === 'voice') renderTranscript(text, '');
         setHeard(heard, null);
         if (!a) { log('sys', `Say the callsign (or select a target) first. Heard: "${heard}"`); return { cs: null, cmds: [], str: 'marshal?' }; }
         if (!a.accepted) { log('sys', `${a.cs} not accepted (click its target to accept): no response to "${heard}".`); return { cs: a.cs, cmds: [], str: 'not accepted' }; }
         MAR.exec(mp, a, heard, src);
-        $('parsed').textContent = 'Understood → ' + a.cs + ' ' + [mp.type && MAR.T[mp.type].name, mp.marshal && `marshal ${mp.marshal.R}/${mp.marshal.D}/${mp.marshal.alt}${mp.marshal.eat != null ? ' EAT ' + String(mp.marshal.eat).padStart(2, '0') : ''}`, !mp.marshal && mp.eat != null && `EAT ${String(mp.eat).padStart(2, '0')}`, mp.cleared && !mp.type && 'cleared/report commencing', mp.commence && 'commence', mp.missed && 'missed approach', mp.hoFinal && (mp.hoFreq ? 'go ' + mp.hoFreq : 'final'), mp.hoApp && 'go silver', mp.hoMar && 'go red'].filter(Boolean).join('; ');
+        $('parsed').textContent = 'Understood → ' + a.cs + ' ' + [mp.type && MAR.T[mp.type].name, mp.marshal && `marshal ${mp.marshal.R}/${mp.marshal.D}/${mp.marshal.alt}${mp.marshal.eat != null ? ' EAT ' + String(mp.marshal.eat).padStart(2, '0') : ''}`, !mp.marshal && mp.eat != null && `EAT ${String(mp.eat).padStart(2, '0')}`, mp.cleared && !mp.type && 'cleared/report commencing', mp.commence && 'commence', mp.rptTi && 'report turning inbound', mp.rptArc && 'report arcing', mp.missed && 'missed approach', mp.hoFinal && (mp.hoFreq ? 'go ' + mp.hoFreq : 'final'), mp.hoApp && 'go silver', mp.hoMar && 'go red'].filter(Boolean).join('; ');
         $('parsed').classList.remove('bad');
         return { cs: a.cs, cmds: ['marshal'], str: 'marshal', mar: mp };
       }
@@ -2399,7 +2400,7 @@ const TUT = [
    <li><b>Jets only</b> (whole thousands, minimum angels 2): <b>LH-1</b> 030 radial at 4 DME; <b>LH-2</b> 030 at 2; <b>LH-3</b> 180 at (angels + 15) DME. Missed (0.75 NM): climb on BRC to 1,200; no instructions by 4 NM / 2 min: turn downwind, report abeam.</li>
    <li><b>Helicopters only</b> (500 ft steps, minimum 1,500; 2,500 when jets are also in marshal): <b>LH-4</b> 090 radial at 7 DME; arc 5 NM at 1,000 to final, FAF 3 DME. <b>LH-5</b> 030 at 2 DME; outbound at 1,000, inbound, FAF 3 DME. <b>Emergency marshal</b>: 045 / 090 / 135 radials, 5 NM 1,500 … 12 NM 5,000, flown like LH-4.</li>
    <li>Wrong radial/DME for the type, a jet approach for a helo (or the reverse), a wrong or missing outbound bearing, a wrong BRC, or an angels already in use are flagged in the log.</li>
-   <li><b>Sequence</b>: after the marshal call the flight holds at the marshal fix until cleared. "Eagle one six, cleared for LH-2 approach, report commencing" → commences at the fix ("commencing"). "Radar contact, report 3 miles outbound bearing" → "established in outbound bearing". "&lt;callsign&gt;, go purple" / "go copper" (Final frequencies) or "&lt;callsign&gt;, go silver" (Approach); "contact final controller" also works → callsign only, leaves Marshal. Permanent map: Marshal=Red, Approach=Silver, Final=Purple/Copper.</li>
+   <li><b>Sequence</b>: after the marshal call the flight holds at the marshal fix until cleared. "Eagle one six, cleared for LH-2 approach, report commencing" → commences at the fix ("commencing"). "Radar contact, report 3 miles outbound bearing" → "established in outbound bearing". "Report turning inbound" → reports "turning inbound" at the turn onto the final bearing; "report arcing" → reports "arcing" when the arc to the final bearing starts (both right away if it is already past that point; shorthand <b>rti</b> / <b>rarc</b>). On the arc, marshal birds configure on their own: jets dirty up, helos landing checks. "&lt;callsign&gt;, go purple" / "go copper" (Final frequencies) or "&lt;callsign&gt;, go silver" (Approach); "contact final controller" also works → callsign only, leaves Marshal. Permanent map: Marshal=Red, Approach=Silver, Final=Purple/Copper.</li>
    <li><b>Flights</b>: for now only one flight checks in: two jets as a flight of two (one call by the leader). Instructions to the leader apply to the flight; calling the wingman by its callsign gives it its own instructions. Only the leader squawks; the wingman shows as a raw return until you tell it "squawk normal".</li>
    <li><b>Geopoints</b>: double-click (double-tap) the scope to drop a geopoint (GPn with radial/DME from the ship); double-click it again to delete; ⚙ Settings → Clear geopoints.</li>
 </ul>`],
@@ -3286,13 +3287,15 @@ const MAR = {
     else if (/\bcommenc(?:e|ing)\b(?!\s+(?:your\s+)?descen)(?!\s+time)/.test(s)) out.commence = true;
     if ((out.type && /\bcleared\b/.test(s)) || /\bcleared\s+(?:for\s+)?(?:the\s+)?approach\b/.test(s)) out.cleared = true;   // "cleared for LH-2 approach, report commencing": commence at the marshal fix
     if (/\breport\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound/.test(s)) out.rpt3 = true;
+    if (/\breport\s+turning\s+inbound\b/.test(s)) out.rptTi = true;   // marshal pattern birds: report the turn inbound
+    if (/\breport\s+arcing\b/.test(s)) out.rptArc = true;   // ... and the start of the arc to the final bearing
     if (/\b(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?final(?:\s+controller)?\b/.test(s)) out.hoFinal = true;
     { const g = s.match(/\bgo(?:\s+(?:to|2))?\s+(purple|purpel|copper|cooper|coper|silver|sliver|silvar|blue|red|read|redd)(?:\s+(?:buttons?|for\s+final|to\s+final|final|approach|marshal+))?\b/); if (g) { let f = g[1]; if (/^purp|^people|^pupil/i.test(f)) f = 'purple'; else if (/^cop|^coop/i.test(f)) f = 'copper'; else if (/^sil|^sliv|^blue/i.test(f)) f = 'silver'; else if (/^red|^read/i.test(f)) f = 'red'; if (f === 'silver') { out.hoApp = true; out.hoFreq = 'silver'; } else if (f === 'red') { out.hoMar = true; out.hoFreq = 'red'; } else { out.hoFinal = true; out.hoFreq = f; } } }
     if (/\b(?:execute\s+)?missed\s+approach\b/.test(s) && !out.marshal) out.missed = true;
     if (out.marshal && out.marshal.R != null) out.marshal.R = norm(out.marshal.R - BRC) % 360;   // spoken radial is BRC + relative value
-    return (out.type || out.marshal || out.eat != null || out.cleared || out.commence || out.missed || out.rpt3 || out.hoFinal || out.hoApp || out.hoMar) ? out : null;
+    return (out.type || out.marshal || out.eat != null || out.cleared || out.commence || out.missed || out.rpt3 || out.rptTi || out.rptArc || out.hoFinal || out.hoApp || out.hoMar) ? out : null;
   },
-  trigger: /\b(?:go(?:\s+(?:to|too|two))?\s+(?:purple|copper|silver|sliver|blue|red|read|redd)\b|report\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound|report\s+commenc|cleared\s+(?:for\s+)?(?:the\s+)?approach|(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?(?:final|approach)|case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery|(?:(?:expected|expect|push|commence)\s+)?approach\s+time|(?:expected|expect|push|commence)\s+time|\beat\s+(?:is\s+|at\s+)?(?:\d|zero|oh|one|two|three|four|five|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)|marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
+  trigger: /\b(?:go(?:\s+(?:to|too|two))?\s+(?:purple|copper|silver|sliver|blue|red|read|redd)\b|report\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound|report\s+commenc|report\s+turning\s+inbound|report\s+arcing|cleared\s+(?:for\s+)?(?:the\s+)?approach|(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?(?:final|approach)|case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery|(?:(?:expected|expect|push|commence)\s+)?approach\s+time|(?:expected|expect|push|commence)\s+time|\beat\s+(?:is\s+|at\s+)?(?:\d|zero|oh|one|two|three|four|five|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)|marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
   say(a, txt, say) { if (a.st === 'mfinal') return; pilotSay(a, `${a.tel}, ${txt}.`, `${a.telSay}, ${say || txt}.`); },
   dg(v) { return String(v).split('').map(c => c === '.' ? 'point' : DIGW[+c]).join(' '); },
   exec(m, a, heard, src) {
@@ -3364,6 +3367,11 @@ const MAR = {
       if (!M.run) log('sys', `${a.cs}: not commenced yet; will report 3 miles outbound after commencing.`);
       M.rpt3 = true; M.rpt3Done = false; parts.push('report 3 miles outbound');
     }
+    for (const [want, key, word] of [[m.rptTi, 'rptTi', 'turning inbound'], [m.rptArc, 'rptArc', 'arcing']]) {   // marshal pattern birds only (a.mar): report at the turn inbound / start of the arc
+      if (!want) continue;
+      if (this.past(a, key)) { M[key] = false; parts.push(word + ' (now)'); says.push(word); }   // already there: report right away
+      else { M[key] = true; parts.push('report ' + word); if (!M.run) log('sys', `${a.cs}: not commenced yet; will report ${word} on the approach.`); }
+    }
     if (m.hoFinal && a.parArr) {   // PAR arrival: linked -> Final Control; solo -> self-recover on final (same as "go purple")
       const freq = (m.hoFreq === 'copper' || m.hoFreq === 'purple') ? m.hoFreq : 'purple'; a.sector = null; a.hoffFreq = freq; a.button = a.button || freq;
       if (LINK.on && LINK.connected()) {
@@ -3419,8 +3427,9 @@ const MAR = {
       else { this.say(a, 'unable, not on the approach'); return; }
     }
     log('ctl', `${a.cs}: "${heard.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${parts.join('; ')}`);
-    if (says.includes('commencing')) this.say(a, 'commencing');
-    else pilotSay(a, `${a.tel}.`, `${a.telSay}.`);   // readback is the callsign only
+    { const now = says.filter(x => x === 'commencing' || x === 'turning inbound' || x === 'arcing');
+      if (now.length) this.say(a, now.join(', '));
+      else pilotSay(a, `${a.tel}.`, `${a.telSay}.`); }   // readback is the callsign only (report requests too); reports already due are said right away
     if (a.st === 'mfinal') return;
     refreshPanel(true);
   },
@@ -3430,6 +3439,7 @@ const MAR = {
     M.run = type; M.inMar = false; M.cleared = false; M.fafDone = false; M.t0 = G.t;
     M.ph = { LH1: atFix ? 'out1' : 'iaf2', LH2: atFix ? 'out2' : 'iaf2', LH3: 'turnF', LH4: 'h4a', LH5: atFix ? 'out5' : 'h5a', EMER: 'h4a' }[type];
     M.fDir = type === 'LH3' ? null : type === 'LH1' || type === 'LH2' || type === 'LH5' ? 'L' : 'R';
+    queueMicrotask(() => { if (a.mar === M && M.ph === 'turnF') this.phEvt(a); });   // LH-3 starts on the turn onto the final bearing
     if (M.alt == null) M.alt = Math.round(a.alt / 100) * 100;
     a.tgtSpd = isHelo(a) ? Math.min(a.tgtSpd, 120) : Math.min(a.tgtSpd, 250);
     const obMag = M.outbound || this.outbound();
@@ -3440,7 +3450,21 @@ const MAR = {
     log('warn', `${a.cs} missed approach (${this.T[M.run].name}) at ${appRng(a).toFixed(1)} NM.`); G.marMissed = (G.marMissed || 0) + 1;
   },
   cancel(a, why) { if (a.mar && a.mar.ph) { log('sys', `${a.cs}: ${this.T[a.mar.run || a.mar.type || a.mar.typeInf] ? (this.T[a.mar.run || a.mar.type || a.mar.typeInf].name + ' ') : ''}procedure cancelled (${why}), radar vectors.`); a.mar.ph = null; a.mar.inMar = false; } },
-  go(a, ph) { a.mar.ph = ph; a.mar.t0 = G.t; },
+  go(a, ph) { a.mar.ph = ph; a.mar.t0 = G.t; this.phEvt(a); },
+  arcPh(M) { return M.run === 'LH4' || M.run === 'EMER' ? 'arc' : 'turnF'; },   // the arc to the final bearing: LH-4 / emergency fly the 5 NM arc; LH-1/2/3/5 fly the turn onto the final bearing
+  past(a, key) { const M = a.mar; if (!M || !M.run || !M.ph) return false;
+    const after = key === 'rptTi' ? ['turnF', 'final'] : (this.arcPh(M) === 'arc' ? ['arc', 'turnF', 'final'] : ['turnF', 'final']); return after.includes(M.ph); },
+  phEvt(a) {   // marshal pattern bird reached a new leg: auto configuration on the arc + pending "report turning inbound / arcing"
+    const M = a.mar; if (!M || !M.run) return; const rep = [];
+    if (M.ph === this.arcPh(M)) { this.autoCfg(a); if (M.rptArc) { M.rptArc = false; rep.push('arcing'); } }
+    if (M.ph === 'turnF' && M.rptTi) { M.rptTi = false; rep.unshift('turning inbound'); }
+    if (rep.length) { if (a.st === 'ctl') this.say(a, rep.join(', ')); log('sys', `${a.cs} ${rep.join(', ')} (${this.T[M.run].name}).`); }
+  },
+  autoCfg(a) {   // marshal birds configure on their own on the arc: jets dirty up, helos landing checks (same as "dirty up" / "perform landing checks"); never twice
+    if (a.parArr || !a.mar) return;
+    if (isHelo(a)) { if (a.landChk) return; a.landChk = true; a.tgtSpd = Math.round(rand(100, 130)); log('sys', `${a.cs} landing checks on the arc (on its own), slowing to ${a.tgtSpd} kt.`); }
+    else { if (a.dirty) return; a.dirty = true; a.tgtSpd = Math.round(rand(130, 150)); log('sys', `${a.cs} dirty on the arc (on its own), slowing to ${a.tgtSpd} kt.`); }
+  },
   finalAlt(a, r, t) {
     if (t.jet) return Math.round(Math.min(1200, Math.max(250, r * 240)) / 10) * 10;
     return Math.round((r > 3 ? Math.min(1000, 500 + (r - 3) * 250) : Math.max(200, 200 + (r - 0.5) * 120)) / 10) * 10;

@@ -7,7 +7,7 @@
 (function () {
 'use strict';
 // vocabulary of Raphael's edited controller phrase list (Nov 2026), number words removed
-const VOCAB = ('abeam above acknowledge adjust alert altimeter altitude angels approach approaching around ball base bearing begin below ' +
+const VOCAB = ('arc arcing inbound turning abeam above acknowledge adjust alert altimeter altitude angels approach approaching around ball base bearing begin below ' +
   'buster button call callsign calm case check checks clear cleared climb climbout come commence commencing contact controller copper ' +
   'correction course crosswind decision deck delta descend descent dirty dogleg down downwind emergency enter established execute expect ' +
   'expected father feet final from further farther gear glidepath going green gyro half heading hear height identification immediately increase ' +

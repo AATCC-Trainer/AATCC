@@ -53,6 +53,8 @@ const CODES = [
   [/^eat(\d{1,2})$/, M, m => `expected approach time ${m[1]}`, 'eat15', 'expected approach time 15'],
   [/^cm$/, M, () => 'commence', 'cm', 'commence'],
   [/^rcm$/, M, () => 'report commencing', 'rcm', 'report commencing'],
+  [/^rti$/, M, () => 'report turning inbound', 'rti', 'report turning inbound (Marshal pattern birds)'],
+  [/^rarc$/, M, () => 'report arcing', 'rarc', 'report arcing (Marshal pattern birds)'],
   // ---- Final / PAR ----
   [/^bd$/, F, () => 'begin descent', 'bd', 'begin descent (own transmission)'],
   [/^cl$/, F, () => 'cleared to land', 'cl', 'cleared to land'],
