@@ -1,0 +1,209 @@
+<!doctype html><html lang="en"><head>
+<script src="gate.js"></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="approach-192.png">
+<title>Phraseology Playbook · AATCC Training Simulation</title><meta name="theme-color" content="#0b0d0b">
+<style>
+:root{--g:rgb(120,255,140);--g2:rgb(190,255,200);--dim:rgba(160,255,175,.65);--line:rgba(120,255,140,.25);--bg:#0b0d0b;--card:#0e130e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--g2);font-family:monospace;font-size:14px;line-height:1.5}
+header{position:sticky;top:0;z-index:5;background:rgba(11,13,11,.97);border-bottom:1px solid var(--line);padding:12px 16px 10px}
+.wrap{max-width:980px;margin:0 auto}
+h1{margin:0;font-size:22px;color:var(--g);letter-spacing:1px}
+.sub{color:var(--dim);font-size:12px;margin:2px 0 10px}
+.sub a{color:var(--g)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#q{flex:1;min-width:200px;padding:9px 10px;font:15px monospace;background:#030503;color:#eaffee;border:1px solid var(--g);outline:none}
+.btn{font:14px monospace;background:#0f1a10;color:rgb(160,255,175);border:1px solid rgba(120,255,140,.55);padding:8px 12px;cursor:pointer;text-decoration:none}
+.btn:hover{filter:brightness(1.25)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.tabs button{font:14px monospace;background:#0f1a10;color:rgb(160,255,175);border:1px solid rgba(120,255,140,.45);padding:7px 12px;cursor:pointer}
+.tabs button.on{background:#123a18;color:#eaffee;border-color:var(--g)}
+.tabs button .n{opacity:.6;font-size:12px;margin-left:4px}
+.red{color:#ff5a6e}.slv{color:#c9ced6}.prp{color:#b48cff}.cop{color:#e0915a}
+.tabs button[data-s=marshal].on{border-color:#ff5a6e}.tabs button[data-s=approach].on{border-color:#c9ced6}.tabs button[data-s=final].on{border-color:#b48cff}
+main{padding:14px 16px 60px}
+#count{color:var(--dim);font-size:12px;margin:0 0 8px}
+.sec{margin:18px 0 6px}
+.sec h2{margin:0;font-size:17px;color:var(--g);border-bottom:1px solid var(--line);padding-bottom:4px}
+.sec p{margin:6px 0 0;color:var(--dim);font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--g);padding:10px 12px;margin:10px 0}
+.card.marshal{border-left-color:#ff5a6e}.card.approach{border-left-color:#c9ced6}.card.final{border-left-color:#b48cff}
+.card h3{margin:0 0 4px;font-size:15px;color:#eaffee}
+.card .tag{float:right;font-size:11px;color:var(--dim);border:1px solid var(--line);padding:0 6px;margin-left:8px}
+.when{color:var(--dim);margin:0 0 6px}
+.row{display:grid;grid-template-columns:112px 1fr;gap:2px 10px;margin:3px 0}
+.row b{color:var(--dim);font-weight:normal;font-size:12px;padding-top:1px}
+.say{color:#eaffee}
+.ph{color:#ffd27a}
+.ex{color:var(--g)}
+.rb{color:#7fe3ff}
+.note{margin-top:6px;font-size:12.5px;color:rgba(200,255,210,.8);border-top:1px dashed var(--line);padding-top:5px}
+.empty{color:#ffd27a;padding:20px 0}
+mark{background:#3a3a10;color:#fff3a0}
+.legend{font-size:12px;color:var(--dim);margin-top:8px}
+.legend span{margin-right:14px}
+@media (max-width:560px){.row{grid-template-columns:1fr}.row b{padding-top:4px}}
+@media print{
+  header .bar,.tabs,#count,.legend{display:none!important}
+  header{position:static;background:#fff;border:0;padding:0 0 6px}
+  body{background:#fff;color:#000;font-size:11pt}
+  h1,.sec h2,.card h3,.say,.ex,.rb,.ph,.when,.row b,.note,.sub,.sec p{color:#000!important}
+  .sub a{color:#000}
+  .card,.card.marshal,.card.approach,.card.final{background:#fff;border:1px solid #888;border-left:3px solid #000;break-inside:avoid;page-break-inside:avoid}
+  .card .tag{color:#000;border-color:#888}
+  .sec{display:block!important;break-after:avoid}
+  .card[hidden]{display:block!important}
+  .ph{font-style:italic}
+  mark{background:none;color:#000}
+  main{padding:0}
+}
+</style></head><body>
+<header><div class="wrap">
+<h1>Phraseology Playbook <span style="font-size:12px;color:#ffd27a;letter-spacing:0">PROTOTYPE</span></h1>
+<div class="sub">The radio calls each trainer position understands, when to use them, and what the sim pilot says back. Spoken calls only (typed shorthand codes are on the code card). Trainer guidance, not an official publication. <a href="index.html">← Home</a></div>
+<div class="bar"><input id="q" type="search" placeholder="Search calls, e.g. glidepath, go purple, commencing…" autocomplete="off" aria-label="Search phraseology"><button class="btn" id="bClear" type="button">Clear</button><button class="btn" id="bPrint" type="button">🖨 Print</button></div>
+<div class="tabs" role="tablist">
+<button type="button" data-s="all" class="on">All</button><button type="button" data-s="general">General</button><button type="button" data-s="marshal"><span class="red">Marshal</span></button><button type="button" data-s="approach"><span class="slv">Approach</span></button><button type="button" data-s="final"><span class="prp">Final</span>/<span class="cop">PAR</span></button>
+</div>
+<div class="legend"><span class="say">Controller says</span><span class="ph">&lt;placeholder&gt;</span><span class="ex">Example</span><span class="rb">Pilot replies</span></div>
+</div></header>
+<main><div class="wrap"><div id="count"></div><div id="out"></div></div></main>
+<script>
+(function () {
+'use strict';
+/* Each entry: s section, t title, w when to use it, c controller template (<placeholders>), e filled-in example, r pilot reply, n note.
+   Every call below was checked against the scope parsers (marshal-controller, approach-controller, final-controller-par-restyled) and the pilot replies they produce. */
+var SECTIONS = [
+ { id: 'general', name: 'General / All positions', cls: '', intro: 'Calls every position uses. Callsigns are the tactical name plus the number spoken digit by digit ("Lightning two one"). Pilots answer most instructions with their callsign only; the exceptions are listed with each call.' },
+ { id: 'marshal', name: 'Marshal (Red)', cls: 'red', intro: 'Case III arrivals: check-in, marshal assignment, expected approach times, commencing the LH approaches, and the handoff to Final or Approach.' },
+ { id: 'approach', name: 'Approach (Silver)', cls: 'slv', intro: 'Launches and the CCA pattern: radar contact, first altitude, vectors, pattern position, slowing down, climbout instructions and the handoff to Final.' },
+ { id: 'final', name: 'Final / PAR (Purple · Copper)', cls: 'prp', intro: 'The precision talk-down to the ship: contact call, course and glidepath calls, range every mile, deck calls, wave-off, and the no-gyro and surveillance variants.' }
+];
+var E = [
+ /* ---------------- General ---------------- */
+ { s: 'general', t: 'Radio check', w: 'First call to an aircraft, or any time you are not sure it hears you.', c: '<callsign>, <your station>, how do you hear me?', e: 'Lightning two one, Stinger Approach, how do you hear me?', r: 'Loud and clear, Lightning two one.', n: 'On Final the ship contact call gets "Lightning two one, loud and clear…" (callsign first). "Radio check" also works.' },
+ { s: 'general', t: 'Addressing an aircraft (callsign first)', w: 'Every instruction. Start with the full callsign, then the instruction. (On Final, calls without a callsign go to the aircraft on the PAR.)', c: '<callsign>, <instruction>', e: 'Venom two one, turn right heading zero nine zero.', r: 'Venom two one.', n: 'On Marshal and Approach the data block shows a letter and short callsign once you accept the target (A LT21). The letter is for typing only; on the radio always say the full callsign ("Lightning two one"). If you leave the callsign out, the call goes to the selected aircraft.' },
+ { s: 'general', t: 'Turn to a heading', w: 'Vectoring. Say the heading digit by digit.', c: '<callsign>, turn <left|right> heading <heading>', e: 'Lightning two one, turn left heading two seven zero.', r: 'Lightning two one.', n: '"Come right heading…" and "fly heading…" also work. A turn with no usable 3-digit heading gets "Lightning two one, unable." and nothing changes.' },
+ { s: 'general', t: 'Climb or descend', w: 'Altitude changes on Marshal and Approach. Use angels (thousands of feet) or feet.', c: '<callsign>, <climb|descend> and maintain angels <angels>', e: 'Eagle one six, descend and maintain angels three.', r: 'Eagle one six.', n: 'Out of range (below 1,000 ft, above 12,000 helo / 30,000 jet): "Unable angels …, Eagle one six." "Descend and maintain one thousand two hundred" works too.' },
+ { s: 'general', t: 'Speed', w: 'Spacing and sequencing.', c: '<callsign>, reduce speed to <knots> knots', e: 'Lightning two one, reduce speed to two two zero knots.', r: 'Lightning two one.', n: 'Below the aircraft\'s slowest speed (130 kt once dirty, 100 kt after landing checks) or too fast: "Unable speed …, Lightning two one."' },
+ { s: 'general', t: 'Say angels', w: 'Marshal and Approach: check an aircraft\'s altitude.', c: '<callsign>, say angels', e: 'Ridge three one, say angels.', r: 'Ridge three one, angels two.', n: 'Below 1,000 ft the pilot answers in feet.' },
+ { s: 'general', t: 'Say state (fuel)', w: 'Marshal and Approach: check fuel state, in thousands of pounds.', c: '<callsign>, say state', e: 'Gunfighter five seven, say state.', r: 'Gunfighter five seven, state four point five.' },
+ { s: 'general', t: 'Say callsign', w: 'You are not sure who called or the callsign was garbled.', c: '<callsign>, say callsign', e: 'Lightning two one, say callsign.', r: 'Lightning two one.' },
+ { s: 'general', t: 'Mark your father (position check)', w: 'Marshal and Approach: ask the pilot for a bearing and range from the ship.', c: '<callsign>, mark your father', e: 'Viper four five, mark your father.', r: 'Viper four five, two one zero for eight.' },
+ { s: 'general', t: 'Traffic advisory', w: 'Another aircraft is close. Information only; the pilot does not maneuver.', c: '<callsign>, traffic, <clock> o\'clock, <miles> miles, <direction>bound, <type>, angels <angels>', e: 'Lightning two one, traffic, two o\'clock, five miles, northbound, F-35, angels three.', r: 'Lightning two one, tally-ho.', n: '"Traffic" must be the first word after the callsign.' },
+ { s: 'general', t: 'Squawk normal', w: 'An aircraft shows as a primary return only (no data block), e.g. a wingman or the one primary-only arrival per sim.', c: '<callsign>, squawk normal', e: 'Eagle one seven, squawk normal.', r: 'Eagle one seven.', n: '"Squawk <code>" (e.g. "squawk four five two one") also brings the data block back.' },
+ { s: 'general', t: 'Correction', w: 'You misspoke in the middle of a call.', c: '<callsign>, <wrong words>, correction, <right instruction>', e: 'Lightning two one, turn left heading two seven zero, correction, turn right heading two seven zero.', r: 'Lightning two one.', n: 'Everything before the last "correction" is disregarded; the callsign carries over. A call that starts with "correction" within about 10 seconds of your last call to that aircraft undoes that call.' },
+ { s: 'general', t: 'Roger', w: 'Acknowledge a pilot report (e.g. "see you", "established"). No action.', c: 'Roger', e: 'Roger.', r: '(no action)' },
+ { s: 'general', t: 'Ship turn: mother in a turn', w: 'The ship starts turning. Broadcast to everyone on frequency.', c: 'Ninety-nine, mother is in a <port|starboard> turn, standby for new BRC', e: 'Ninety-nine, mother is in a port turn, standby for new BRC.', r: 'No readback (sometimes one pilot answers "roger").', n: 'Scored on Marshal, Approach and Final. Use the turn direction shown on the scope banner.' },
+ { s: 'general', t: 'Ship turn: mother steady', w: 'The ship has finished its turn.', c: 'Ninety-nine, mother is steady, new BRC is <BRC>', e: 'Ninety-nine, mother is steady, new BRC is one eight five.', r: 'No readback.' },
+ { s: 'general', t: 'Frequency changes', w: 'Sending an aircraft to another position. Colors are fixed: Marshal Red, Approach Silver, Final Purple and Copper.', c: '<callsign>, go <red|silver|purple|copper>', e: 'Lightning two one, go purple.', r: 'Lightning two one.', n: 'Final answers its own frequency changes in words ("going red", "going silver"). "Contact final controller" also hands an aircraft to Final.' },
+ { s: 'general', t: 'When the pilot says "unable"', w: 'Not a call you make: what the pilot\'s "unable" means.', c: '(pilot) <callsign>, unable', e: 'Lightning two one, unable.', r: '—', n: 'The sim could not use the call (nothing understood, or a turn with no valid heading), or the value is out of limits ("unable angels …", "unable speed …"). Marshal: "unable, not on the approach" (handoff or missed approach before commencing). Final: "unable, full stop", "negative, practice approach", "unable heading, no gyro". Fix the call and say it again.' },
+ /* ---------------- Marshal ---------------- */
+ { s: 'marshal', t: 'Check-in (pilot calls you)', w: 'An arrival or flight of two checks in. Click its target to accept it before you answer.', c: '(pilot) Stinger Marshal, <callsign>, [flight of two, <wingman>,] <bearing> for <miles>, angels <angels>, state <fuel>, <souls> souls on board', e: 'Stinger Marshal, Venom two one, flight of two, Venom two two, two one zero for ten, angels six, state five point zero, two souls on board.', r: '—', n: 'One arrival per sim checks in from about 6 NM and asks for a CCA approach: work that one with the Approach calls (radar contact, angels 1.2 / 1, vectors for CCA, go purple).' },
+ { s: 'marshal', t: '99 weather', w: 'Once marshal aircraft are on frequency: the Case III weather broadcast. One point per marshal aircraft that hears it.', c: 'Ninety-nine, Stinger Marshal, weather <conditions>', e: 'Ninety-nine, Stinger Marshal, weather, ceiling eight hundred overcast, visibility two miles, altimeter two niner niner two.', r: 'No readback.', n: 'The sim listens for "ninety-nine" and "weather"; the rest is your brief.' },
+ { s: 'marshal', t: 'Marshal instructions (full call)', w: 'After check-in: the whole Case III assignment in one call.', c: '<callsign>, case three recovery, <LH-#> approach with CCA final, marshal <radial> at <DME>, angels <angels>, BRC <BRC>, outbound bearing <bearing>, expected approach time <minutes>', e: 'Venom two one, case three recovery, LH2 approach with CCA final, marshal zero three zero at two, angels two, BRC three six zero, outbound bearing two one zero, expected approach time one two.', r: 'Venom two one.', n: 'Radials are relative to BRC. Outbound bearing = DWH + 30. Jets: LH-1 030/4, LH-2 030/2, LH-3 180/(angels+15), minimum angels 2. Helos: LH-4 090/7, LH-5 030/2, minimum 1,500 ft. "Emergency approach" for the emergency helo marshal. The pilot holds quietly at the fix.' },
+ { s: 'marshal', t: 'Expected approach time', w: 'Give or change an aircraft\'s EAT on its own.', c: '<callsign>, expected approach time <minutes>', e: 'Eagle one six, expected approach time one eight.', r: 'Eagle one six.', n: 'The aircraft commences at its marshal fix at that minute and says "commencing".' },
+ { s: 'marshal', t: 'Cleared, report commencing', w: 'Clear a holding aircraft for its approach and ask for the commencing report.', c: '<callsign>, cleared for <LH-#> approach, report commencing', e: 'Eagle one six, cleared for LH2 approach, report commencing.', r: 'Eagle one six.  …at the fix: "Eagle one six, commencing."' },
+ { s: 'marshal', t: 'Commence', w: 'Start the approach now.', c: '<callsign>, commence', e: 'Venom two one, commence.', r: 'Venom two one, commencing.', n: 'If it is not at the fix yet it flies there first and commences. With no approach type assigned: "Venom two one, say approach type."' },
+ { s: 'marshal', t: 'Report 3 miles outbound', w: 'After commencing (LH-1, LH-2, LH-5): confirm it is established outbound.', c: '<callsign>, radar contact, report three miles outbound', e: 'Eagle one six, radar contact, report three miles outbound.', r: 'Eagle one six.  …later: "Eagle one six, established in outbound bearing."' },
+ { s: 'marshal', t: 'Report turning inbound', w: 'Marshal pattern birds only: ask for a call at the turn onto the final bearing.', c: '<callsign>, report turning inbound', e: 'Venom two one, report turning inbound.', r: 'Venom two one.  …at the turn: "Venom two one, turning inbound."', n: 'If it is already past the turn it reports right away.' },
+ { s: 'marshal', t: 'Report arcing', w: 'Marshal pattern birds only: ask for a call when the arc to the final bearing starts.', c: '<callsign>, report arcing', e: 'Ridge three one, report arcing.', r: 'Ridge three one.  …on the arc: "Ridge three one, arcing."', n: 'On the arc marshal birds configure on their own, silently: jets dirty up, helos do landing checks. LH-4 and the emergency marshal fly a 5 NM arc; for LH-1/2/3/5 the turn onto the final bearing counts as the arc.' },
+ { s: 'marshal', t: 'Execute missed approach', w: 'An aircraft on its LH approach must go around.', c: '<callsign>, execute missed approach', e: 'Eagle one six, execute missed approach.', r: 'Eagle one six, missed approach.', n: 'Before it has commenced: "Eagle one six, unable, not on the approach." Pilots also go missed on their own at the missed approach point.' },
+ { s: 'marshal', t: 'Handoff to Final', w: 'A commenced aircraft is inbound: switch it to Final.', c: '<callsign>, go <purple|copper>', e: 'Venom two one, go purple.', r: 'Venom two one.', n: 'Only after commencing (otherwise "unable, not on the approach"). A flight of two goes together.' },
+ { s: 'marshal', t: 'Handoff to Approach', w: 'Send an aircraft to Approach (Silver).', c: '<callsign>, go silver', e: 'Eagle one six, go silver.', r: 'Eagle one six.', n: 'Cancels any LH procedure in progress.' },
+ { s: 'marshal', t: 'Radar vectors (cancels the procedure)', w: 'You need to take an aircraft off its LH procedure.', c: '<callsign>, turn <left|right> heading <heading>', e: 'Eagle one six, turn right heading one two zero.', r: 'Eagle one six.', n: 'Any heading, altitude, sector or go-purple call cancels the LH procedure and the aircraft is on radar vectors.' },
+ /* ---------------- Approach ---------------- */
+ { s: 'approach', t: 'Check-in (pilot calls you)', w: 'A launch from the ship checks in. Click its target to accept it.', c: '(pilot) Stinger Approach, <callsign>, airborne, state <fuel>, <souls> souls on board, request practice PAR approach', e: 'Stinger Approach, Lightning two one, airborne, state four point five, two souls on board, request practice PAR approach.', r: '—', n: 'After a low approach it checks in again "off the low approach" with its position from mother.' },
+ { s: 'approach', t: 'Radar contact', w: 'First call after check-in, within 2 NM of the ship (later costs points). Saying "Stinger Approach" in the first call scores too.', c: '<callsign>, Stinger Approach, radar contact', e: 'Lightning two one, Stinger Approach, radar contact.', r: 'Lightning two one.' },
+ { s: 'approach', t: 'Radar contact with position', w: 'Radar identification by position; graded against the real range and bearing.', c: '<callsign>, radar contact, <miles> miles <direction> of mother', e: 'Lightning two one, radar contact, five miles northeast of mother.', r: 'Lightning two one.' },
+ { s: 'approach', t: 'First altitude after check-in', w: 'The first altitude you give: angels 1.2 for jets, angels 1 for helos.', c: '<callsign>, descend and maintain angels <1.2|1>', e: 'Lightning two one, descend and maintain angels one point two.', r: 'Lightning two one.' },
+ { s: 'approach', t: 'Vectors for the CCA', w: 'Set up the approach: heading, altitude, approach type and the Final frequency to expect.', c: '<callsign>, turn <left|right> heading <heading>, descend and maintain angels <angels>, vectors for CCA approach, expect final button <purple|copper>', e: 'Lightning two one, turn left heading one eight zero, descend and maintain angels one point two, vectors for CCA approach, expect final button purple.', r: 'Lightning two one.' },
+ { s: 'approach', t: 'Vectors for radar identification', w: 'You have not identified the aircraft yet and want a turn to do it.', c: '<callsign>, turn <left|right> heading <heading>, vectors for radar identification', e: 'Nighthawk two five, turn right heading zero nine zero, vectors for radar identification.', r: 'Nighthawk two five.' },
+ { s: 'approach', t: 'Pattern position', w: 'Tell the pilot where it is in the CCA pattern. Graded against the real leg and range.', c: '<callsign>, <upwind|crosswind|downwind|abeam|dogleg|base>, <miles> miles', e: 'Lightning two one, downwind, four miles.', r: 'Lightning two one.' },
+ { s: 'approach', t: 'Dirty up (jets)', w: 'Slow a jet for the approach (130–150 kt).', c: '<callsign>, dirty up', e: 'Lightning two one, dirty up.', r: 'Lightning two one.' },
+ { s: 'approach', t: 'Perform landing checks (helos)', w: 'Slow a helicopter for the approach (100–130 kt).', c: '<callsign>, perform landing checks', e: 'Nighthawk two five, perform landing checks.', r: 'Nighthawk two five.' },
+ { s: 'approach', t: 'Climbout instructions', w: 'Before the handoff: what to do after the low approach. Stored, not flown now.', c: '<callsign>, your climbout instructions are at one mile take angels <angels>, turn <left|right> heading <heading>', e: 'Lightning two one, your climbout instructions are at one mile take angels two, turn left heading two seven zero.', r: 'Lightning two one.', n: 'Re-vectoring before 1 NM past the ship cancels the stored turn.' },
+ { s: 'approach', t: 'Sector hold', w: 'Park an aircraft away from the pattern. Sectors: 1 NE, 2 SE, 3 SW, 4 NW.', c: '<callsign>, proceed to sector <1-4>, report established', e: 'Viper four five, proceed to sector two, report established.', r: 'Viper four five, proceed to sector two, report established.  …later: "Viper four five, established on sector two."', n: 'The only Approach instruction the pilot reads back in full.' },
+ { s: 'approach', t: 'Signal buster', w: 'Maximum speed (500 kt).', c: '<callsign>, signal buster', e: 'Lightning two one, signal buster.', r: 'Lightning two one.' },
+ { s: 'approach', t: 'Handoff to Final', w: 'Lined up inbound, about 3,000 ft or lower inside about 3 NM.', c: '<callsign>, go <purple|copper>', e: 'Lightning two one, go purple.', r: 'Lightning two one.', n: 'With Link ON the Final page takes it; solo, it self-recovers on the final bearing.' },
+ { s: 'approach', t: 'Send to Marshal', w: 'Hand an aircraft to Marshal (Red).', c: '<callsign>, go red', e: 'Nighthawk two five, go red.', r: 'Nighthawk two five.' },
+ /* ---------------- Final / PAR ---------------- */
+ { s: 'final', t: 'Check-in (pilot calls you)', w: 'The aircraft arrives 7–9 miles out. Its intention is full stop or practice approaches.', c: '(pilot) Stinger Final, <callsign>, <miles> miles, level <feet>, heading <heading>, for the PAR to the ship, <full stop|request multiple practice PARs>', e: 'Stinger Final, Lightning two one, eight miles, level one thousand five hundred, heading three four zero, for the PAR to the ship, full stop.', r: '—', n: 'After 1–3 practice approaches the last check-in says "this will be a full stop".' },
+ { s: 'final', t: 'Contact call', w: 'Your first call on final. Complete call scores a bonus.', c: '<callsign>, Stinger final, how do you hear me, wheels should be down, report see me', e: 'Lightning two one, Stinger final, how do you hear me, wheels should be down, report see me.', r: 'Lightning two one, loud and clear, wheels down, will report see you.' },
+ { s: 'final', t: 'Course calls', w: 'Every few seconds. Call what you see on the azimuth display.', c: '<on course | slightly left/right of course | left/right of course | well left/right of course | going left/right of course>', e: 'Slightly right of course.', r: 'Lightning two one.  (silent after "do not acknowledge")', n: 'Course line through the middle of the tick = on course; between middle and end = slightly; touching the end = left/right; not touching = well.' },
+ { s: 'final', t: 'Heading corrections', w: 'The only way to move the aircraft sideways. Pair it with a course call.', c: '<course call>, come <left|right> heading <heading>', e: 'Well right of course, come right heading three five zero.', r: 'Lightning two one.', n: 'Small corrections close in. On a no-gyro approach use turn / stop turn instead.' },
+ { s: 'final', t: 'Approaching glidepath', w: '10 to 30 seconds before the aircraft meets the glidepath (bonus point).', c: 'Approaching glidepath', e: 'Approaching glidepath.', r: 'Lightning two one.' },
+ { s: 'final', t: 'Begin descent', w: 'A separate call when it reaches the glidepath. The pilot only starts down on this call.', c: 'Begin descent', e: 'Begin descent.', r: 'Lightning two one.' },
+ { s: 'final', t: 'Do not acknowledge further transmissions', w: 'Right after begin descent, on its own.', c: 'Do not acknowledge further transmissions', e: 'Do not acknowledge further transmissions.', r: 'Lightning two one.  (then silent, except "see you", deck calls and emergencies)' },
+ { s: 'final', t: 'Glidepath calls', w: 'Every few seconds with the course call. Call what you see on the elevation display.', c: '<on glidepath | slightly above/below glidepath | above/below glidepath | well above/below glidepath | going above/below glidepath>', e: 'On course, slightly above glidepath.', r: '(silent after "do not acknowledge")', n: '"Slightly above" makes the pilot descend a bit faster, "slightly below" a bit slower; "on glidepath" brings it back to normal.' },
+ { s: 'final', t: 'Rate of descent', w: 'The aircraft is drifting off the glidepath steadily.', c: '<increase|reduce|adjust> rate of descent', e: 'Slightly below glidepath, reduce rate of descent.', r: '(silent after "do not acknowledge")' },
+ { s: 'final', t: 'Range calls', w: 'At least once every mile.', c: '<miles> miles  |  <n> and a half miles  |  three-quarter mile', e: 'On course, on glidepath, four miles.', r: '(silent after "do not acknowledge")', n: '"…miles from touchdown" also works.' },
+ { s: 'final', t: '"See you" (pilot report)', w: 'At 2 miles the pilot reports seeing the ship.', c: '(pilot) <callsign>, see you', e: 'Lightning two one, see you.', r: '—', n: 'No reply needed; "roger" is fine.' },
+ { s: 'final', t: 'Low altitude alert', w: 'The aircraft keeps sinking below the glidepath and glidepath calls do not stop it. All four parts are required.', c: 'Low altitude alert, <callsign>, check your altitude immediately, altimeter two niner niner two', e: 'Low altitude alert, Lightning two one, check your altitude immediately, altimeter two niner niner two.', r: 'Lightning two one, climbing.', n: 'The pilot answers even after "do not acknowledge", then climbs back to the glidepath on its own; no further glidepath calls are needed for the recovery. Incomplete alerts are not accepted. +5 when it is really sinking, −3 when it is not.' },
+ { s: 'final', t: 'Check wheels down', w: 'If you did not say "wheels should be down" in the contact call.', c: 'Check wheels down', e: 'Check wheels down.', r: 'Lightning two one.' },
+ { s: 'final', t: 'Deck call: helicopter (landing clearance)', w: 'Full-stop helicopter at about one mile, before half a mile.', c: 'One mile, go green', e: 'One mile, go green.', r: 'Going green.', n: 'The reply is the landing clearance. Without a deck call by half a mile the deck is fouled and the pilot waves off.' },
+ { s: 'final', t: 'Deck call: jet (landing clearance)', w: 'Full-stop jet at about three-quarter mile.', c: 'Three-quarter mile, call the ball', e: 'Three-quarter mile, call the ball.', r: 'Ball, state four point nine.', n: '"Roger ball" is optional. "Deck is clear, cleared to land spot seven" is also accepted as the clearance.' },
+ { s: 'final', t: 'Practice approach: jet climb out', w: 'Practice approach, jet, at one mile (instead of the deck call).', c: 'One mile, execute climb outs, go silver', e: 'One mile, execute climb outs, go silver.', r: 'Lightning two one, going silver.', n: 'Climbs to 1,200 ft with a left turn and comes back for another approach. To a full-stop aircraft: "unable, full stop".' },
+ { s: 'final', t: 'Practice approach: helo starboard delta', w: 'Practice approach, helicopter, at one mile.', c: 'One mile, enter starboard delta, go green', e: 'One mile, enter starboard delta, go green.', r: 'Nighthawk two five, entering starboard delta.', n: 'Climbs to 1,000 ft with a right turn. Wrong call for the type: "negative, request climb out / request starboard delta".' },
+ { s: 'final', t: 'Over the deck, contact Tower', w: 'Full stop, inside half a mile.', c: 'Over the deck … contact Tower', e: 'Over the deck. Lightning two one, contact Tower.', r: 'Lightning two one.' },
+ { s: 'final', t: 'Wave-off', w: 'Unsafe approach, fouled deck, or way off course or glidepath close in. Call it early if it gets low.', c: '<callsign>, wave off, wave off, climb and maintain <feet>, fly base recovery course <BRC>', e: 'Lightning two one, wave off, wave off, climb and maintain two thousand, fly base recovery course three six zero.', r: 'Waving off, heading three six zero, climbing 2,000, Lightning two one.', n: 'Without a heading the reply is "Waving off, base recovery course, climbing …". Pilots also wave off on their own when unstable, with no deck call, or when they never got "begin descent".' },
+ { s: 'final', t: 'Send back to Marshal', w: 'Return an aircraft to Marshal (Red).', c: '<callsign>, go red', e: 'Lightning two one, go red.', r: 'Lightning two one, going red.' },
+ { s: 'final', t: 'No-gyro approach', w: 'The aircraft has no heading reference: you call the turns.', c: '<callsign>, this will be a no gyro approach  ·  turn <left|right>  ·  stop turn  ·  make half standard rate turns', e: 'Lightning two one, this will be a no gyro approach.', r: 'Lightning two one, no gyro approach.  "Turn left" → "Turning left."  "Stop turn" → "Stopping turn."  "Make half standard rate turns" → "Half standard rate."', n: 'Turns are 3°/s, 1.5°/s after "half standard rate". Heading calls get "Unable heading, no gyro".' },
+ { s: 'final', t: 'Surveillance (ASR) approach', w: 'No glidepath. Announce by 4 miles (rotary) / 5 miles (fixed wing).', c: '<callsign>, this will be a surveillance approach', e: 'Nighthawk two five, this will be a surveillance approach.', r: 'Nighthawk two five, surveillance approach.', n: 'Glidepath calls are not used on an ASR approach.' },
+ { s: 'final', t: 'ASR: prepare to descend', w: 'One mile before the final approach fix.', c: '<callsign>, <miles> miles, prepare to descend in one mile', e: 'Nighthawk two five, four miles, prepare to descend in one mile.', r: 'Nighthawk two five.' },
+ { s: 'final', t: 'ASR: descend to MDA', w: 'At the final approach fix (3 miles rotary, 5 miles fixed wing). MDA is 470 ft.', c: '<callsign>, <miles> miles, descend to your minimum descent altitude, minimum descent altitude four seven zero', e: 'Nighthawk two five, three miles, descend to your minimum descent altitude, minimum descent altitude four seven zero.', r: 'Nighthawk two five, descending to four seven zero.' },
+ { s: 'final', t: 'ASR: surveillance minimums', w: 'At three-quarter mile (the missed approach point).', c: '<callsign>, surveillance minimums, <course call>, if mother not in sight, execute missed approach', e: 'Nighthawk two five, surveillance minimums, on course, if mother not in sight, execute missed approach.', r: 'Nighthawk two five, mother in sight.  — or —  Nighthawk two five, mother not in sight, executing missed approach.', n: 'ASR jets: "one mile, call the ball" at one mile when stable at the MDA ("Lightning two one, Lightning ball"; not visual: "Lightning two one, clara").' }
+];
+
+var $ = function (id) { return document.getElementById(id); };
+var tab = 'all', q = '';
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function hi(html) {   // highlight search words in already-escaped text (outside tags)
+  if (!q) return html;
+  var words = q.split(/\s+/).filter(Boolean).map(function (w) { return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); });
+  if (!words.length) return html;
+  var re = new RegExp('(' + words.join('|') + ')', 'gi');
+  return html.split(/(<[^>]+>)/).map(function (p) { return p.charAt(0) === '<' ? p : p.replace(re, '<mark>$1</mark>'); }).join('');
+}
+function tpl(s) { return hi(esc(s).replace(/&lt;([^&]+?)&gt;/g, '<span class="ph">&lt;$1&gt;</span>')); }
+function txt(e) { return [e.t, e.w, e.c, e.e, e.r, e.n || '', e.s].join(' ').toLowerCase(); }
+function match(e) { if (!q) return true; var t = txt(e); return q.toLowerCase().split(/\s+/).filter(Boolean).every(function (w) { return t.indexOf(w) >= 0; }); }
+var POSN = { general: 'All positions', marshal: 'Marshal', approach: 'Approach', final: 'Final' };
+function card(e) {
+  return '<div class="card ' + e.s + '"><span class="tag">' + POSN[e.s] + '</span><h3>' + hi(esc(e.t)) + '</h3>' +
+    '<div class="when">' + hi(esc(e.w)) + '</div>' +
+    '<div class="row"><b>Controller</b><span class="say">' + tpl(e.c) + '</span></div>' +
+    '<div class="row"><b>Example</b><span class="ex">“' + hi(esc(e.e)) + '”</span></div>' +
+    '<div class="row"><b>Pilot reply</b><span class="rb">' + hi(esc(e.r)) + '</span></div>' +
+    (e.n ? '<div class="note">' + hi(esc(e.n)) + '</div>' : '') + '</div>';
+}
+function render() {
+  var html = '', shown = 0;
+  SECTIONS.forEach(function (S) {
+    if (tab !== 'all' && tab !== S.id) return;
+    var list = E.filter(function (e) { return e.s === S.id && match(e); });
+    if (!list.length) return;
+    shown += list.length;
+    html += '<section class="sec" data-sec="' + S.id + '"><h2 class="' + S.cls + '">' + esc(S.name) + ' <span style="font-size:12px;color:var(--dim)">(' + list.length + ')</span></h2><p>' + esc(S.intro) + '</p></section>' + list.map(card).join('');
+  });
+  $('out').innerHTML = html || '<div class="empty">No calls match “' + esc(q) + '”. Try fewer words, or the All tab.</div>';
+  $('count').textContent = shown + ' of ' + E.length + ' calls' + (q ? ' matching “' + q + '”' : '') + (tab !== 'all' ? ' · ' + POSN[tab] : '');
+  document.querySelectorAll('.tabs button').forEach(function (b) {
+    var n = b.dataset.s === 'all' ? E.filter(match).length : E.filter(function (e) { return e.s === b.dataset.s && match(e); }).length;
+    var sp = b.querySelector('.n'); if (!sp) { sp = document.createElement('span'); sp.className = 'n'; b.appendChild(sp); } sp.textContent = n;
+  });
+}
+document.querySelectorAll('.tabs button').forEach(function (b) { b.onclick = function () { tab = b.dataset.s; document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('on', x === b); }); try { history.replaceState(null, '', '#' + tab); } catch (e) {} render(); }; });
+$('q').addEventListener('input', function () { q = this.value.trim(); render(); });
+$('bClear').onclick = function () { $('q').value = ''; q = ''; render(); $('q').focus(); };
+var prevTab = null;
+$('bPrint').onclick = function () { window.print(); };
+addEventListener('beforeprint', function () { prevTab = tab; tab = 'all'; var pq = q; q = ''; render(); q = pq; });
+addEventListener('afterprint', function () { if (prevTab) tab = prevTab; render(); });
+var h = (location.hash || '').slice(1); if (POSN[h]) { tab = h; document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('on', x.dataset.s === h); }); }
+render();
+window.__playbook = { entries: E, sections: SECTIONS };
+})();
+</script>
+</body></html>
