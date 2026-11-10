@@ -62,8 +62,6 @@ const CODES = [
   // ---- Final / PAR ----
   [/^bd$/, F, () => 'begin descent', 'bd', 'begin descent (own transmission)'],
   [/^cl$/, F, () => 'cleared to land', 'cl', 'cleared to land'],
-  [/^dc$/, F, () => 'deck is clear', 'dc', 'deck is clear'],
-  [/^cls(\d{1,2})$/, F, m => `deck is clear, cleared to land spot ${m[1]}`, 'cls7', 'deck is clear, cleared to land spot 7'],
   [/^cb$/, F, () => 'call the ball', 'cb', 'call the ball'],
   [/^gg$/, F, () => 'go green', 'gg', 'go green'],
   [/^co$/, F, () => 'execute climb outs, go silver', 'co', 'execute climb outs, go silver'],
