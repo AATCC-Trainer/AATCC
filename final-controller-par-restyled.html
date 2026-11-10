@@ -1246,10 +1246,10 @@ function updatePar(a, dt) {
     if (a.sinkOn) { a.sinkT += dt; target = nom + Math.min(1400, 35 * a.sinkT) + a.gustV; }        // sinker: glidepath calls don't fix it
     else if (a.recover) {                                                                        // after the low altitude alert: climb back to the glidepath
       const below = gpAlt(a.r) - a.z;
-      target = nom - clamp(below * 10, -300, 1200);
+      target = nom - clamp(below * 12, -300, 1500);   // prompt but realistic climb back to the glidepath
       if (below < 15) { a.recover = false; a.corr = 0; a.bias = 0; }
     }
-    a.vs += (target - a.vs) * Math.min(1, dt / 2.5);
+    a.vs += (target - a.vs) * Math.min(1, dt / (a.recover ? 1.5 : 2.5));
     a.corr *= Math.exp(-dt / 45);
   } else if (a.phase === 'final' || a.phase === 'linkin') {
     const target = clamp((a.levelAlt - a.z) * 3, -1500, 1500) * -1;
@@ -1556,11 +1556,14 @@ function execute(p, src) {
   if (p.cmds.some(c => c.k === 'laa') && PAR_PHASES.includes(a.phase)) {
     const q = laaParts(p.raw), full = q.alert && q.check && q.alt && p.cs === a.cs;
     if (!full) log('warn', `Incomplete low altitude alert to ${a.cs} (needs ${[p.cs === a.cs ? '' : 'the callsign', q.alert ? '' : '"low altitude alert"', q.check ? '' : '"check your altitude immediately"', q.alt ? '' : '"altimeter two niner niner two"'].filter(Boolean).join(', ')}); not accepted.`);
-    else if (a.sinkOn) {
-      a.sinkOn = false; a.sinkDone = true; a.recover = true; a.corr = 0; a.bias = 0; special = true;
-      addPts(a, 5, `★ Low altitude alert for ${a.cs}: ${Math.round(gpAlt(a.r) - a.z)} ft below the glidepath, recovering`, 'good');
+    else {   // full alert: the pilot corrects back up to the glidepath on their own (no further GP calls needed); clears any instructor GP offset
+      const wasSink = a.sinkOn, below = gpAlt(a.r) - a.z;
+      a.instGpOff = null; a.sinkOn = false; if (wasSink) a.sinkDone = true; a.corr = 0; a.bias = 0; special = true;
+      if (a.phase === 'descent' && below > 15) a.recover = true;
+      if (wasSink) addPts(a, 5, `★ Low altitude alert for ${a.cs}: ${Math.round(below)} ft below the glidepath, recovering`, 'good');
+      else judge(a, false, 'low altitude alert', `not sinking (${actualGp(a)})`);
       pilotSay(a, `${a.tel}, climbing.`, `${a.telSay}, climbing.`, true, false, true);   // safety reply, even after DNA
-    } else { judge(a, false, 'low altitude alert', `not sinking (${actualGp(a)})`); }
+    }
   }
   // ship initial-contact bonus: callsign + "Stinger final" + "how do you hear me" + "wheels should be down" + "report see me"
   if (isShip() && !a.contactBonus && PAR_PHASES.includes(a.phase) && p.cs === a.cs) {
