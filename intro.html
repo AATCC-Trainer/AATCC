@@ -1,0 +1,972 @@
+<!doctype html><html lang="en"><head>
+<script src="gate.js"></script>
+<script src="phrase-match.js"></script>
+<script src="shorthand.js"></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Intro</title><meta name="apple-mobile-web-app-title" content="Intro"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#050b06"><link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="approach-192.png">
+<style>
+:root{--g:#a8f0b2;--gd:#3f8a4c;--gdd:#1e3f24;--bg:#050b06;--panel:#08130a;--panel2:#0c1a0f;--hov:#12301a;--dim:#6f9c76;--amber:#ffbf3c;--bad:#ff6a6a;--ok:#6dff86;
+--red:#ff5a6e;--silver:#c9ced6;--purple:#b48cff;--copper:#e0915a}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--g);font-family:Consolas,Menlo,"DejaVu Sans Mono",monospace;-webkit-text-size-adjust:100%}
+body{overflow:hidden}
+#app{display:flex;flex-direction:column;height:100%;height:100dvh}
+#top{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--gdd);flex-wrap:wrap;padding-top:max(6px,env(safe-area-inset-top))}
+#top a.home{color:var(--dim);text-decoration:none;font-size:13px;padding:4px 6px;border:1px solid var(--gdd);border-radius:3px}
+#top .ttl{font-size:13px;letter-spacing:1px;color:var(--g);white-space:nowrap}
+#top .ttl b{color:#d8ffde}
+#prog{flex:1;min-width:160px;display:flex;gap:4px;align-items:center}
+#prog .seg{flex:1;height:18px;border:1px solid var(--gdd);border-radius:3px;position:relative;overflow:hidden;font-size:10px;color:var(--dim);display:flex;align-items:center;justify-content:center}
+#prog .seg i{position:absolute;left:0;top:0;bottom:0;background:#174a22;width:0;transition:width .3s}
+#prog .seg span{position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 3px}
+#prog .seg.cur{border-color:var(--g);color:#d8ffde}#prog .seg.done{color:var(--ok)}
+button{font-family:inherit;font-size:14px;background:var(--panel2);color:var(--g);border:1px solid var(--gd);border-radius:4px;padding:7px 12px;min-height:38px;cursor:pointer;touch-action:manipulation}
+button:hover:not(:disabled){background:var(--hov)}button:disabled{opacity:.35;cursor:default}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+#top button{min-height:30px;padding:3px 9px;font-size:13px}
+#main{flex:1;display:flex;min-height:0}
+#scopeBox{flex:1;position:relative;min-width:0;min-height:0}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:manipulation}
+#scopeTag{position:absolute;left:8px;top:6px;font-size:12px;color:var(--dim);pointer-events:none}
+#scopeTag b{padding:1px 6px;border:1px solid;border-radius:3px;margin-right:4px}
+#panel{width:440px;max-width:46vw;display:flex;flex-direction:column;border-left:1px solid var(--gdd);background:var(--panel);min-height:0}
+#pscroll{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}
+#mentor{border:1px solid var(--gd);border-radius:6px;padding:10px;background:#0a1a0d;position:relative}
+#mentor .who{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:var(--dim)}
+#mentor .av{width:30px;height:30px;border-radius:50%;border:2px solid var(--amber);display:flex;align-items:center;justify-content:center;color:var(--amber);font-weight:bold}
+#mentor .who b{color:var(--amber);letter-spacing:1px}
+#say{font-size:15px;line-height:1.45;color:#d8ffde}
+#say p{margin:0 0 7px}#say p:last-child{margin:0}
+#say .k{color:var(--amber)}
+.ex{display:block;margin:6px 0;padding:6px 8px;border-left:3px solid var(--g);background:#0c2211;color:#eaffee}
+.task{border:1px dashed var(--amber);border-radius:6px;padding:8px 10px;color:var(--amber);font-size:15px}
+.task b{color:#ffe1a0}
+.opts{display:flex;flex-direction:column;gap:6px}
+.opts button{text-align:left;line-height:1.35;padding:9px 10px}
+.opts button .n{color:var(--dim);margin-right:6px}
+.opts button.right{border-color:var(--ok);color:var(--ok);background:#0f2c15}.opts button.wrong{border-color:var(--bad);color:var(--bad)}
+#fb{font-size:14px;line-height:1.45;border-radius:6px;padding:0}
+#fb:not(:empty){padding:8px 10px;border:1px solid}
+#fb.ok{border-color:var(--ok);color:#c9ffd3;background:#0c2611}#fb.bad{border-color:var(--bad);color:#ffd0d0;background:#2a0c0c}#fb.info{border-color:var(--gd);color:var(--g)}
+#nav{display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid var(--gdd);padding-bottom:max(8px,env(safe-area-inset-bottom))}
+#nav #stepNo{flex:1;text-align:center;font-size:12px;color:var(--dim)}
+#bNext{background:#123f1a;border-color:var(--g);color:#d8ffde;font-weight:bold;min-width:110px}
+#bNext.pulse{animation:pulse 1.2s infinite}@keyframes pulse{50%{box-shadow:0 0 0 4px rgba(120,255,140,.25)}}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{border-radius:16px;padding:6px 11px;min-height:34px}
+.built{min-height:46px;border:1px solid var(--gdd);border-radius:6px;padding:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:#030803}
+.built:empty::before{content:"Tap the words below in order…";color:var(--dim);font-size:13px}
+.built button{border-color:var(--amber);color:#ffe1a0}
+.dlg{display:flex;flex-direction:column;gap:5px;font-size:14px}
+.dlg div{padding:6px 8px;border-radius:5px;line-height:1.35}
+.dlg .you{background:#0c2211;border-left:3px solid var(--g)}.dlg .plt{background:#151a22;border-left:3px solid var(--silver);color:#e6e9ee}
+.dlg .lbl{font-size:11px;color:var(--dim);display:block}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.vis button.on{background:#123f1a;border-color:var(--g);color:#d8ffde}
+#voice{display:flex;flex-direction:column;gap:7px}
+#ptt{display:flex;align-items:center;justify-content:center;gap:10px;font-size:16px;font-weight:bold;min-height:58px;border-width:2px;border-color:var(--g);background:#0f2c15;color:#d8ffde;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#ptt .dot{width:14px;height:14px;border-radius:50%;background:var(--g);box-shadow:0 0 8px var(--g)}
+#ptt.live{background:#3a0d12;border-color:var(--red);color:#ffd6dc}#ptt.live .dot{background:var(--red);box-shadow:0 0 12px var(--red);animation:pulse 0.8s infinite}
+#ptt.off{opacity:.5}
+.notice{font-size:12px;color:var(--amber);border:1px solid #6b5420;border-radius:4px;padding:6px 8px;line-height:1.4}
+.typed{display:flex;gap:6px}
+.typed input{flex:1;min-width:0;font-family:inherit;font-size:16px;background:#030803;color:#d8ffde;border:1px solid var(--gd);border-radius:4px;padding:8px}
+.heard{font-size:13px;color:var(--dim);line-height:1.4}.heard b{color:#eaffee;font-weight:normal}
+#rlog{font-size:13px;display:flex;flex-direction:column;gap:3px;max-height:150px;overflow-y:auto}
+#rlog div{padding:3px 6px;border-radius:3px}#rlog .you{color:#d8ffde;background:#0c2211}#rlog .plt{color:#e6e9ee;background:#151a22}#rlog .sys{color:var(--dim)}
+.small{font-size:12px;color:var(--dim)}
+#ov{position:fixed;inset:0;background:rgba(3,8,4,.86);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+#ov.open{display:flex}
+#ov .card{max-width:520px;width:100%;border:1px solid var(--g);border-radius:8px;background:#071109;padding:22px 20px;text-align:center;max-height:100%;overflow-y:auto}
+#ov h1{font-size:22px;margin:0 0 6px;color:#d8ffde;letter-spacing:1px}#ov h2{font-size:14px;color:var(--amber);margin:0 0 14px;font-weight:normal}
+#ov p{font-size:14px;line-height:1.5;margin:8px 0;color:var(--g)}
+#ov .btns{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+#ov .btns a{display:block;padding:11px;border:1px solid;border-radius:4px;text-decoration:none;font-size:15px}
+.stars{font-size:40px;letter-spacing:6px;color:var(--amber);margin:8px 0}.stars .e{color:#2a3a2c}
+.f-red{color:var(--red);border-color:var(--red)}.f-silver{color:var(--silver);border-color:var(--silver)}.f-purple{color:var(--purple);border-color:var(--purple)}.f-copper{color:var(--copper);border-color:var(--copper)}
+#prog .seg .sh{display:none}
+@media (max-width:820px),(orientation:portrait) and (max-width:1100px){
+  #main{flex-direction:column}
+  #scopeBox{flex:none;height:42vh;height:42dvh;min-height:220px}
+  #panel{width:auto;max-width:none;flex:1;border-left:none;border-top:1px solid var(--gdd)}
+  #top .ttl{display:none}
+  #top .wide,#prog .seg .lg{display:none}
+  #prog .seg .sh{display:inline}
+  #prog{min-width:0}
+}
+</style></head><body>
+<div id="app">
+  <header id="top">
+    <a class="home" href="index.html" title="Back to the home page">◂ Home</a>
+    <div class="ttl"><b>AATCC INTRO</b> · <span id="chName"></span></div>
+    <div id="prog" aria-label="Chapter progress"></div>
+    <button id="bMute" title="Mute / unmute voices (M)" aria-label="Mute">🔊</button>
+    <button id="bRestart" title="Restart the intro from the beginning" aria-label="Restart intro">↺<span class="wide"> Restart</span></button>
+  </header>
+  <main id="main">
+    <section id="scopeBox" aria-label="Radar scope"><canvas id="cv"></canvas><div id="scopeTag"></div></section>
+    <section id="panel">
+      <div id="pscroll">
+        <div id="mentor" aria-live="polite"><div class="who"><span class="av">A</span><b>AERO</b><span>Senior controller · your mentor</span></div><div id="say"></div></div>
+        <div id="task"></div>
+        <div id="fb" aria-live="polite"></div>
+      </div>
+      <div id="nav"><button id="bBack" title="Previous step (←)">◂ Back</button><span id="stepNo"></span><button id="bNext" title="Next step (Enter)">Next ▸</button></div>
+    </section>
+  </main>
+</div>
+<div id="ov" role="dialog" aria-modal="true"><div class="card" id="ovCard"></div></div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const SIM = 2;                 // intro clock runs at 2x so the story keeps moving (rates below are real per-second rates)
+const TURN_RATE = 3;           // deg/s, standard rate turn
+const CLIMB_FPM = 2000, SPD_RATE = 3, NM_FT = 6076.12, GP_TAN = Math.tan(3 * Math.PI / 180), SWEEP_MS = 4000;
+const FCOL = { red: '#ff5a6e', silver: '#c9ced6', purple: '#b48cff', copper: '#e0915a', none: '#a8f0b2' };
+const FNAME = { red: 'Marshal · Red', silver: 'Approach · Silver', purple: 'Final · Purple', copper: 'Final · Copper' };
+const LS_KEY = 'aatccIntro.v1', LS_MUTE = 'aatccIntroMute';
+const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
+
+/* ===================== callsigns + spoken numbers (mirrors approach-controller.html) ===================== */
+const AIRLINES = [
+  { icao: 'LTNG', tel: 'Lightning', words: ['lightning', 'lightening'] },
+  { icao: 'NHWK', tel: 'Nighthawk', words: ['nighthawk', 'night hawk', 'nite hawk', 'night hawks'] },
+  { icao: 'VIPR', tel: 'Viper', words: ['viper', 'vipers', 'piper'] },
+  { icao: 'VENM', tel: 'Venom', words: ['venom'] },
+  { icao: 'EGLE', tel: 'Eagle', words: ['eagle', 'eagles'] },
+  { icao: 'RDGE', tel: 'Ridge', words: ['ridge'] },
+];
+const DW = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'niner'];
+const sayDigits = n => String(n).split('').map(d => d === '.' ? 'point' : (DW[+d] ?? d)).join(' ');
+const h3 = v => String(Math.round(v) % 360 || 360).padStart(3, '0');
+function tel(cs) { const al = AIRLINES.find(a => cs.startsWith(a.icao)); return al ? al.tel + ' ' + cs.slice(al.icao.length) : cs; }
+function telSay(cs) { const al = AIRLINES.find(a => cs.startsWith(a.icao)); return al ? al.tel + ' ' + sayDigits(cs.slice(al.icao.length)) : cs; }
+const angTxt = alt => String(Math.round(alt / 100) / 10);
+const angSay = alt => sayDigits(angTxt(alt));
+
+const DIG = { zero: 0, oh: 0, o: 0, one: 1, two: 2, three: 3, tree: 3, four: 4, fower: 4, five: 5, fife: 5, six: 6, seven: 7, eight: 8, ait: 8, nine: 9, niner: 9 };
+const TEEN = { ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
+const TENS = { twenty: 20, thirty: 30, forty: 40, fourty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+const isWordNum = t => (t in DIG && t !== 'oh' && t !== 'o') || t in TEEN || t in TENS;
+const tokVal = t => /^\d+(\.\d+)?$/.test(t) ? parseFloat(t) : (t in DIG ? DIG[t] : t in TEEN ? TEEN[t] : t in TENS ? TENS[t] : 0);
+function runToStr(run) {
+  if (run.includes('hundred') || run.includes('thousand')) {
+    let total = 0, cur = 0, lastD = false;
+    for (const t of run) {
+      if (t === 'thousand') { total += (cur || 1) * 1000; cur = 0; }
+      else if (t === 'hundred') cur = (cur || 1) * 100;
+      else if (t !== 'point') { const v = tokVal(t); cur = (lastD && v < 10 && cur < 10) ? cur * 10 + v : cur + v; lastD = v < 10; continue; }
+      lastD = false;
+    }
+    return String(total + cur);
+  }
+  let s = '';
+  for (let i = 0; i < run.length; i++) {
+    const t = run[i];
+    if (/^\d+(\.\d+)?$/.test(t)) s += t;
+    else if (t === 'point') s += '.';
+    else if (t in DIG) s += String(DIG[t]);
+    else if (t in TEEN) s += String(TEEN[t]);
+    else if (t in TENS) { const n = run[i + 1]; if (n && n in DIG && DIG[n] > 0 && n !== 'oh' && n !== 'o') { s += String(TENS[t] + DIG[n]); i++; } else s += String(TENS[t]); }
+  }
+  return s.replace(/\.$/, '');
+}
+function normalizeSpeech(raw) {
+  let s = ' ' + String(raw).toLowerCase() + ' ';
+  s = s.replace(/(\d),(\d{3})/g, '$1$2');
+  s = s.replace(/[’`]/g, "'");
+  s = s.replace(/\bwave-?off\b|\bwaive\s+off\b|\bwave\s+of\b/g, ' wave off ');
+  s = s.replace(/(\d)\.(\d)/g, '$1dot$2');
+  s = s.replace(/,/g, ' , ');
+  s = s.replace(/[^a-z0-9\s,]/g, ' ');
+  s = s.replace(/dot/g, '.');
+  s = s.replace(/\b(\d+)(miles?|knots|kts|feet|ft)\b/g, '$1 $2');
+  s = s.replace(/\bglide\s*(?:path|slope|pass|bath|past)\b|\bglideslope\b/g, ' glidepath ');
+  s = s.replace(/\b(dissent|decent|descents)\b/g, 'descent');
+  s = s.replace(/\bnight\s*hawks?\b/g, 'nighthawk');
+  s = s.replace(/\bgo\s+round\b|\bgoaround\b/g, 'go around');
+  s = s.replace(/\bb\s+r\s+c\b/g, 'brc');
+  s = s.replace(/\bwrite\b|\bwright\b/g, 'right').replace(/\bleft\s+of\s+cores\b/g, 'left of course');
+  s = s.replace(/\bcent(?:er|re)\s*line\b/g, 'centerline');
+  s = s.replace(/\b(?:hitting|hedding|heddings?|headings|header|headers|heating|hiding|heeding)(?:\s+s)?\s+(?=(?:\d+|zero|oh|one|two|to|too|three|tree|four|for|five|fife|six|seven|eight|nine|niner)\b)/g, 'heading ');
+  s = s.replace(/\bheading\s+(?:to|too)\s+(?=\w)/g, 'heading two ');
+  s = s.replace(/\b(?:uh+|um+|umm+|er|erm|ah+|hmm+|please|okay|ok)\b/g, ' ');
+  s = s.replace(/\b(?:angel|angle)\s+s\b|\b(?:angels|angles|angel|angle)\b/g, ' angels ');
+  s = s.replace(/\bknots?\b|\bkts\b/g, 'knots');
+  const toks = s.split(/\s+/).filter(Boolean), out = [];
+  let run = [], locked = false;
+  const flush = () => { if (run.length) out.push(runToStr(run)); run = []; locked = false; };
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    if (t === ',') { flush(); continue; }
+    const multi = /^\d{2,}(\.\d+)?$/.test(t) || /^\d+\.\d+$/.test(t), single = /^\d$/.test(t);
+    if (multi) { flush(); run = [t]; locked = true; continue; }
+    if (single || isWordNum(t)) { if (locked) flush(); run.push(t); continue; }
+    if ((t === 'oh' || t === 'o') && run.length) { if (locked) flush(); run.push('zero'); continue; }
+    if ((t === 'hundred' || t === 'thousand') && run.length) { run.push(t); continue; }
+    if (t === 'point' && run.length && toks[i + 1] && (isWordNum(toks[i + 1]) || /^\d$/.test(toks[i + 1]))) { run.push('point'); locked = false; continue; }
+    if (t === 'and' && run.some(x => x === 'hundred' || x === 'thousand') && toks[i + 1] && isWordNum(toks[i + 1])) continue;
+    flush(); out.push(t);
+  }
+  flush();
+  return ' ' + out.join(' ') + ' ';
+}
+function extractCallsign(s, known) {
+  const matchDigits = (prefix, digits) => { for (let len = digits.length; len >= 1; len--) { const cs = prefix + digits.slice(0, len); if (known.includes(cs)) return { cs, rest: digits.slice(len) }; } return null; };
+  let m = s.match(new RegExp('\\b(' + AIRLINES.map(a => a.icao.toLowerCase()).join('|') + ')\\s?(\\d{1,4})\\b'));
+  if (m) { const pre = m[1].toUpperCase(), hit = matchDigits(pre, m[2]); return { cs: hit ? hit.cs : pre + m[2], unknown: !hit, idx: m.index, s: s.replace(m[0], ' ' + (hit ? hit.rest : '') + ' ') }; }
+  for (const al of AIRLINES) for (const w of al.words) {
+    m = s.match(new RegExp('\\b' + w + '\\s+(\\d{1,6})\\b'));
+    if (m) { const hit = matchDigits(al.icao, m[1]); return { cs: hit ? hit.cs : al.icao + m[1], unknown: !hit, idx: m.index, s: s.replace(m[0], ' ' + (hit ? hit.rest : '') + ' ') }; }
+  }
+  for (const al of AIRLINES) for (const w of al.words) { const i = s.search(new RegExp('\\b' + w + '\\b')); if (i >= 0) return { cs: null, bare: al.tel, idx: i, s }; }
+  return { cs: null, s };
+}
+const Q = w => (w === 'well' || w === 'way' || w === 'too' || w === 'very') ? 'well' : (w ? 'slightly' : null);
+const SIDE = w => (w === 'left' ? 'L' : w === 'right' ? 'R' : (w === 'above' || w === 'high') ? 'above' : 'below');
+// subset of the Approach / Final scope patterns (same regexes): the instructions the intro aircraft can fly
+const PATTERNS = [
+  [/\bgo(?:\s+(?:to|too|two))?\s+(purple|copper|coppers|purpel)(?:\s+buttons?)?\b/g, m => ({ k: 'freq', v: /^c/i.test(m[1]) ? 'copper' : 'purple' })],
+  [/\bgo(?:\s+(?:to|too|two))?\s+red(?:\s+buttons?)?\b/g, () => ({ k: 'freq', v: 'red' })],
+  [/\bgo(?:\s+(?:to|too|two))?\s+(?:silver|sliver|silvar)(?:\s+buttons?)?\b/g, () => ({ k: 'freq', v: 'silver' })],
+  [/\b(?:the\s+)?deck\s+is\s+clear\b/g, () => ({ k: 'deckClear' })],
+  [/\bcleared\s+(?:to\s+)?land(?:ing)?\b(?:\s+(?:on\s+spot|spot)\s+\d{1,2})?/g, () => ({ k: 'clearLand' })],
+  [/\bwave off(?:\s+wave off)*\b|\bgo around\b|\bexecute\s+(?:a\s+)?missed approach\b|\bmissed approach\b/g, () => ({ k: 'ga' })],
+  [/\b(?:take\s+|climb\s+(?:and\s+maintain\s+|to\s+)?|descend\s+(?:and\s+maintain\s+|to\s+)?|maintain\s+)?angels\s+(\d+(?:\.\d+)?)\b/g, m => { const n = parseFloat(m[1]); return { k: 'alt', v: Math.round(n < 100 ? n * 1000 : n) }; }],
+  [/\b(?:climb|descend)(?:\s+and\s+maintain|\s+to|\s+maintain)?\s+(\d{2,5})(?:\s+feet)?\b|\bmaintain\s+(\d{4,5})(?:\s+feet)?\b/g, m => { let v = +(m[1] || m[2]); if (v < 100) v *= 100; return { k: 'alt', v }; }],
+  [/\b(?:fly\s+)?(?:base\s+recovery\s+course|brc)\s+(\d{1,3})\b/g, m => ({ k: 'hdg', dir: null, v: +m[1] })],
+  [/\b(?:turn\s+|come\s+)?(left|right)\s+(?:turn\s+)?(?:to\s+)?heading\s+(\d{1,3})\b|\b(?:fly\s+|turn\s+to\s+)?heading\s+(\d{1,3})\b|\b(?:turn|come)\s+(left|right)\s+(?:to\s+)?(\d{3})\b/g,
+    m => { const dir = m[1] || m[4] || null; return { k: 'hdg', dir: dir ? SIDE(dir) : null, v: +(m[2] || m[3] || m[5]) }; }],
+  [/\b(?:going|drifting|moving)\s+(left|right)\s+(?:of\s+)?(?:course|centerline)\b/g, m => ({ k: 'course', q: 'going', side: SIDE(m[1]) })],
+  [/\b(?:(slightly|well|way|little|a little|very)\s+)?(left|right)\s+of\s+(?:the\s+)?(?:course|centerline)\b/g, m => ({ k: 'course', q: Q(m[1] === 'little' || m[1] === 'a little' ? 'slightly' : m[1]), side: SIDE(m[2]) })],
+  [/\bon\s+(?:course|centerline|the centerline)\b/g, () => ({ k: 'onCourse' })],
+  [/\bapproaching\s+(?:the\s+)?glidepath\b/g, () => ({ k: 'approachingGp' })],
+  [/\b(?:(slightly|well|way|little|a little|too|very)\s+)?(above|below|high|low)(?:\s+of)?(?:\s+the)?\s+glidepath\b/g, m => ({ k: 'gp', q: Q(m[1]), side: SIDE(m[2]) })],
+  [/\bon\s+(?:the\s+)?(?:glidepath|path)\b/g, () => ({ k: 'onGp' })],
+  [/\b(?:begin|start|commence)(?:\s+your)?\s+descen[td]\b|\bdescend now\b/g, () => ({ k: 'beginDescent' })],
+  [/\b(?:(?:signal|signals|single|sigma)\s+)?(?:buster|busters|busta)\b/g, () => ({ k: 'buster' })],
+  [/\b(?:reduce|increase|maintain|slow)(?:\s+(?:your\s+)?speed)?(?:\s+to)?\s+(\d{2,3})(?:\s+knots)?\b|\bspeed\s+(\d{2,3})(?:\s+knots)?\b|\b(\d{2,3})\s+knots\b/g, m => ({ k: 'spd', v: +(m[1] || m[2] || m[3]) })],
+];
+const PM = t => { try { return window.PhraseMatch ? window.PhraseMatch.normalize(t, { protect: AIRLINES.flatMap(a => a.words) }) : String(t); } catch (e) { return String(t); } };
+function parse(raw, known) {
+  const norm = normalizeSpeech(PM(raw));
+  let s = norm.replace(/\bheading\s+(\d{3})(\d+)\b/g, 'heading $1 $2');
+  const csr = extractCallsign(s, known); s = csr.s;
+  const used = new Array(s.length).fill(false), found = [];
+  for (const [re, fn] of PATTERNS) {
+    re.lastIndex = 0; let m;
+    while ((m = re.exec(s))) {
+      if (!m[0].trim()) { re.lastIndex++; continue; }
+      const a = m.index, b = a + m[0].length; let ov = false; for (let i = a; i < b; i++) if (used[i]) { ov = true; break; }
+      if (ov) continue;
+      const c = fn(m); if (c.k === 'hdg' && !(c.v >= 1 && c.v <= 360)) continue;
+      for (let i = a; i < b; i++) used[i] = true; found.push({ i: a, c });
+    }
+  }
+  found.sort((p, q) => p.i - q.i);
+  const cmds = found.map(f => f.c);
+  const hdgMissing = !cmds.some(c => c.k === 'hdg') && (/\bheading\b/.test(norm) || /\b(?:turn|come)\s+(?:left|right)\b/.test(s));
+  const csLate = csr.idx != null && csr.idx > 0 && /\b(turn|heading|climb|descend|maintain|knots|angels|cleared|begin|slow|reduce|go)\b/.test(norm.slice(0, csr.idx));
+  return { raw, norm: norm.trim(), cs: csr.cs, csUnknown: !!csr.unknown, bare: csr.bare || null, csLate, cmds, hdgMissing };
+}
+function cmdStr(c) {
+  switch (c.k) {
+    case 'hdg': return (c.dir ? (c.dir === 'L' ? 'turn left ' : 'turn right ') : 'fly ') + 'heading ' + h3(c.v);
+    case 'alt': return (c.v % 100 === 0 && c.v < 18000 ? 'angels ' + angTxt(c.v) : c.v + ' ft');
+    case 'spd': return c.v + ' knots';
+    case 'buster': return 'signal buster';
+    case 'freq': return 'go ' + c.v;
+    case 'clearLand': return 'cleared to land';
+    case 'deckClear': return 'deck is clear';
+    case 'ga': return 'wave off';
+    case 'course': return (c.q === 'going' ? 'going ' : (c.q ? c.q + ' ' : '')) + (c.side === 'L' ? 'left' : 'right') + ' of course';
+    case 'onCourse': return 'on course';
+    case 'gp': return (c.q ? c.q + ' ' : '') + c.side + ' glidepath';
+    case 'onGp': return 'on glidepath';
+    case 'approachingGp': return 'approaching glidepath';
+    case 'beginDescent': return 'begin descent';
+  }
+  return c.k;
+}
+const INFO_K = new Set(['course', 'onCourse', 'gp', 'onGp', 'approachingGp', 'beginDescent', 'deckClear']);
+
+/* ===================== little radar sim ===================== */
+const W = { range: 15, course: false, vis: 'both', hl: {}, hold: null, t: 0, acs: [], sweep: 0, flash: null, mark: null };
+function mk(o) {
+  const a = Object.assign({ cs: 'LTNG21', x: 0, y: -10, hdg: 360, tgtHdg: null, turn: 0, alt: 3000, tgtAlt: null, spd: 250, tgtSpd: null, freq: 'none', code: '4213',
+    trail: [], mode: 'free', trackCL: false, gpOn: false, cleared: false, landed: false }, o);
+  if (a.tgtAlt == null) a.tgtAlt = a.alt; if (a.tgtSpd == null) a.tgtSpd = a.spd;
+  a.paint = { x: a.x, y: a.y, alt: a.alt, spd: a.spd };
+  if (o.seedTrail) { const r = a.hdg * Math.PI / 180, st = a.spd / 3600 * (SWEEP_MS / 1000); for (let k = 5; k >= 1; k--) a.trail.push({ x: a.x - Math.sin(r) * st * k, y: a.y - Math.cos(r) * st * k }); }
+  return a;
+}
+const dist = a => Math.hypot(a.x, a.y);
+const gpAlt = d => d * NM_FT * GP_TAN + 60;
+const angDiff = (a, b) => ((b - a + 540) % 360) - 180;
+function stepAc(a, dt) {
+  if (a.landed) return;
+  if (a.mode === 'hold' && a.hold) {
+    const H = a.hold, w = (a.spd / 3600) / H.r * dt * 180 / Math.PI;
+    H.ang = (H.ang + w) % 360; const r = H.ang * Math.PI / 180;
+    a.x = H.x + Math.sin(r) * H.r; a.y = H.y + Math.cos(r) * H.r; a.hdg = (H.ang + 90) % 360;
+  } else {
+    if (a.trackCL || a.mode === 'final') { a.tgtHdg = (360 + Math.max(-12, Math.min(12, -a.x * 70))) % 360; a.turn = 0; }
+    if (a.tgtHdg != null) {
+      const togo = a.turn === -1 ? (a.hdg - a.tgtHdg + 360) % 360 : a.turn === 1 ? (a.tgtHdg - a.hdg + 360) % 360 : Math.abs(angDiff(a.hdg, a.tgtHdg));
+      const dir = a.turn || Math.sign(angDiff(a.hdg, a.tgtHdg)) || 1, stp = Math.min(TURN_RATE * dt, togo);
+      a.hdg = (a.hdg + dir * stp + 360) % 360;
+      if (togo - stp < 0.01) { a.hdg = a.tgtHdg % 360; if (!a.trackCL && a.mode !== 'final') { a.tgtHdg = null; a.turn = 0; } }
+    }
+    const r = a.hdg * Math.PI / 180, d = a.spd / 3600 * dt;
+    a.x += Math.sin(r) * d; a.y += Math.cos(r) * d;
+  }
+  let tgt = a.tgtAlt, rate = CLIMB_FPM;
+  if (a.gpOn || a.mode === 'final') { tgt = Math.min(a.tgtAlt, gpAlt(dist(a))); rate = 1600; }
+  const da = tgt - a.alt, sa = rate / 60 * dt; a.alt = Math.abs(da) <= sa ? tgt : a.alt + Math.sign(da) * sa;
+  const ds = a.tgtSpd - a.spd, ss = SPD_RATE * dt; a.spd = Math.abs(ds) <= ss ? a.tgtSpd : a.spd + Math.sign(ds) * ss;
+  if ((a.gpOn || a.mode === 'final') && dist(a) < 0.12 && (a.cleared || a.mode === 'final')) { a.landed = true; W.flash = { t: W.t, txt: tel(a.cs) + ' ABOARD' }; onEvent('landed', a); }
+  else if (a.gpOn && !a.cleared && a.y < 0 && dist(a) < 0.6 && !a.autoWo) { a.autoWo = true; onEvent('noClearance', a); }
+}
+function tick(dt) {
+  W.t += dt;
+  const prev = W.sweep; W.sweep = (W.t * 1000 / SWEEP_MS * 360) % 360;   // one sweep every 4 s, like the scopes
+  const simDt = dt * SIM * (window.__fastK || 1), n = Math.max(1, Math.ceil(simDt / 0.1));
+  for (const a of W.acs) for (let i = 0; i < n; i++) stepAc(a, simDt / n);
+  for (const a of W.acs) {
+    if (a.landed) continue;
+    const b = (Math.atan2(a.x, a.y) * 180 / Math.PI + 360) % 360;
+    const crossed = prev <= W.sweep ? (b > prev && b <= W.sweep) : (b > prev || b <= W.sweep);
+    if (crossed || window.__fastK > 1) { a.trail.push({ x: a.paint.x, y: a.paint.y }); if (a.trail.length > 6) a.trail.shift(); a.paint = { x: a.x, y: a.y, alt: a.alt, spd: a.spd }; }
+  }
+}
+
+/* ===================== drawing ===================== */
+const cv = $('cv'), ctx = cv.getContext('2d');
+let CW = 0, CH = 0, DPR = 1;
+function resize() { const r = cv.getBoundingClientRect(); DPR = Math.min(2, window.devicePixelRatio || 1); CW = r.width; CH = r.height; cv.width = Math.max(1, CW * DPR); cv.height = Math.max(1, CH * DPR); }
+window.addEventListener('resize', resize);
+function draw(now) {
+  if (CW < 2) resize();
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = '#050b06'; ctx.fillRect(0, 0, CW, CH);
+  const cx = CW / 2, cy = CH / 2 + 6, R = Math.max(40, Math.min(CW, CH) / 2 - 22), sc = R / W.range;
+  const P = (x, y) => [cx + x * sc, cy - y * sc];
+  const small = Math.min(CW, CH) < 420, fs = small ? 10 : 12;
+  ctx.font = `${fs}px Consolas,Menlo,"DejaVu Sans Mono",monospace`;
+  ctx.fillStyle = '#071209'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+  const sw = W.sweep * Math.PI / 180;
+  for (let k = 0; k < 24; k++) { const a1 = sw - k * 0.03, a0 = a1 - 0.03; ctx.fillStyle = `rgba(110,255,140,${0.16 * (1 - k / 24)})`; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, a0 - Math.PI / 2, a1 - Math.PI / 2); ctx.closePath(); ctx.fill(); }
+  const step = W.range <= 10 ? 2 : 5;
+  for (let r = step; r <= W.range + 0.01; r += step) {
+    const hl = W.hl.ring === r;
+    ctx.strokeStyle = hl ? 'rgba(255,191,60,0.9)' : 'rgba(120,255,140,0.22)'; ctx.lineWidth = hl ? 2 : 1;
+    ctx.beginPath(); ctx.arc(cx, cy, r * sc, 0, Math.PI * 2); ctx.stroke();
+    if (W.hl.rings || hl || W.range <= 10) { ctx.fillStyle = hl || W.hl.rings ? 'rgba(255,191,60,0.9)' : 'rgba(168,240,178,0.5)'; ctx.fillText(r + (W.hl.rings ? ' NM' : ''), cx + r * sc * 0.7071 + 3, cy + r * sc * 0.7071 - 3); }
+  }
+  ctx.lineWidth = 1;
+  if (W.course) { ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(180,140,255,0.6)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + R); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(180,140,255,0.85)'; const ft = 'FINAL 360'; ctx.fillText(ft, cx - ctx.measureText(ft).width - 6, cy + R * 0.72); }
+  if (W.hold) { const H = P(W.hold.x, W.hold.y); ctx.strokeStyle = 'rgba(255,90,110,0.5)'; ctx.setLineDash([4, 5]); ctx.beginPath(); ctx.arc(H[0], H[1], W.hold.r * sc, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = 'rgba(255,90,110,0.9)'; ctx.fillText('MARSHAL', H[0] - 26, H[1] - W.hold.r * sc - 5); }
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(120,255,140,0.55)'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+  for (let d = 0; d < 360; d += 10) {
+    const r = d * Math.PI / 180, nx = Math.sin(r), ny = -Math.cos(r), hl = W.hl.brg === d || (W.hl.brgs && d % 90 === 0);
+    ctx.strokeStyle = hl ? '#ffbf3c' : 'rgba(120,255,140,0.5)'; ctx.lineWidth = hl ? 2 : 1;
+    const l = d % 30 === 0 ? 9 : 4; ctx.beginPath(); ctx.moveTo(cx + nx * R, cy + ny * R); ctx.lineTo(cx + nx * (R - l), cy + ny * (R - l)); ctx.stroke();
+    if (d % 30 === 0 && (!small || d % 90 === 0 || W.hl.brgs)) { ctx.fillStyle = hl ? '#ffbf3c' : 'rgba(168,240,178,0.8)'; const t = String(d).padStart(3, '0'), tw = ctx.measureText(t).width; ctx.fillText(t, cx + nx * (R + 12) - tw / 2, cy + ny * (R + 12) + fs / 3); }
+    if (W.hl.brg === d) { ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + nx * R, cy + ny * R); ctx.stroke(); ctx.setLineDash([]); }
+  }
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(160,255,175,0.75)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.sin(sw) * R, cy - Math.cos(sw) * R); ctx.stroke();
+  ctx.fillStyle = W.hl.ship ? '#ffbf3c' : '#cfe8d2'; ctx.beginPath(); ctx.moveTo(cx, cy - 9); ctx.lineTo(cx + 4, cy - 3); ctx.lineTo(cx + 4, cy + 8); ctx.lineTo(cx - 4, cy + 8); ctx.lineTo(cx - 4, cy - 3); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = W.hl.ship ? '#ffbf3c' : 'rgba(207,232,210,0.7)'; ctx.fillText('STINGER', cx + 8, cy + 18);
+  for (const a of W.acs) {
+    if (a.landed) { a.hit = null; continue; }
+    const Qp = P(a.paint.x, a.paint.y); a.hit = { x: Qp[0], y: Qp[1] };
+    if (Math.hypot(Qp[0] - cx, Qp[1] - cy) > R + 4) { a.hit = null; continue; }
+    const col = a.freq && a.freq !== 'none' ? FCOL[a.freq] : '#a8f0b2', showB = W.vis !== 'primary', showP = W.vis !== 'secondary';
+    if (showP) { a.trail.forEach((t, i) => { const T = P(t.x, t.y); ctx.fillStyle = `rgba(150,255,165,${0.12 + 0.1 * i})`; ctx.beginPath(); ctx.arc(T[0], T[1], 1.8, 0, Math.PI * 2); ctx.fill(); });
+      ctx.fillStyle = 'rgba(190,255,200,0.95)'; ctx.fillRect(Qp[0] - 3, Qp[1] - 2, 6, 4); }
+    if (showB) {
+      ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(Qp[0] - 5, Qp[1] - 5); ctx.lineTo(Qp[0] + 5, Qp[1] + 5); ctx.stroke(); ctx.lineWidth = 1;
+      const l1 = a.cs + (a.freq && a.freq !== 'none' ? ' ' + a.freq.slice(0, 3).toUpperCase() : ''), l2 = `${String(Math.round(a.paint.alt / 100)).padStart(3, '0')} ${String(Math.round(a.paint.spd / 10)).padStart(2, '0')} ${a.code}`;
+      let bx = Qp[0] + 12, by = Qp[1] - 16; const bw = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width);
+      if (bx + bw > CW - 4) bx = Qp[0] - 12 - bw; if (by - fs < 2) by = Qp[1] + 22;
+      if (W.hl.block === a.cs) { ctx.strokeStyle = '#ffbf3c'; ctx.strokeRect(bx - 4, by - fs - 2, bw + 8, fs * 2 + 8); }
+      ctx.strokeStyle = 'rgba(168,240,178,0.35)'; ctx.beginPath(); ctx.moveTo(Qp[0] + (bx > Qp[0] ? 5 : -5), Qp[1] - 3); ctx.lineTo(bx > Qp[0] ? bx - 2 : bx + bw + 2, by - 3); ctx.stroke();
+      ctx.fillStyle = col; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + fs + 2);
+    }
+    if (W.hl.ac === a.cs) { ctx.strokeStyle = 'rgba(255,191,60,' + (0.5 + 0.4 * Math.sin(now / 200)) + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(Qp[0], Qp[1], 13, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1; }
+    if (W.mark && W.mark.cs === a.cs) { ctx.strokeStyle = W.mark.ok ? '#6dff86' : '#ff6a6a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(Qp[0], Qp[1], 16, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1; }
+  }
+  if (W.flash && W.t - W.flash.t < 4) { ctx.fillStyle = 'rgba(109,255,134,' + (1 - (W.t - W.flash.t) / 4) + ')'; ctx.font = `bold ${small ? 16 : 22}px Consolas,Menlo,monospace`; const tw = ctx.measureText(W.flash.txt).width; ctx.fillText(W.flash.txt, cx - tw / 2, cy - 30); }
+}
+let lastT = performance.now();
+function frame(now) { const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now; if (!document.hidden) { tick(dt); draw(now); } requestAnimationFrame(frame); }
+
+/* ===================== voices (TTS) ===================== */
+let muted = localStorage.getItem(LS_MUTE) === '1';
+const TTS = 'speechSynthesis' in window;
+let voices = [];
+function loadVoices() { try { voices = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang)); } catch (e) { voices = []; } }
+if (TTS) { loadVoices(); try { speechSynthesis.onvoiceschanged = loadVoices; } catch (e) {} }
+function pickVoice(who) {
+  if (!voices.length) return null;
+  const us = voices.filter(v => /en[-_]US/i.test(v.lang)), pool = us.length ? us : voices;
+  if (who === 'pilot') return pool.find(v => /\b(male|daniel|fred|alex|david|guy|aaron|tom)\b/i.test(v.name) && !/female/i.test(v.name)) || pool[Math.min(1, pool.length - 1)];
+  return pool.find(v => /samantha|female|zira|jenny|aria|google us english/i.test(v.name)) || pool[0];
+}
+const plain = h => String(h).replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/[🎯🎙✅❌▸◂↺·←]/gu, ' ').replace(/\s+/g, ' ').trim();
+function speak(text, who) {
+  if (!TTS || muted || !text) return;
+  try {
+    const u = new SpeechSynthesisUtterance(plain(text)); u.lang = 'en-US';
+    const v = pickVoice(who); if (v) u.voice = v;
+    if (who === 'pilot') { u.rate = 1.12; u.pitch = 0.85; } else { u.rate = 1.03; u.pitch = 1.05; }
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+function hush() { if (TTS) try { speechSynthesis.cancel(); } catch (e) {} }
+function setMute(m) { muted = m; try { localStorage.setItem(LS_MUTE, m ? '1' : '0'); } catch (e) {} $('bMute').textContent = m ? '🔇' : '🔊'; $('bMute').setAttribute('aria-label', m ? 'Unmute voices' : 'Mute voices'); if (m) hush(); }
+
+/* ===================== the story ===================== */
+const CHAPTERS = ['Briefing', 'The scope', 'The flow', 'Phraseology', 'Mission'], CH_SHORT = ['Brief', 'Scope', 'Flow', 'Radio', 'Mission'];
+const LT21 = o => Object.assign({ cs: 'LTNG21', code: '4213' }, o);
+const LT24 = o => Object.assign({ cs: 'LTNG24', code: '4247' }, o);
+const NH41 = o => Object.assign({ cs: 'NHWK41', code: '4302' }, o);
+const VP12 = o => Object.assign({ cs: 'VIPR12', code: '4155' }, o);
+const PRACTICE = () => [LT21({ x: 6, y: -6, hdg: 360, alt: 3000, spd: 250, freq: 'silver' })];
+const STEPS = [
+  // ---------- Briefing ----------
+  { ch: 0, id: 'welcome', type: 'info', range: 15, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
+    say: `<p>Welcome aboard <b>USS Stinger</b>. I'm Aero, and tonight you're working your first <b>night recovery</b>: bringing aircraft back aboard the ship in the dark.</p><p>At night pilots can't see much, so they rely on <b>you</b>, the controller, watching them on radar and talking them home.</p><p>Four short chapters: <b>the scope</b>, <b>the flow</b>, <b>phraseology</b>, then a real <b>mission</b>. Tap <b>Next</b> (or press Enter) when you're ready.</p>` },
+  // ---------- Chapter A: the scope ----------
+  { ch: 1, id: 'scope1', type: 'info', range: 15, hl: { ship: true }, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
+    say: `<p>This is your <b>radar scope</b>. Picture a map seen from straight above, with <b>north at the top</b>.</p><p>The <span class="k">ship</span> is always in the center. The bright rotating line is the <b>sweep</b>, the radar antenna turning. Each time it passes an aircraft, the target <b>jumps</b> to its new spot. That's why targets move in little steps.</p>` },
+  { ch: 1, id: 'rings', type: 'click', range: 15, hl: { rings: true },
+    acs: [LT21({ x: 3.5, y: 3.6, hdg: 200, alt: 3000, spd: 220 }), NH41({ x: -7.1, y: -7.0, hdg: 45, alt: 1500, spd: 120 }), VP12({ x: 14.2, y: -4.4, hdg: 300, alt: 2000, spd: 130 })],
+    say: `<p>The circles are <b>range rings</b>, one every <b>5 nautical miles</b> from the ship: 5, 10, 15. They let you judge distance at a glance.</p>`,
+    task: `🎯 Tap the aircraft that is <b>10 miles</b> from the ship.`, answer: 'NHWK41',
+    why: { LTNG21: 'That one is inside the first ring, about <b>5 miles</b> out.', VIPR12: 'That one is out on the third ring, about <b>15 miles</b>.' }, hint: 'Look for the target sitting on the <b>second</b> ring.',
+    good: `Exactly. It's on the <b>second ring</b>, so it's 10 miles from mother (that's what we call the ship).` },
+  { ch: 1, id: 'brg', type: 'click', range: 15, hl: { brgs: true },
+    acs: [LT21({ x: 0, y: 11, hdg: 180, alt: 3000, spd: 250 }), NH41({ x: 8, y: 0, hdg: 270, alt: 1500, spd: 120 }), VP12({ x: -8.5, y: -8.5, hdg: 45, alt: 2000, spd: 130 })],
+    say: `<p>The numbers around the edge are <b>bearings</b>: directions measured clockwise from north, always as three digits. <b>360</b> (or 000) is north, <b>090</b> east, <b>180</b> south, <b>270</b> west.</p><p>"Bearing 090 from mother" means the aircraft is due <b>east</b> of the ship.</p>`,
+    task: `🎯 Tap the aircraft on <b>bearing 090</b> (due east of the ship).`, answer: 'NHWK41',
+    why: { LTNG21: 'That one is due <b>north</b>, bearing 360.', VIPR12: 'That one is <b>southwest</b>, about bearing 225.' }, hint: '090 is to the <b>right</b> of the ship.',
+    good: `Right, due east: bearing <b>zero niner zero</b>.` },
+  { ch: 1, id: 'block', type: 'info', range: 15, hl: { block: 'LTNG21', ac: 'LTNG21' }, acs: [LT21({ x: -5, y: 6, hdg: 120, alt: 3000, spd: 250 })],
+    say: `<p>The little mark is the <b>target</b>: where the aircraft is. The text beside it is the <b>data block</b>, sent automatically by the aircraft's equipment:</p><p><span class="ex">LTNG21 ← callsign, "Lightning 21"<br>030 ← altitude in hundreds of feet (3,000 ft)<br>25 ← speed in tens of knots (250 knots)<br>4213 ← its beacon code</span></p><p>Navy controllers say altitude in <b>angels</b>: one angel = <b>1,000 feet</b>. So 3,000 feet is <b>angels 3</b>.</p>` },
+  { ch: 1, id: 'qAlt', type: 'choice', range: 15, hl: { block: 'LTNG21' }, acs: [LT21({ x: -5, y: 6, hdg: 120, alt: 3000, spd: 250 })],
+    say: `<p>Quick check. Look at Lightning 21's data block.</p>`, q: `What altitude is Lightning 21 at?`,
+    opts: [{ t: 'Angels 3 (3,000 feet)', ok: 1 }, { t: 'Angels 30', why: '030 is in <b>hundreds</b> of feet: 030 × 100 = 3,000 ft, which is angels 3.' }, { t: '300 feet', why: 'Close, but it\'s hundreds of feet: 30 hundred = 3,000 ft.' }, { t: 'Angels 42', why: '4213 is the <b>beacon code</b>, not the altitude.' }],
+    good: `Yes: 030 means 3,000 feet, <b>angels 3</b>.` },
+  { ch: 1, id: 'qSpd', type: 'choice', range: 15, hl: { block: 'LTNG21' }, acs: [LT21({ x: -5, y: 6, hdg: 120, alt: 3000, spd: 250 })],
+    say: `<p>And the speed?</p>`, q: `How fast is Lightning 21 going?`,
+    opts: [{ t: '25 knots', why: 'Speed is shown in <b>tens</b> of knots: 25 × 10 = 250.' }, { t: '250 knots', ok: 1 }, { t: '4,213 knots', why: 'That\'s the beacon code.' }, { t: '30 knots', why: '030 is the altitude.' }],
+    good: `Correct, <b>250 knots</b>.` },
+  { ch: 1, id: 'hdg', type: 'info', range: 15, hl: { ac: 'LTNG21', brg: 30 }, acs: [LT21({ x: 4, y: 7, hdg: 270, alt: 3000, spd: 250, seedTrail: true })],
+    say: `<p><b>Bearing</b> tells you where an aircraft <i>is</i> from the ship. <b>Heading</b> is where its <i>nose points</i>: the direction it's flying.</p><p>Lightning 21 is on bearing about <b>030</b> from mother, but it's <b>heading 270</b> (west). The fading dots behind the target are its <b>history trail</b>, showing where it came from.</p>` },
+  { ch: 1, id: 'qHdg', type: 'choice', range: 15, acs: [LT21({ x: -6, y: 8, hdg: 180, alt: 2000, spd: 250, seedTrail: true })],
+    say: `<p>Watch Lightning 21 and its history dots for a couple of sweeps.</p>`, q: `Which way is Lightning 21 heading?`,
+    opts: [{ t: 'North, heading 360', why: 'The trail dots are <b>above</b> it, so it came from the north and is flying <b>south</b>.' }, { t: 'East, heading 090', why: 'It isn\'t moving sideways. Follow the dots: it\'s moving down the scope.' }, { t: 'South, heading 180', ok: 1 }, { t: 'West, heading 270', why: 'It isn\'t moving sideways. Follow the dots: it\'s moving down the scope.' }],
+    good: `Nice. Dots behind it to the north, moving down the scope: <b>heading 180</b>, south.` },
+  { ch: 1, id: 'priSec', type: 'info', range: 15, vis: 'both', visToggle: true, acs: [LT21({ x: -5, y: 6, hdg: 120, alt: 3000, spd: 250 }), NH41({ x: 6, y: -5, hdg: 330, alt: 1500, spd: 120 })],
+    say: `<p>Radar gives you two kinds of picture:</p><p><b>Primary</b>: the raw radar echo bouncing off the aircraft. It shows <i>where</i> something is, but not who it is or how high.</p><p><b>Secondary</b>: the aircraft's transponder answering the radar. That's what gives you the <b>data block</b> (callsign, altitude, speed).</p><p>Try the buttons below to see each one.</p>` },
+  { ch: 1, id: 'qPri', type: 'choice', range: 15, vis: 'primary', acs: [LT21({ x: -5, y: 6, hdg: 120, alt: 3000, spd: 250 }), NH41({ x: 6, y: -5, hdg: 330, alt: 1500, spd: 120 })],
+    say: `<p>Uh oh, the data blocks just vanished, but the targets are still moving.</p>`, q: `What are you looking at now?`,
+    opts: [{ t: 'Primary only (raw radar echoes)', ok: 1 }, { t: 'Secondary only', why: 'Secondary is what <b>draws</b> the data block. No blocks means you\'re seeing primary only.' }, { t: 'The aircraft have landed', why: 'They\'re still moving, just without their transponder data.' }],
+    good: `That's it, <b>primary only</b>. You can still see where they are, so you can still work them; you just have to ask the pilot for things like altitude.` },
+  // ---------- Chapter B: the flow ----------
+  { ch: 2, id: 'flowM', type: 'info', range: 20, hold: { x: 4, y: -15, r: 2 },
+    acs: [LT21({ x: 4, y: -13, hdg: 90, alt: 6000, spd: 250, freq: 'red', mode: 'hold', hold: { x: 4, y: -15, r: 2, ang: 0 } })],
+    say: `<p>Now the big picture. Every aircraft coming home passes through three controllers, each on their own radio frequency with its own <b>color</b>:</p><p><b class="f-red">1. MARSHAL (Red)</b>: aircraft check in and wait their turn in a holding pattern, stacked at different altitudes so they stay apart. Marshal sends them down one at a time.</p>` },
+  { ch: 2, id: 'flowA', type: 'info', range: 20, keep: true, course: true,
+    acs: [LT21({ x: 4, y: -13, hdg: 90, alt: 6000, spd: 250, freq: 'red', mode: 'hold', hold: { x: 4, y: -15, r: 2, ang: 0 } })],
+    enter: () => { const a = W.acs[0]; if (!a) return; a.mode = 'free'; a.freq = 'silver'; a.tgtHdg = 300; a.turn = 0; a.tgtAlt = 1200; a.tgtSpd = 200; W.hold = null; },
+    say: `<p><b class="f-silver">2. APPROACH (Silver)</b>: gives the pilot <b>vectors</b> (headings, altitudes and speeds) to line them up behind the ship on the <b>final approach course</b>, the dashed line.</p><p>Watch Lightning 21 switch to Silver and start down.</p>` },
+  { ch: 2, id: 'flowF', type: 'info', range: 10, course: true,
+    acs: [LT21({ x: 0.2, y: -6.5, hdg: 360, alt: 1200, spd: 150, freq: 'purple', mode: 'final' })],
+    say: `<p><b class="f-purple">3. FINAL</b> (<span class="f-purple">Purple</span> or <span class="f-copper">Copper</span>: two Final frequencies, so two controllers can work at once) talks the pilot down the last few miles, keeping them on <b>course</b> (left/right) and on the <b>glidepath</b> (the right descent angle) all the way to the deck.</p><p>Watch it come aboard.</p>` },
+  { ch: 2, id: 'qFlow', type: 'choice', range: 20, course: true, acs: [LT21({ x: 4, y: -13, hdg: 300, alt: 5000, spd: 250, freq: 'red' })],
+    say: `<p>Let's check the flow.</p>`, q: `Marshal is done with Lightning 21 and it needs vectors to final. Which frequency does it go to?`,
+    opts: [{ t: 'Red (Marshal)', why: 'It\'s already on Red. Marshal hands it <b>on</b> to the next controller.' }, { t: 'Silver (Approach)', ok: 1 }, { t: 'Purple (Final)', why: 'Final comes <b>after</b> Approach has lined it up.' }],
+    good: `Right. Marshal → <b class="f-silver">Approach</b> → Final. The controller says "<b>go silver</b>" to send it there.` },
+  // ---------- Chapter C: phraseology ----------
+  { ch: 3, id: 'struct', type: 'info', range: 15, acs: PRACTICE(),
+    say: `<p>Radio time. Every call has the same shape:</p><p><span class="ex"><b>WHO</b> you're talking to, then <b>WHAT</b> to do.<br>"Lightning 21, turn left heading two seven zero."</span></p><p>Callsign <b>first</b>, so the right pilot knows the call is for them. Short and standard: no "please", no chit-chat.</p>` },
+  { ch: 3, id: 'numbers', type: 'info', range: 15, acs: PRACTICE(),
+    say: `<p>Numbers are spoken <b>digit by digit</b> so they can't be misheard:</p><p><span class="ex">Heading 270 → "heading <b>two seven zero</b>"<br>Heading 090 → "heading <b>zero niner zero</b>" (9 is "niner")<br>3,000 ft → "<b>angels three</b>"<br>1,200 ft → "<b>angels one point two</b>"</span></p><p>The everyday instructions: <b>fly heading</b>, <b>turn left/right heading</b>, <b>climb and maintain angels</b>, <b>descend and maintain angels</b>, <b>maintain ___ knots</b>, <b>signal buster</b> (max speed), and <b>go silver / purple / copper</b> to switch frequency.</p>` },
+  { ch: 3, id: 'qCall', type: 'choice', range: 15, acs: PRACTICE(),
+    say: `<p>You want Lightning 21 to turn left to heading 270.</p>`, q: `Which transmission is correct?`,
+    opts: [{ t: '"Turn left heading two seventy, Lightning 21."', why: 'Callsign goes <b>first</b>, and the heading is said digit by digit: two seven zero.' }, { t: '"Lightning 21, turn left heading two seven zero."', ok: 1 }, { t: '"Lightning 21, go left two hundred seventy degrees, please."', why: 'Use the standard words: "turn left heading", digits, and no "please".' }, { t: '"Hey Lightning, head west a bit."', why: 'No full callsign and no exact heading. The pilot can\'t fly "a bit".' }],
+    good: `Perfect structure: callsign, instruction, digits.` },
+  { ch: 3, id: 'qDig', type: 'choice', range: 15, acs: PRACTICE(),
+    say: `<p>Numbers drill.</p>`, q: `How do you say "heading 090"?`,
+    opts: [{ t: '"heading ninety"', why: 'Headings are always three digits, said one at a time.' }, { t: '"heading zero nine zero"', why: 'So close! On the radio 9 is said "<b>niner</b>".' }, { t: '"heading zero niner zero"', ok: 1 }],
+    good: `Yes, "<b>zero niner zero</b>".` },
+  { ch: 3, id: 'chips1', type: 'chips', range: 15, acs: PRACTICE(),
+    say: `<p>Now you build one. Tap the words in order.</p>`, task: `🎯 Tell Lightning 21 to climb to 4,000 feet.`,
+    target: ['Lightning 21', 'climb and maintain', 'angels', 'four'], extra: ['descend and maintain', 'four thousand', 'please', 'heading'],
+    good: `"<b>Lightning 21, climb and maintain angels four.</b>" A textbook call.` },
+  { ch: 3, id: 'chips2', type: 'chips', range: 15, acs: PRACTICE(),
+    say: `<p>One more, with a heading this time.</p>`, task: `🎯 Tell Lightning 21 to turn right to heading 090.`,
+    target: ['Lightning 21', 'turn right', 'heading', 'zero', 'niner', 'zero'], extra: ['turn left', 'ninety', 'nine'],
+    good: `"<b>Lightning 21, turn right heading zero niner zero.</b>" Spot on.` },
+  { ch: 3, id: 'readback', type: 'info', range: 15, acs: PRACTICE(),
+    say: `<p>After you give an instruction, the pilot <b>reads it back</b>, repeating the key numbers so you both know it was heard right.</p><p><span class="ex">You: "Lightning 21, turn left heading two seven zero."<br>Pilot: "Lightning 21, left heading two seven zero."</span></p><p>Your job is to <b>listen</b> to every readback. If it's wrong, say "<b>negative</b>" and give the correct instruction again.</p>` },
+  { ch: 3, id: 'spot1', type: 'choice', range: 15, acs: PRACTICE(),
+    say: `<p>Listen to this exchange.</p>`,
+    dlg: [['you', 'Lightning 21, turn right heading one eight zero, descend and maintain angels two.'], ['plt', 'Lightning 21, right heading one eight zero, descend and maintain angels three.']],
+    q: `What do you say next?`,
+    opts: [{ t: '"Lightning 21, negative, descend and maintain angels two."', ok: 1 }, { t: 'Nothing, the readback was fine.', why: 'Listen again: you said angels <b>two</b>, the pilot read back angels <b>three</b>.' }, { t: '"Lightning 21, negative, turn right heading one eight zero."', why: 'The heading was read back correctly. It\'s the <b>altitude</b> that\'s wrong.' }, { t: '"Roger."', why: '"Roger" would accept the wrong altitude.' }],
+    good: `Good ears. You caught the wrong altitude and corrected just that part.` },
+  { ch: 3, id: 'spot2', type: 'choice', range: 15, acs: PRACTICE(),
+    say: `<p>You called: "<b>Lightning 24, turn left heading three three zero, maintain two zero zero knots.</b>"</p>`,
+    q: `Which pilot readback is WRONG?`,
+    opts: [{ t: '"Lightning 24, left heading three three zero, maintain two zero zero knots."', why: 'That one matches perfectly.' }, { t: '"Left heading three three zero, two zero zero knots, Lightning 24."', why: 'Callsign at the end is still a fine readback; all the numbers match.' }, { t: '"Lightning 24, right heading three three zero, maintain two zero zero knots."', ok: 1 }],
+    good: `Yes: <b>right</b> instead of <b>left</b>. You'd answer "Lightning 24, negative, turn <b>left</b> heading three three zero."` },
+  { ch: 3, id: 'voiceIntro', type: 'info', range: 15, acs: PRACTICE(), voiceHelp: true,
+    say: `<p>Time to talk for real. From here on you'll <b>say</b> your calls out loud, and the aircraft will fly <b>exactly</b> what you say, so watch the scope!</p><p><b>Hold</b> the 🎙 button (or the <b>Space bar</b>) while you talk and let go when you're done. Or tap it once to start and again to stop. The first time, your browser will ask for microphone permission.</p><p>No mic, or a browser without speech recognition? Just <b>type</b> the call in the box instead.</p>` },
+  { ch: 3, id: 'v1', type: 'voice', range: 15, acs: PRACTICE(),
+    say: `<p>Lightning 21 is with you on <b class="f-silver">Approach (Silver)</b>, heading north.</p>`,
+    task: `🎯 Turn Lightning 21 <b>left</b> to heading <b>270</b>.`, expect: { cs: 'LTNG21', need: [{ k: 'hdg', v: 270, dir: 'L' }] },
+    hint: 'Lightning 21, turn left heading two seven zero', good: 'Watch it roll left toward the west in a standard-rate turn.' },
+  { ch: 3, id: 'v2', type: 'voice', range: 15, keep: true, acs: [LT21({ x: 4.6, y: -3.5, hdg: 270, alt: 3000, spd: 250, freq: 'silver' })],
+    say: `<p>Now bring it lower.</p>`, task: `🎯 Have Lightning 21 descend to <b>angels 2</b> (2,000 feet).`, expect: { cs: 'LTNG21', need: [{ k: 'alt', v: 2000 }] },
+    hint: 'Lightning 21, descend and maintain angels two', good: 'Watch the altitude in the data block count down: 030… 025… 020.' },
+  { ch: 3, id: 'v3', type: 'voice', range: 15, keep: true, acs: [LT21({ x: 1, y: -3.5, hdg: 270, alt: 2000, spd: 250, freq: 'silver' })],
+    say: `<p>Last one before the mission: slow it down.</p>`, task: `🎯 Slow Lightning 21 to <b>200 knots</b>.`, expect: { cs: 'LTNG21', need: [{ k: 'spd', v: 200 }] },
+    hint: 'Lightning 21, maintain two zero zero knots', good: 'The speed in the block drops from 25 to 20 as it slows.' },
+  // ---------- Final mission ----------
+  { ch: 4, id: 'm0', type: 'info', range: 15, course: true, acs: [LT24({ x: 7, y: -11, hdg: 270, alt: 4000, spd: 250, freq: 'silver' })],
+    pilot: 'Stinger Approach, Lightning 24, one three miles southeast of mother, angels four, request PAR approach, full stop.',
+    say: `<p>This is it. <b>Lightning 24</b>, an F-35, just checked in with you on <b class="f-silver">Approach</b>. Your job: get it lined up, hand it to Final, then talk it all the way down to the deck.</p><p>The dashed purple line is the <b>final approach course</b>. Ships land into the wind, so tonight final comes from the south, heading <b>360</b>.</p>` },
+  { ch: 4, id: 'm1', type: 'voice', range: 15, course: true, keep: true, acs: [LT24({ x: 7, y: -11, hdg: 270, alt: 4000, spd: 250, freq: 'silver' })],
+    say: `<p>Final approach starts at <b>1,200 feet</b>, which is angels one point two.</p>`, task: `🎯 Descend Lightning 24 to <b>angels 1.2</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'alt', v: 1200 }] },
+    hint: 'Lightning 24, descend and maintain angels one point two', good: 'Down it goes.' },
+  { ch: 4, id: 'm2', type: 'voice', range: 15, course: true, keep: true, acs: [LT24({ x: 5.5, y: -11, hdg: 270, alt: 2400, tgtAlt: 1200, spd: 250, freq: 'silver' })],
+    say: `<p>It needs to be slower before final.</p>`, task: `🎯 Slow Lightning 24 to <b>150 knots</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'spd', v: 150 }] },
+    hint: 'Lightning 24, maintain one five zero knots', good: 'Speed coming back.' },
+  { ch: 4, id: 'm3', type: 'voice', range: 15, course: true, acs: [LT24({ x: 0.85, y: -9.5, hdg: 270, alt: 1200, spd: 150, freq: 'silver' })],
+    say: `<p>A minute later, it's nearly at the final course. Turn it now so it rolls out right on the dashed line.</p>`, task: `🎯 Turn Lightning 24 <b>right</b> to heading <b>360</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'hdg', v: 360, dir: 'R' }] },
+    hint: 'Lightning 24, turn right heading three six zero', good: 'Rolling out on final. Nicely timed.' },
+  { ch: 4, id: 'm4', type: 'voice', range: 15, course: true, keep: true, acs: [LT24({ x: 0.05, y: -9, hdg: 360, alt: 1200, spd: 150, freq: 'silver' })],
+    say: `<p>It's lined up. Time to hand it to Final Control on <b class="f-purple">Purple</b>.</p>`, task: `🎯 Switch Lightning 24 to <b>Purple</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'freq', v: 'purple' }] },
+    hint: 'Lightning 24, go purple', good: 'Handed off to Final.' },
+  { ch: 4, id: 'm5', type: 'info', range: 10, course: true, acs: [LT24({ x: -0.05, y: -8, hdg: 360, alt: 1200, spd: 150, freq: 'purple' })],
+    pilot: 'Stinger Final, Lightning 24, eight miles, level one thousand two hundred, heading three six zero.',
+    say: `<p>Now <b>you</b> are the <b class="f-purple">Final controller</b>. The scope has zoomed in to 10 miles.</p><p>On final you give a steady stream of short calls: <b>left/right of course</b>, <b>begin descent</b>, <b>on glidepath</b>, <b>above/below glidepath</b>. The pilot corrects <b>without reading back</b>; they're busy flying.</p><p>Remember: "<b>slightly left of course</b>" says where the aircraft <i>is</i> (left of the line), so the pilot corrects back to the <b>right</b>.</p>` },
+  { ch: 4, id: 'm6', type: 'voice', range: 10, course: true, acs: [LT24({ x: -0.2, y: -6.8, hdg: 356, alt: 1200, spd: 150, freq: 'purple' })],
+    say: `<p>Uh oh, it's drifting to the <b>left</b> of the dashed line.</p>`, task: `🎯 Tell Lightning 24 it's <b>slightly left of course</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'course', side: 'L' }] },
+    hint: 'Lightning 24, slightly left of course', good: 'See it ease back right onto the line? No readback needed.' },
+  { ch: 4, id: 'm7', type: 'voice', range: 10, course: true, acs: [LT24({ x: 0, y: -3.7, hdg: 360, alt: 1200, spd: 150, freq: 'purple', trackCL: true })],
+    say: `<p>It's reaching the <b>glidepath</b>, the 3° slope down to the deck. The pilot stays level until you tell them.</p>`, task: `🎯 Tell Lightning 24 to <b>begin descent</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'beginDescent' }] },
+    hint: 'Lightning 24, begin descent', good: 'Watch the altitude start dropping as it rides the glidepath.' },
+  { ch: 4, id: 'm8', type: 'voice', range: 10, course: true, waitLand: true, acs: [LT24({ x: 0, y: -2.6, hdg: 360, alt: Math.round(2.6 * NM_FT * GP_TAN + 60), spd: 150, freq: 'purple', trackCL: true, gpOn: true })],
+    say: `<p>On course, on glidepath. The flight deck is clear.</p>`, task: `🎯 Clear Lightning 24 to <b>land</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'clearLand' }] },
+    hint: 'Lightning 24, cleared to land', good: 'Here it comes…' },
+  { ch: 4, id: 'done', type: 'done', range: 10, course: true, acs: [] },
+];
+const GRADED = STEPS.filter(s => ['click', 'choice', 'chips', 'voice'].includes(s.type));
+
+/* ===================== state + persistence ===================== */
+let cur = 0, res = {}, R = { done: false, tries: 0, built: [] };   // R = runtime state of the current step
+function save() { try { localStorage.setItem(LS_KEY, JSON.stringify({ i: cur, res, t: Date.now() })); } catch (e) {} }
+function load() { try { const o = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); if (o && typeof o.i === 'number') return o; } catch (e) {} return null; }
+function markResult(st, firstTry) { if (!(st.id in res)) res[st.id] = firstTry ? 1 : 0; save(); }
+
+function buildProg() { $('prog').innerHTML = CHAPTERS.map((c, i) => `<div class="seg" title="${c}"><i></i><span class="lg">${c}</span><span class="sh">${CH_SHORT[i]}</span></div>`).join(''); }
+function updProg() {
+  const st = STEPS[cur], segs = $('prog').children;
+  CHAPTERS.forEach((c, i) => {
+    const idx = STEPS.map((s, j) => s.ch === i && s.type !== 'done' ? j : -1).filter(j => j >= 0), first = idx[0], n = idx.length;
+    const done = st.type === 'done' ? n : Math.max(0, Math.min(n, cur - first + (R && R.done ? 1 : 0)));
+    segs[i].querySelector('i').style.width = (done / n * 100) + '%';
+    segs[i].classList.toggle('cur', st.ch === i && st.type !== 'done'); segs[i].classList.toggle('done', done >= n);
+  });
+  $('chName').textContent = st.type === 'done' ? 'Mission complete' : CHAPTERS[st.ch];
+  $('stepNo').textContent = st.type === 'done' ? '' : `Step ${cur + 1} of ${STEPS.length - 1}`;
+}
+function updTag() { const a = W.acs[0]; $('scopeTag').innerHTML = a && a.freq && a.freq !== 'none' ? `<b class="f-${a.freq}">${FNAME[a.freq]}</b>${W.range} NM` : `${W.range} NM range`; }
+function setScene(st, first) {
+  W.range = st.range || 15; W.course = !!st.course; W.vis = st.vis || 'both'; W.hl = st.hl || {}; W.hold = st.hold ? Object.assign({}, st.hold) : null; W.mark = null;
+  const have = st.keep && !first && st.acs && W.acs.length === st.acs.length && st.acs.every(a => W.acs.some(x => x.cs === a.cs && !x.landed));
+  if (!have) W.acs = (st.acs || []).map(a => mk(JSON.parse(JSON.stringify(a))));
+  if (st.enter) st.enter(first);
+  updTag();
+}
+function show(i, first) {
+  hush(); stopRec();
+  cur = Math.max(0, Math.min(STEPS.length - 1, i));
+  const st = STEPS[cur];
+  R = { done: st.type === 'info', tries: 0, built: [], landed: false };
+  setScene(st, first);
+  $('fb').className = ''; $('fb').innerHTML = '';
+  if (st.type === 'done') { renderDone(); save(); updProg(); return; }
+  $('say').innerHTML = st.say || '';
+  renderTask(st);
+  speak(st.say, 'mentor');
+  if (st.pilot) speak(st.pilot.replace(/Lightning 24/g, 'Lightning two four'), 'pilot');
+  updNav(); updProg(); save();
+  $('pscroll').scrollTop = 0;
+}
+function updNav() {
+  const st = STEPS[cur];
+  $('bBack').disabled = cur === 0;
+  $('bNext').disabled = !R.done || st.type === 'done';
+  $('bNext').textContent = cur >= STEPS.length - 2 ? 'Finish ▸' : 'Next ▸';
+  $('bNext').classList.toggle('pulse', R.done && st.type !== 'info' && st.type !== 'done');
+}
+function feedback(kind, html) { const f = $('fb'); f.className = kind; f.innerHTML = html; if (html) setTimeout(() => { try { f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {} }, 30); }
+function succeed(st, extra) {
+  markResult(st, R.tries === 0);
+  R.done = !st.waitLand || R.landed;
+  const praise = ['Nice work!', 'Spot on.', 'Exactly right.', 'Textbook.', 'Good call.'][Math.floor(Math.random() * 5)];
+  feedback('ok', `✅ <b>${praise}</b> ${st.good || ''}${extra ? '<br>' + extra : ''}`);
+  speak(praise + ' ' + plain(st.good || '') + ' ' + plain(extra || ''), 'mentor');
+  updNav(); updProg();
+  if (R.done) setTimeout(() => { try { $('bNext').focus({ preventScroll: true }); } catch (e) {} }, 50);
+}
+function fail(st, html, sayIt) {
+  R.tries++;
+  let more = '';
+  if (st.type === 'voice' && st.hint && R.tries >= 2) more = `<br><span class="small">Try saying:</span> "<b>${esc(st.hint)}</b>"`;
+  else if (st.type !== 'voice' && st.hint && R.tries >= 2) more = `<br><span class="small">Hint: ${st.hint}</span>`;
+  feedback('bad', `❌ ${html}${more}`); speak(sayIt || plain(html), 'mentor');
+  if (st.type === 'voice' && R.tries >= 3 && !$('bSkip')) {
+    const b = document.createElement('button'); b.id = 'bSkip'; b.textContent = 'Skip this one';
+    b.onclick = () => { markResult(st, false); const a = W.acs[0]; if (a) execute(a, st.expect.need.map(n => Object.assign({}, n))); R.done = true; b.remove(); updNav(); updProg(); };
+    $('task').appendChild(b);
+  }
+}
+
+/* ===================== task renderers ===================== */
+function renderTask(st) {
+  const t = $('task'); t.innerHTML = '';
+  if (st.pilot) t.insertAdjacentHTML('beforeend', `<div class="dlg"><div class="plt"><span class="lbl">PILOT</span>${esc(st.pilot)}</div></div>`);
+  if (st.type === 'info') {
+    if (st.visToggle) {
+      const row = document.createElement('div'); row.className = 'row vis';
+      [['both', 'Both'], ['primary', 'Primary only'], ['secondary', 'Secondary only']].forEach(([v, l]) => { const b = document.createElement('button'); b.textContent = l; b.className = W.vis === v ? 'on' : ''; b.onclick = () => { W.vis = v; [...row.children].forEach(x => x.classList.toggle('on', x === b)); }; row.appendChild(b); });
+      t.appendChild(row);
+    }
+    if (st.voiceHelp) t.insertAdjacentHTML('beforeend', `<div class="notice">${voiceNotice() || '🎙 Speech recognition works in this browser. Have your mic ready.'}</div>`);
+    return;
+  }
+  if (st.task) t.insertAdjacentHTML('beforeend', `<div class="task">${st.task}</div>`);
+  if (st.dlg) t.insertAdjacentHTML('beforeend', `<div class="dlg">${st.dlg.map(([w, s]) => `<div class="${w}"><span class="lbl">${w === 'you' ? 'YOU' : 'PILOT'}</span>${esc(s)}</div>`).join('')}</div>`);
+  if (st.type === 'click') { t.insertAdjacentHTML('beforeend', `<div class="small">Tap or click right on the target. Keyboard: ${st.acs.map((a, i) => (i + 1) + ' = ' + a.cs).join(', ')}.</div>`); return; }
+  if (st.type === 'choice') {
+    t.insertAdjacentHTML('beforeend', `<div class="task" style="border-style:solid;color:#ffe1a0">${st.q}</div>`);
+    const box = document.createElement('div'); box.className = 'opts';
+    st.opts.forEach((o, i) => { const b = document.createElement('button'); b.innerHTML = `<span class="n">${i + 1}</span>${esc(o.t)}`; b.onclick = () => choose(st, i, b); box.appendChild(b); });
+    t.appendChild(box); return;
+  }
+  if (st.type === 'chips') {
+    const built = document.createElement('div'); built.className = 'built'; built.id = 'built';
+    const pool = document.createElement('div'); pool.className = 'chips'; pool.id = 'pool';
+    shuffle([...st.target, ...st.extra]).forEach(w => { const b = document.createElement('button'); b.textContent = w; b.onclick = () => chip(st, b); pool.appendChild(b); });
+    const row = document.createElement('div'); row.className = 'row'; const clr = document.createElement('button'); clr.textContent = 'Clear'; clr.onclick = () => clearChips(); row.appendChild(clr);
+    t.append(built, pool, row); return;
+  }
+  if (st.type === 'voice') renderVoice(st);
+}
+function shuffle(a) { let s = 7; for (let i = a.length - 1; i > 0; i--) { s = (s * 9301 + 49297) % 233280; const j = Math.floor(s / 233280 * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function choose(st, i, b) {
+  if (R.done) return;
+  const o = st.opts[i];
+  if (o.ok) { b.classList.add('right'); [...b.parentNode.children].forEach(x => x.disabled = true); succeed(st); }
+  else { b.classList.add('wrong'); b.disabled = true; fail(st, `Not quite. ${o.why || ''}`); }
+}
+function clickAc(st, cs) {
+  if (R.done) return;
+  if (cs === st.answer) { W.mark = { cs, ok: true }; succeed(st); }
+  else { W.mark = { cs, ok: false }; fail(st, `That's <b>${tel(cs)}</b>. ${(st.why && st.why[cs]) || ''}`); }
+}
+function chip(st, b) {
+  if (R.done) return;
+  const built = $('built');
+  if (b.parentNode === built) { $('pool').appendChild(b); const k = R.built.indexOf(b.textContent); if (k >= 0) R.built.splice(k, 1); feedback('', ''); return; }
+  built.appendChild(b); R.built.push(b.textContent);
+  if (R.built.length === st.target.length) {
+    if (R.built.every((w, i) => w === st.target[i])) { [...built.children, ...$('pool').children].forEach(x => x.disabled = true); succeed(st); }
+    else {
+      const wrongWord = R.built.find(w => st.extra.includes(w));
+      const why = wrongWord ? `"<b>${esc(wrongWord)}</b>" doesn't belong in this call.` : R.built[0] !== st.target[0] ? 'Start with the <b>callsign</b>, then the instruction.' : 'The words are right, but the order isn\'t.';
+      fail(st, `${why} Tap <b>Clear</b> (or tap words to remove them) and try again.`, plain(why) + ' Try again.');
+    }
+  }
+}
+function clearChips() { if (R.done) return; [...$('built').children].forEach(b => $('pool').appendChild(b)); R.built = []; feedback('', ''); }
+
+/* ===================== voice input (push to talk, Web Speech API) ===================== */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+let rec = null, recOn = false, recFinal = '', recInter = '', recAlts = [], micBlocked = false, pressT = 0, toggleMode = false, finishTimer = null;
+const voiceOk = () => !!SR && !micBlocked;
+function voiceNotice() {
+  if (!SR) return '⌨️ Speech recognition isn\'t available in this browser (Firefox and some others don\'t support it). Type your calls in the box instead; everything else works the same. For voice, use Chrome, Edge or Safari.';
+  if (micBlocked) return '🚫 The microphone is blocked, so type your calls instead. To use voice, allow the microphone for this site in your browser settings and reload.';
+  if (location.protocol === 'file:') return 'Voice may be blocked on a file:// page. Use the website (https) for voice, or type below.';
+  return '';
+}
+function pttLabel() { return voiceOk() ? (MOBILE ? 'Hold to talk' : 'Hold to talk (Space)') : 'Voice unavailable, type below'; }
+function renderVoice(st) {
+  const d = document.createElement('div'); d.id = 'voice';
+  const n = voiceNotice();
+  d.innerHTML = `<div class="notice" id="vNote"${n ? '' : ' style="display:none"'}>${n}</div>
+    <button id="ptt" class="${voiceOk() ? '' : 'off'}" aria-label="Push to talk"><span class="dot"></span><span id="pttTxt">${pttLabel()}</span></button>
+    <form class="typed" id="typedF" autocomplete="off"><input id="typedIn" placeholder="…or type: ${esc(tel(st.expect.cs))}, …" aria-label="Type your transmission" enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false"><button type="submit">Send</button></form>
+    <div class="heard" id="heard"></div>
+    <div id="rlog" aria-live="polite"></div>
+    <div class="row"><button id="bReset" title="Put the aircraft back where this step started">↺ Reset aircraft</button></div>`;
+  $('task').appendChild(d);
+  const p = $('ptt');
+  p.addEventListener('pointerdown', e => { e.preventDefault(); if (recOn && toggleMode) { pttEnd(); return; } pressT = performance.now(); toggleMode = false; pttStart(); });
+  p.addEventListener('pointerup', e => { e.preventDefault(); if (!recOn || toggleMode) return; if (performance.now() - pressT < 350) { toggleMode = true; $('pttTxt').textContent = 'Listening… tap again to send'; return; } pttEnd(); });
+  p.addEventListener('pointercancel', () => { if (recOn && !toggleMode) pttEnd(); });
+  p.addEventListener('contextmenu', e => e.preventDefault());
+  p.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); if (recOn) pttEnd(); else { toggleMode = true; pttStart(); } } });
+  $('typedF').addEventListener('submit', e => { e.preventDefault(); const v = $('typedIn').value.trim(); if (!v) return; $('typedIn').value = ''; handleTx(v, 'typed'); });
+  $('bReset').onclick = () => { setScene(Object.assign({}, st, { keep: false }), true); feedback('', ''); addLog('sys', 'Aircraft put back where this step started.'); };
+}
+function addLog(kind, text) { const l = $('rlog'); if (!l) return; const d = document.createElement('div'); d.className = kind; d.textContent = (kind === 'you' ? 'YOU: ' : kind === 'plt' ? 'PILOT: ' : '') + text; l.appendChild(d); l.scrollTop = l.scrollHeight; }
+function pttStart() {
+  if (STEPS[cur].type !== 'voice') return;
+  if (!voiceOk()) { const i = $('typedIn'); if (i) i.focus(); return; }
+  if (recOn) return;
+  hush(); recFinal = ''; recInter = ''; recAlts = [];
+  try {
+    rec = new SR(); rec.lang = 'en-US'; rec.continuous = !MOBILE; rec.interimResults = true; rec.maxAlternatives = 5;
+    rec.onresult = e => { let f = '', it = ''; const alts = [];
+      for (let i = 0; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) { const a = []; for (let j = 0; j < r.length; j++) a.push(r[j].transcript); alts.push(a); f += r[0].transcript + ' '; } else it += r[0].transcript + ' '; }
+      recFinal = f; recInter = it; recAlts = alts; const h = $('heard'); if (h) h.innerHTML = `Hearing: <b>${esc((f + it).trim())}</b>`; };
+    rec.onerror = ev => recError(ev.error);
+    rec.onend = () => { if (recOn) finishRec(); };
+    rec.start(); recOn = true;
+    const p = $('ptt'); if (p) p.classList.add('live'); const pt = $('pttTxt'); if (pt) pt.textContent = toggleMode ? 'Listening… tap again to send' : 'Listening… let go to send';
+  } catch (err) { recError(String(err && err.message || err)); }
+}
+function pttEnd() {
+  if (!recOn) return;
+  const pt = $('pttTxt'); if (pt) pt.textContent = 'Processing…';
+  try { rec && rec.stop(); } catch (e) {}
+  clearTimeout(finishTimer); finishTimer = setTimeout(finishRec, 1500);
+}
+function finishRec() {
+  if (!recOn) return; recOn = false; toggleMode = false; clearTimeout(finishTimer);
+  const p = $('ptt'); if (p) p.classList.remove('live'); const pt = $('pttTxt'); if (pt) pt.textContent = pttLabel();
+  let text = (recFinal + ' ' + recInter).trim();
+  if (recAlts.length === 1 && recAlts[0].length > 1) {   // choose the recognizer alternative the parser understands best
+    const known = W.acs.map(a => a.cs); let best = text, bs = -1;
+    for (const alt of recAlts[0]) { const q = parse(alt, known); const s = q.cmds.length * 2 + (q.cs && !q.csUnknown ? 3 : 0); if (s > bs) { bs = s; best = alt; } }
+    text = (best + ' ' + recInter).trim();
+  }
+  if (!text) { const h = $('heard'); if (h) h.innerHTML = 'Heard nothing. Hold the button a little longer and speak clearly.'; return; }
+  handleTx(text, 'voice');
+}
+function stopRec() { if (!recOn) return; recOn = false; toggleMode = false; clearTimeout(finishTimer); try { rec && rec.abort(); } catch (e) {} const p = $('ptt'); if (p) p.classList.remove('live'); }
+function recError(code) {
+  if (code === 'no-speech') { stopRec(); const h = $('heard'); if (h) h.innerHTML = 'Heard nothing. Try again, a little louder.'; const pt = $('pttTxt'); if (pt) pt.textContent = pttLabel(); return; }
+  if (code === 'aborted') return;
+  stopRec();
+  if (code === 'not-allowed' || code === 'service-not-allowed' || code === 'audio-capture') micBlocked = true;
+  const n = $('vNote'); const msg = micBlocked ? voiceNotice() : (code === 'network' ? '🌐 Speech recognition needs an internet connection. Type your call instead.' : 'Mic error (' + esc(code) + '). You can type your call instead.');
+  if (n) { n.style.display = ''; n.innerHTML = msg; }
+  const p = $('ptt'); if (p) { p.classList.toggle('off', !voiceOk()); $('pttTxt').textContent = pttLabel(); }
+  const i = $('typedIn'); if (i && micBlocked) i.focus();
+}
+
+/* ===================== transmissions: parse → readback → aircraft flies it → Aero checks ===================== */
+function readbackParts(a, cmds) {
+  const parts = [];
+  for (const c of cmds) {
+    if (c.k === 'hdg') parts.push((c.dir ? (c.dir === 'L' ? 'left ' : 'right ') : '') + 'heading ' + sayDigits(h3(c.v)));
+    else if (c.k === 'alt') { const chg = Math.abs(c.v - a.tgtAlt) > 50 || Math.abs(c.v - a.alt) > 50; parts.push((chg ? (c.v > a.alt ? 'climb and maintain ' : 'descend and maintain ') : 'maintain ') + (c.v % 100 === 0 && c.v < 18000 ? 'angels ' + angSay(c.v) : sayDigits(c.v) + ' feet')); }
+    else if (c.k === 'spd') parts.push('maintain ' + sayDigits(c.v) + ' knots');
+    else if (c.k === 'buster') parts.push('buster');
+    else if (c.k === 'freq') parts.push('going ' + c.v);
+    else if (c.k === 'clearLand') parts.push('cleared to land');
+    else if (c.k === 'ga') parts.push('waving off');
+  }
+  return parts;
+}
+function execute(a, cmds) {
+  for (const c of cmds) {
+    if (c.k === 'hdg') { a.trackCL = false; a.mode = 'free'; a.tgtHdg = c.v % 360; a.turn = c.dir === 'L' ? -1 : c.dir === 'R' ? 1 : 0; }
+    else if (c.k === 'alt') { a.tgtAlt = c.v; a.gpOn = false; }
+    else if (c.k === 'spd') a.tgtSpd = Math.max(110, Math.min(500, c.v));
+    else if (c.k === 'buster') a.tgtSpd = 500;
+    else if (c.k === 'freq') { a.freq = c.v; updTag(); }
+    else if (c.k === 'course' || c.k === 'onCourse') { if (a.freq === 'purple' || a.freq === 'copper') { a.trackCL = true; a.tgtHdg = null; a.turn = 0; } }
+    else if (c.k === 'beginDescent') { a.gpOn = true; a.tgtAlt = Math.min(a.tgtAlt, a.alt); }
+    else if (c.k === 'clearLand') a.cleared = true;
+    else if (c.k === 'ga') { a.gpOn = false; a.cleared = false; a.trackCL = false; a.tgtAlt = Math.max(1200, a.tgtAlt); a.tgtHdg = 0; a.turn = 0; W.flash = { t: W.t, txt: 'WAVE OFF' }; }
+  }
+}
+function describeNeed(n) {
+  switch (n.k) {
+    case 'hdg': return `turn ${n.dir === 'L' ? 'left' : 'right'} heading ${sayDigits(h3(n.v))}`;
+    case 'alt': return `descend and maintain angels ${angSay(n.v)}`;
+    case 'spd': return `maintain ${sayDigits(n.v)} knots`;
+    case 'freq': return `go ${n.v}`;
+    case 'course': return 'slightly left of course';
+    case 'beginDescent': return 'begin descent';
+    case 'clearLand': return 'cleared to land';
+  }
+  return n.k;
+}
+function evaluate(st, p) {
+  const ex = st.expect, issues = [], tips = [];
+  if (!p.cs) issues.push(p.bare ? `You said "${p.bare}" but not the <b>number</b>. With several Lightnings airborne, the pilot needs the full callsign: <b>${tel(ex.cs)}</b>.` : `No callsign. Start every call with <b>who</b> you're talking to: "<b>${tel(ex.cs)}</b>, …"`);
+  else if (p.csLate) tips.push('Tip: put the callsign <b>first</b> so the pilot knows the call is for them before the instruction starts.');
+  for (const n of ex.need) {
+    const c = p.cmds.find(x => x.k === n.k);
+    if (!c) { issues.push(`The task needed "<b>${describeNeed(n)}</b>", and I didn't hear that in your call.`); continue; }
+    if (n.k === 'hdg') {
+      if (c.v % 360 !== n.v % 360) issues.push(`You said heading <b>${sayDigits(h3(c.v))}</b> (${h3(c.v)}), but the task was <b>${h3(n.v)}</b>. The pilot flew exactly what you said.`);
+      else if (c.dir && n.dir && c.dir !== n.dir) issues.push(`You said turn <b>${c.dir === 'L' ? 'left' : 'right'}</b>, but the task was a <b>${n.dir === 'L' ? 'left' : 'right'}</b> turn, so it went the long way around!`);
+      else if (!c.dir && n.dir) tips.push(`Tip: "fly heading" lets the pilot pick the shorter way. "Turn <b>${n.dir === 'L' ? 'left' : 'right'}</b> heading…" removes any doubt.`);
+    }
+    if (n.k === 'alt' && c.v !== n.v) issues.push(`You said <b>${cmdStr(c)}</b>, but the task was <b>angels ${angTxt(n.v)}</b> (${n.v.toLocaleString('en-US')} ft).`);
+    if (n.k === 'spd' && c.v !== n.v) issues.push(`You said <b>${c.v} knots</b>, but the task was <b>${n.v} knots</b>.`);
+    if (n.k === 'freq' && c.v !== n.v) issues.push(`You sent it to <b>${c.v}</b>, but Final is waiting on <b>${n.v}</b>.`);
+    if (n.k === 'course' && c.side !== n.side) issues.push(`It's <b>left</b> of the line, so the call is "slightly <b>left</b> of course". The pilot then corrects back right. Saying "right of course" made it drift further left.`);
+  }
+  const extra = p.cmds.filter(c => !ex.need.some(n => n.k === c.k) && !INFO_K.has(c.k));
+  if (extra.length) issues.push(`You also said "<b>${extra.map(cmdStr).join('", "')}</b>", which wasn't part of this task, and the pilot did it anyway.`);
+  return { ok: !issues.length, issues, tips };
+}
+let txBusy = false;
+function handleTx(raw, src) {
+  const st = STEPS[cur]; if (st.type !== 'voice') return false;
+  if (R.done) { feedback('info', 'Already done. Tap <b>Next</b> to continue.'); return false; }
+  if (txBusy) return false;
+  const a = W.acs.find(x => !x.landed); if (!a) return false;
+  let text = raw;
+  if (src === 'typed' && window.Shorthand) { try { const r = Shorthand.expand(raw, { scope: a.freq === 'purple' || a.freq === 'copper' ? 'final' : 'approach', airlines: AIRLINES, selected: tel(a.cs), callsigns: W.acs.map(x => ({ cs: x.cs, tel: tel(x.cs) })) }); if (r && r.shorthand) text = r.text; } catch (e) {} }
+  const p = parse(text, W.acs.map(x => x.cs));
+  const h = $('heard'); if (h) h.innerHTML = `${src === 'voice' ? 'Heard' : 'Sent'}: <b>${esc(text)}</b><br>Understood: ${p.cs ? esc(tel(p.cs)) : '<span style="color:var(--bad)">no callsign</span>'} · ${p.cmds.length ? esc(p.cmds.map(cmdStr).join(', ')) : '<span style="color:var(--bad)">no instruction</span>'}`;
+  addLog('you', text); feedback('', '');
+  txBusy = true;
+  const wrongCs = p.cs && p.cs !== a.cs;
+  setTimeout(() => {
+    if (STEPS[cur] !== st) { txBusy = false; return; }
+    if (wrongCs) { txBusy = false; addLog('sys', '(no answer)'); fail(st, `Nobody answered. You called <b>${esc(tel(p.cs))}</b>, but the aircraft is <b>${tel(a.cs)}</b>. With the wrong callsign, the right pilot ignores the call.`); return; }
+    if (!p.cmds.length || p.hdgMissing) {
+      txBusy = false; addLog('plt', `${tel(a.cs)}, say again.`); speak(telSay(a.cs) + ', say again.', 'pilot');
+      fail(st, p.hdgMissing ? 'The pilot heard a turn but no usable <b>heading number</b>, so they asked you to say again. Say the heading as three digits.' : `The pilot couldn't pick out an instruction and asked you to <b>say again</b>.${src === 'voice' ? ' If the mic misheard you, speak a little slower, or type it.' : ''}`);
+      return;
+    }
+    const parts = readbackParts(a, p.cmds);
+    execute(a, p.cmds);
+    if (parts.length) { addLog('plt', `${tel(a.cs)}, ${parts.join(', ')}.`); speak(`${telSay(a.cs)}, ${parts.join(', ')}.`, 'pilot'); }
+    else addLog('sys', '(no readback: on final the pilot just corrects; routine calls aren\'t acknowledged)');
+    const ev = evaluate(st, p);
+    setTimeout(() => {
+      txBusy = false;
+      if (STEPS[cur] !== st) return;
+      if (ev.ok) succeed(st, ev.tips.join('<br>'));
+      else fail(st, ev.issues.join('<br>') + (ev.tips.length ? '<br>' + ev.tips.join('<br>') : '') + '<br>Try again (tap <b>↺ Reset aircraft</b> if it wandered off).');
+    }, 600);
+  }, 650);
+  return true;
+}
+function onEvent(kind, a) {
+  const st = STEPS[cur];
+  if (kind === 'landed') {
+    addLog('sys', `${tel(a.cs)} is aboard. Trap!`);
+    if (st.waitLand) { R.landed = true; if (st.id in res) { R.done = true; feedback('ok', `✅ <b>${tel(a.cs)} is safely aboard!</b> You just ran your first recovery. Tap <b>Finish</b>.`); speak(telSay(a.cs) + ' is safely aboard. You just ran your first recovery!', 'mentor'); updNav(); updProg(); try { $('bNext').focus({ preventScroll: true }); } catch (e) {} } }
+  } else if (kind === 'noClearance' && st.waitLand && !R.done) {
+    a.gpOn = false; a.tgtAlt = 1200; W.flash = { t: W.t, txt: 'WAVE OFF' };
+    addLog('plt', `${tel(a.cs)}, no landing clearance, waving off.`); speak(telSay(a.cs) + ', no landing clearance, waving off.', 'pilot');
+    fail(st, 'It got close to the deck without a landing clearance, so the pilot waved off. Tap <b>↺ Reset aircraft</b> and clear it to land a bit sooner.');
+  }
+}
+
+/* ===================== completion ===================== */
+function renderDone() {
+  const got = GRADED.filter(s => res[s.id] === 1).length, tot = GRADED.length, pct = got / tot;
+  const stars = pct >= 0.85 ? 3 : pct >= 0.6 ? 2 : 1;
+  $('say').innerHTML = `<p><b>Mission complete.</b> Lightning 24 is safely aboard USS Stinger. Welcome to the team, controller.</p>`;
+  $('task').innerHTML = `<div class="row"><button id="bAgain">↺ Restart intro</button><button id="bResult">Show results</button></div>`;
+  $('bAgain').onclick = restart; $('bResult').onclick = renderDone;
+  updNav();
+  openOv(`<h1>MISSION COMPLETE</h1><h2>First night recovery · USS Stinger</h2>
+    <div class="stars" aria-label="${stars} of 3 stars">${'★'.repeat(stars)}<span class="e">${'★'.repeat(3 - stars)}</span></div>
+    <p>${got} of ${tot} tasks right on the first try.</p>
+    <p>${stars === 3 ? 'Outstanding. You\'re ready for the real trainers.' : stars === 2 ? 'Solid work. A few reps on the trainers and you\'ll be sharp.' : 'You got it aboard, and that\'s what counts. Replay the intro any time.'}</p>
+    <p class="small">Next, try a trainer position:</p>
+    <div class="btns">
+      <a href="marshal-controller.html" class="f-red">Marshal · Red</a>
+      <a href="approach-controller.html" class="f-silver">Approach · Silver</a>
+      <a href="final-controller-par-restyled.html" class="f-purple">Final · Purple / Copper</a>
+      <button id="ovRestart">↺ Restart intro</button>
+      <a href="index.html" style="color:var(--dim);border-color:var(--gdd)">Home</a>
+    </div>`);
+  $('ovRestart').onclick = restart;
+  speak(`Mission complete! ${got} of ${tot} on the first try. ${stars} star${stars > 1 ? 's' : ''}.`, 'mentor');
+}
+function openOv(html) { $('ovCard').innerHTML = html; $('ov').classList.add('open'); setTimeout(() => { const b = $('ovCard').querySelector('button,a'); if (b) try { b.focus({ preventScroll: true }); } catch (e) {} }, 30); }
+function closeOv() { $('ov').classList.remove('open'); }
+function restart() { hush(); res = {}; try { localStorage.removeItem(LS_KEY); } catch (e) {} closeOv(); show(0, true); }
+
+/* ===================== input wiring ===================== */
+const advance = () => { if (R.done && STEPS[cur].type !== 'done') show(cur + 1, false); };
+$('bNext').onclick = advance;
+$('bBack').onclick = () => { if (cur > 0) show(cur - 1, true); };
+$('bMute').onclick = () => setMute(!muted);
+$('bRestart').onclick = () => { if (confirm('Restart the intro from the beginning? Your progress will be cleared.')) restart(); };
+$('ov').addEventListener('keydown', e => { if (e.key === 'Escape' && STEPS[cur].type === 'done') closeOv(); });
+cv.addEventListener('pointerdown', e => {
+  const st = STEPS[cur]; if (st.type !== 'click' || R.done) return;
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  let best = null, bd = 34; for (const a of W.acs) if (a.hit) { const d = Math.hypot(a.hit.x - x, a.hit.y - y); if (d < bd) { bd = d; best = a; } }
+  if (best) clickAc(st, best.cs); else feedback('info', 'Tap right on a target (the small marks with text beside them).');
+});
+const inField = e => e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
+document.addEventListener('keydown', e => {
+  if ($('ov').classList.contains('open') || document.getElementById('aatccGate')) return;
+  const st = STEPS[cur];
+  if (e.code === 'Space' && st.type === 'voice' && !inField(e)) { e.preventDefault(); if (!e.repeat && !recOn) { toggleMode = false; pressT = performance.now(); pttStart(); } return; }
+  if (inField(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+  const onBtn = e.target && (e.target.tagName === 'BUTTON' || e.target.tagName === 'A');
+  if ((e.key === 'Enter' && !onBtn) || e.key === 'ArrowRight') { if (R.done) { e.preventDefault(); advance(); } return; }
+  if (e.key === 'ArrowLeft' && cur > 0) { show(cur - 1, true); return; }
+  if (e.key === 'm' || e.key === 'M') { setMute(!muted); return; }
+  if (/^[1-9]$/.test(e.key)) {
+    const i = +e.key - 1;
+    if (st.type === 'choice') { const b = $('task').querySelectorAll('.opts button')[i]; if (b && !b.disabled) b.click(); }
+    else if (st.type === 'click' && W.acs[i]) clickAc(st, W.acs[i].cs);
+  }
+});
+document.addEventListener('keyup', e => { if (e.code === 'Space' && recOn && !toggleMode && !inField(e)) { e.preventDefault(); pttEnd(); } });
+
+/* ===================== boot ===================== */
+buildProg(); setMute(muted); resize(); requestAnimationFrame(frame);
+(function boot() {
+  const saved = load(), resume = saved && saved.i > 0 && saved.i < STEPS.length - 1 ? saved : null;
+  if (resume) { cur = resume.i; res = resume.res || {}; }
+  setScene(STEPS[cur], true); updProg(); $('say').innerHTML = STEPS[cur].say || ''; updNav();
+  // nothing speaks until the first tap (iOS needs a user gesture for audio)
+  const go = `style="background:#123f1a;border-color:var(--g);color:#d8ffde;font-weight:bold"`;
+  openOv(`<h1>FIRST NIGHT ABOARD STINGER</h1><h2>A guided intro to air traffic control</h2>
+    <p>No experience needed. Your mentor, Aero, will teach you to <b>read the radar scope</b> and <b>talk like a controller</b>. Then you'll bring an aircraft aboard the ship yourself, by voice.</p>
+    <p class="small">About 10 minutes · progress saves automatically · 🔊 voices on (toggle with the speaker button or M)</p>
+    <div class="btns">${resume ? `<button id="ovGo" ${go}>Continue: ${CHAPTERS[STEPS[cur].ch]}, step ${cur + 1}</button><button id="ovRe">↺ Restart from the beginning</button>` : `<button id="ovGo" ${go}>Start the mission ▸</button>`}</div>`);
+  $('ovGo').onclick = () => { closeOv(); show(cur, true); };
+  if ($('ovRe')) $('ovRe').onclick = restart;
+})();
+
+/* test hook for headless tests: inject a recognized string exactly as the voice path delivers it */
+window.__intro = {
+  inject: t => handleTx(t, 'voice'), type: t => handleTx(t, 'typed'), parse: t => parse(t, W.acs.map(a => a.cs)),
+  get i() { return cur; }, get id() { return STEPS[cur].id; }, get type() { return STEPS[cur].type; }, get done() { return R.done; },
+  acs: () => W.acs.map(a => ({ cs: a.cs, x: +a.x.toFixed(2), y: +a.y.toFixed(2), hdg: Math.round(a.hdg) % 360, tgtHdg: a.tgtHdg, turn: a.turn, alt: Math.round(a.alt), tgtAlt: a.tgtAlt, spd: Math.round(a.spd), tgtSpd: a.tgtSpd, freq: a.freq, gpOn: a.gpOn, trackCL: a.trackCL, cleared: a.cleared, landed: a.landed, hit: a.hit ? { x: Math.round(a.hit.x), y: Math.round(a.hit.y) } : null })),
+  go: i => show(i, true), steps: STEPS.map(s => ({ id: s.id, type: s.type, ch: s.ch, answer: s.answer, ok: s.opts ? s.opts.findIndex(o => o.ok) : null, target: s.target || null, hint: s.hint || null })),
+  res: () => res, fast: k => { window.__fastK = k; },
+};
+</script>
+</body></html>
