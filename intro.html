@@ -35,6 +35,18 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
 #mentor .who{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:var(--dim)}
 #mentor .av{width:30px;height:30px;border-radius:50%;border:2px solid var(--amber);display:flex;align-items:center;justify-content:center;color:var(--amber);font-weight:bold}
 #mentor .who b{color:var(--amber);letter-spacing:1px}
+#mentor .av{position:relative;background:radial-gradient(circle at 50% 40%,#2a2410,#0a1a0d);transition:box-shadow .2s}
+#mentor.talking .av{animation:avTalk 0.9s ease-in-out infinite}
+@keyframes avTalk{0%,100%{box-shadow:0 0 0 0 rgba(255,191,60,.0)}50%{box-shadow:0 0 0 5px rgba(255,191,60,.28)}}
+#mentor .bars{display:none;gap:2px;align-items:flex-end;height:12px;margin-left:2px}
+#mentor.talking .bars{display:inline-flex}
+#mentor .bars i{width:3px;background:var(--amber);border-radius:1px;animation:bar .6s ease-in-out infinite}
+#mentor .bars i:nth-child(2){animation-delay:.15s}#mentor .bars i:nth-child(3){animation-delay:.3s}
+@keyframes bar{0%,100%{height:3px}50%{height:12px}}
+#vpick{display:none;position:absolute;right:10px;top:46px;z-index:40;width:300px;max-width:calc(100vw - 20px);background:#071109;border:1px solid var(--g);border-radius:6px;padding:10px;font-size:13px;flex-direction:column;gap:8px}
+#vpick.open{display:flex}
+#vpick select{font-family:inherit;font-size:14px;background:#030803;color:#d8ffde;border:1px solid var(--gd);border-radius:4px;padding:6px;width:100%}
+.nameF{display:flex;gap:6px}.nameF input{flex:1;min-width:0;font-family:inherit;font-size:16px;background:#030803;color:#d8ffde;border:1px solid var(--gd);border-radius:4px;padding:8px}
 #say{font-size:15px;line-height:1.45;color:#d8ffde}
 #say p{margin:0 0 7px}#say p:last-child{margin:0}
 #say .k{color:var(--amber)}
@@ -100,14 +112,19 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
     <a class="home" href="index.html" title="Back to the home page">◂ Home</a>
     <div class="ttl"><b>AATCC INTRO</b> · <span id="chName"></span></div>
     <div id="prog" aria-label="Chapter progress"></div>
+    <button id="bVoice" title="Choose Aero's voice" aria-label="Choose Aero's voice">🗣<span class="wide"> Voice</span></button>
     <button id="bMute" title="Mute / unmute voices (M)" aria-label="Mute">🔊</button>
     <button id="bRestart" title="Restart the intro from the beginning" aria-label="Restart intro">↺<span class="wide"> Restart</span></button>
   </header>
+  <div id="vpick" role="dialog" aria-label="Aero's voice"><label for="vSel"><b>Aero's voice</b></label><select id="vSel"></select>
+    <div class="row"><button id="vTest">▶ Test</button><button id="vClose">Done</button></div>
+    <div class="small" id="vNone" style="display:none">No voices reported by this browser yet.</div>
+    <div class="small">Voices come from your device. "Enhanced", "Premium" and "Natural" voices sound the most human. On iPhone/iPad add them in Settings › Accessibility › Spoken Content › Voices › English.</div></div>
   <main id="main">
     <section id="scopeBox" aria-label="Radar scope"><canvas id="cv"></canvas><div id="scopeTag"></div></section>
     <section id="panel">
       <div id="pscroll">
-        <div id="mentor" aria-live="polite"><div class="who"><span class="av">A</span><b>AERO</b><span>Senior controller · your mentor</span></div><div id="say"></div></div>
+        <div id="mentor" aria-live="polite"><div class="who"><span class="av">A</span><b>AERO</b><span>Your AI guide</span><span class="bars" aria-hidden="true"><i></i><i></i><i></i></span></div><div id="say"></div></div>
         <div id="task"></div>
         <div id="fb" aria-live="polite"></div>
       </div>
@@ -125,7 +142,7 @@ const TURN_RATE = 3;           // deg/s, standard rate turn
 const CLIMB_FPM = 2000, SPD_RATE = 3, NM_FT = 6076.12, GP_TAN = Math.tan(3 * Math.PI / 180), SWEEP_MS = 4000;
 const FCOL = { red: '#ff5a6e', silver: '#c9ced6', purple: '#b48cff', copper: '#e0915a', none: '#a8f0b2' };
 const FNAME = { red: 'Marshal · Red', silver: 'Approach · Silver', purple: 'Final · Purple', copper: 'Final · Copper' };
-const LS_KEY = 'aatccIntro.v1', LS_MUTE = 'aatccIntroMute';
+const LS_KEY = 'aatccIntro.v2', LS_MUTE = 'aatccIntroMute';
 const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
 
 /* ===================== callsigns + spoken numbers (mirrors approach-controller.html) ===================== */
@@ -406,30 +423,112 @@ function draw(now) {
 let lastT = performance.now();
 function frame(now) { const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now; if (!document.hidden) { tick(dt); draw(now); } requestAnimationFrame(frame); }
 
-/* ===================== voices (TTS) ===================== */
+/* ===================== voices (TTS): Aero = warm, steady male guide; pilots = different voice, radio-ish ===================== */
 let muted = localStorage.getItem(LS_MUTE) === '1';
 const TTS = 'speechSynthesis' in window;
-let voices = [];
-function loadVoices() { try { voices = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang)); } catch (e) { voices = []; } }
-if (TTS) { loadVoices(); try { speechSynthesis.onvoiceschanged = loadVoices; } catch (e) {} }
-function pickVoice(who) {
-  if (!voices.length) return null;
-  const us = voices.filter(v => /en[-_]US/i.test(v.lang)), pool = us.length ? us : voices;
-  if (who === 'pilot') return pool.find(v => /\b(male|daniel|fred|alex|david|guy|aaron|tom)\b/i.test(v.name) && !/female/i.test(v.name)) || pool[Math.min(1, pool.length - 1)];
-  return pool.find(v => /samantha|female|zira|jenny|aria|google us english/i.test(v.name)) || pool[0];
+const LS_VOICE = 'aatccIntroVoice', LS_NAME = 'aatccIntroName';
+let voices = [], aeroV = null, pilotV = null;
+// robotic / novelty voices (macOS Eloquence + effects voices) never get picked automatically
+const NOVELTY = /\b(albert|bad news|bahh|bells|boing|bubbles|cellos|wobble|zarvox|trinoids|whisper|jester|organ|superstar|good news|hysterical|deranged|eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley|ralph|junior|kathy|princess|vicki|victoria)\b/i;
+const MALE = /\b(evan|nathan|aaron|alex|tom|fred|daniel|arthur|oliver|guy|andrew|brian|christopher|eric|roger|steffan|ryan|davis|tony|jason|william|liam|thomas|james|david|mark|george|noah|male)\b/i;
+const QUALITY = /enhanced|premium|natural|neural|online/i;
+function voiceScore(v) {
+  const n = v.name, us = /en[-_]US/i.test(v.lang);
+  if (NOVELTY.test(n) || /female/i.test(n)) return /female/i.test(n) ? 1 : -100;
+  let s = 0;
+  if (/^evan\b/i.test(n)) s = 100; else if (/^nathan\b/i.test(n)) s = 96;
+  else if (/microsoft (andrew|brian|guy|christopher).*(online|natural)/i.test(n)) s = 98;
+  else if (/google uk english male/i.test(n)) s = 90;
+  else if (/^aaron\b/i.test(n)) s = 80; else if (/^alex\b/i.test(n)) s = 78; else if (/^tom\b/i.test(n)) s = 62;
+  else if (/microsoft .*(online|natural)/i.test(n) && MALE.test(n)) s = 85;
+  else if (/^fred\b/i.test(n)) s = 12;                       // last resort: very robotic
+  else if (MALE.test(n)) s = 50;
+  else s = us ? 6 : 3;
+  if (QUALITY.test(n)) s += 10;
+  if (us) s += 2;
+  return s;
 }
-const plain = h => String(h).replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/[🎯🎙✅❌▸◂↺·←]/gu, ' ').replace(/\s+/g, ' ').trim();
-function speak(text, who) {
-  if (!TTS || muted || !text) return;
+function loadVoices() {
+  try { voices = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang)); } catch (e) { voices = []; }
+  const ranked = voices.slice().sort((a, b) => voiceScore(b) - voiceScore(a));
+  const want = localStorage.getItem(LS_VOICE);
+  aeroV = (want && voices.find(v => v.voiceURI === want || v.name === want)) || ranked[0] || null;
+  // pilot: a different male voice if the device has one (prefer a different base name, e.g. not Evan vs Evan (Enhanced))
+  const base = v => v.name.replace(/\s*\(.*\)\s*/g, '').trim().toLowerCase();
+  pilotV = ranked.find(v => aeroV && base(v) !== base(aeroV) && voiceScore(v) >= 40) || ranked.find(v => v !== aeroV && voiceScore(v) > 0) || aeroV;
+  fillVoicePicker(ranked);
+}
+if (TTS) { loadVoices(); try { speechSynthesis.addEventListener('voiceschanged', loadVoices); } catch (e) { try { speechSynthesis.onvoiceschanged = loadVoices; } catch (e2) {} } setTimeout(loadVoices, 800); setTimeout(loadVoices, 2500); }
+function fillVoicePicker(ranked) {
+  const sel = $('vSel'); if (!sel) return;
+  const want = localStorage.getItem(LS_VOICE) || '';
+  const best = ranked[0];
+  sel.innerHTML = `<option value="">Auto${best ? ' (' + esc(best.name) + ')' : ''}</option>` + ranked.filter(v => voiceScore(v) > -100 || v.voiceURI === want).map(v => `<option value="${esc(v.voiceURI)}"${v.voiceURI === want ? ' selected' : ''}>${esc(v.name)} · ${esc(v.lang)}</option>`).join('');
+  $('vNone').style.display = voices.length ? 'none' : '';
+}
+const ICAO_RE = new RegExp('\\b(' + AIRLINES.map(a => a.icao).join('|') + ')(\\d{1,4})\\b', 'g');
+const TEL_RE = new RegExp('\\b(' + AIRLINES.map(a => a.tel).join('|') + ')\\s+(\\d{1,4})\\b', 'g');
+// HTML → plain on-screen text (UI hints and emoji removed)
+const plain = h => String(h).replace(/<span class="ui">[\s\S]*?<\/span>/g, ' ').replace(/<br\s*\/?>/gi, '. ').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&[a-z]+;/g, ' ')
+  .replace(/\p{Extended_Pictographic}|\uFE0F/gu, ' ').replace(/[▸◂↺·•★✓✗⌨]/g, ' ').replace(/\s+/g, ' ').trim();
+// on-screen text → how Aero should SAY it (phonetic tweaks only where needed)
+function forSpeech(t) {
+  return (' ' + t + ' ')
+    .replace(/\((?:[^()]*\b(?:tap|press|click|Enter|Space bar|button)\b[^()]*)\)/gi, ' ')   // "(or press Enter)" is UI, not speech
+    .replace(/×/g, ' times ').replace(/°/g, ' degree').replace(/\s*[←→]\s*/g, ', ').replace(/\s=\s/g, ' equals ').replace(/\b(\w+)\s?\/\s?(\w+)\b/g, (m, a, b) => /\d/.test(m) ? m : a + ' or ' + b).replace(/_{2,}/g, 'blank')
+    .replace(ICAO_RE, (m, p, d) => telSay(p + d)).replace(TEL_RE, (m, w, d) => w + ' ' + sayDigits(d))
+    .replace(/\b(heading|bearing)\s+(\d{3})\b/gi, (m, w, d) => w + ' ' + sayDigits(d))
+    .replace(/\bangels\s+(\d+(?:\.\d)?)\b/gi, (m, d) => 'angels ' + sayDigits(d))
+    .replace(/\b(\d{4})\b(?=\s*(?:,|\.|\s)*(?:its )?beacon)/gi, (m, d) => sayDigits(d))
+    .replace(/\bUSS\b/g, 'U S S').replace(/\bPAR\b/g, 'P A R').replace(/\bATC\b/g, 'A T C').replace(/\bNM\b/g, 'miles').replace(/(\d)\s*ft\b/g, '$1 feet')
+    .replace(/\bAero\b/g, 'Airo').replace(/"/g, '').replace(/\s+([,.!?:;])/g, '$1').replace(/([.!?,])\1+/g, '$1').replace(/\s+/g, ' ').trim();
+}
+// split into sentence-sized chunks; paragraph breaks get a longer pause
+function chunks(html) {
+  const paras = String(html).split(/<\/p>|<p>|\n\n/).map(plain).map(forSpeech).filter(s => /[a-z0-9]/i.test(s));
+  const out = [];
+  paras.forEach((p, pi) => { const ss = p.match(/[^.!?]+[.!?]*["')]?/g) || [p]; ss.map(s => s.trim()).filter(s => /[a-z0-9]/i.test(s)).forEach((s, si, arr) => out.push({ t: s, gap: si === arr.length - 1 && pi < paras.length - 1 ? 420 : 170 })); });
+  return out;
+}
+let sq = [], sqBusy = false, sqGen = 0, actx = null;
+function squelch() {   // tiny radio key-up click before pilot transmissions (Web Audio; no external files)
   try {
-    const u = new SpeechSynthesisUtterance(plain(text)); u.lang = 'en-US';
-    const v = pickVoice(who); if (v) u.voice = v;
-    if (who === 'pilot') { u.rate = 1.12; u.pitch = 0.85; } else { u.rate = 1.03; u.pitch = 1.05; }
-    speechSynthesis.speak(u);
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const n = Math.floor(actx.sampleRate * 0.07), buf = actx.createBuffer(1, n, actx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) * 0.35;
+    const src = actx.createBufferSource(), bp = actx.createBiquadFilter(), g = actx.createGain();
+    bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 0.9; g.gain.value = 0.5;
+    src.buffer = buf; src.connect(bp); bp.connect(g); g.connect(actx.destination); src.start();
   } catch (e) {}
 }
-function hush() { if (TTS) try { speechSynthesis.cancel(); } catch (e) {} }
+function setTalking(on) { const m = $('mentor'); if (m) m.classList.toggle('talking', !!on); }
+function nextChunk() {
+  if (!sq.length) { sqBusy = false; setTalking(false); return; }
+  sqBusy = true;
+  const c = sq.shift(), gen = sqGen;
+  let doneOnce = false;
+  const done = () => { if (doneOnce || gen !== sqGen) return; doneOnce = true; clearTimeout(wd); if (c.who === 'aero' && !(sq[0] && sq[0].who === 'aero')) setTalking(false); setTimeout(() => { if (gen === sqGen) nextChunk(); }, c.gap); };
+  const wd = setTimeout(done, 2500 + c.t.split(' ').length * 650);   // watchdog in case onend never fires (Safari)
+  try {
+    const u = new SpeechSynthesisUtterance(c.t); u.lang = 'en-US';
+    if (c.who === 'pilot') { if (pilotV) u.voice = pilotV; u.rate = 1.13; u.pitch = pilotV === aeroV ? 0.8 : 0.9; u.volume = 0.9; squelch(); }
+    else { if (aeroV) u.voice = aeroV; u.rate = 1.0; u.pitch = 0.97; u.volume = 1; }
+    u.onstart = () => { if (c.who === 'aero' && gen === sqGen) setTalking(true); };
+    u.onend = done; u.onerror = done;
+    speechSynthesis.speak(u);
+  } catch (e) { done(); }
+}
+function speak(text, who) {
+  if (!TTS || muted || !text) return;
+  const w = who === 'pilot' ? 'pilot' : 'aero';
+  const cs = w === 'pilot' ? [{ t: forSpeech(plain(text)), gap: 200 }] : chunks(text);
+  cs.forEach(c => sq.push(Object.assign(c, { who: w })));
+  if (!sqBusy) nextChunk();
+}
+function hush() { sqGen++; sq = []; sqBusy = false; setTalking(false); if (TTS) try { speechSynthesis.cancel(); } catch (e) {} }
 function setMute(m) { muted = m; try { localStorage.setItem(LS_MUTE, m ? '1' : '0'); } catch (e) {} $('bMute').textContent = m ? '🔇' : '🔊'; $('bMute').setAttribute('aria-label', m ? 'Unmute voices' : 'Mute voices'); if (m) hush(); }
+function toggleVoicePanel(open) { const p = $('vpick'); const o = open ?? !p.classList.contains('open'); p.classList.toggle('open', o); if (o) loadVoices(); }
+const userName = () => { try { return (localStorage.getItem(LS_NAME) || '').trim() || 'Controller'; } catch (e) { return 'Controller'; } };
 
 /* ===================== the story ===================== */
 const CHAPTERS = ['Briefing', 'The scope', 'The flow', 'Phraseology', 'Mission'], CH_SHORT = ['Brief', 'Scope', 'Flow', 'Radio', 'Mission'];
@@ -440,8 +539,10 @@ const VP12 = o => Object.assign({ cs: 'VIPR12', code: '4155' }, o);
 const PRACTICE = () => [LT21({ x: 6, y: -6, hdg: 360, alt: 3000, spd: 250, freq: 'silver' })];
 const STEPS = [
   // ---------- Briefing ----------
+  { ch: 0, id: 'meet', type: 'name', range: 15, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
+    say: `<p>Hey there, and welcome! I'm <b>Aero</b>, your personal AI guide for this training.</p><p>Think of me as your coach in the headset. I'll show you how to read the radar scope, teach you the radio calls controllers use, and let you know the moment you nail one. Mess something up? No problem. I'll explain it and we'll run it again.</p><p>I'll be right here with you the whole way, from your first look at the scope to bringing a jet aboard the ship.</p><p>First things first: what should I call you? Your name or a callsign works.</p>` },
   { ch: 0, id: 'welcome', type: 'info', range: 15, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
-    say: `<p>Welcome aboard <b>USS Stinger</b>. I'm Aero, and tonight you're working your first <b>night recovery</b>: bringing aircraft back aboard the ship in the dark.</p><p>At night pilots can't see much, so they rely on <b>you</b>, the controller, watching them on radar and talking them home.</p><p>Four short chapters: <b>the scope</b>, <b>the flow</b>, <b>phraseology</b>, then a real <b>mission</b>. Tap <b>Next</b> (or press Enter) when you're ready.</p>` },
+    say: () => `<p>Alright, <b>${esc(userName())}</b>, welcome aboard <b>USS Stinger</b>. Tonight you're working your first <b>night recovery</b>: bringing aircraft back aboard the ship in the dark.</p><p>At night pilots can't see much, so they rely on <b>you</b>, the controller, watching them on radar and talking them home.</p><p>We'll do it in four short chapters: <b>the scope</b>, <b>the flow</b>, <b>phraseology</b>, then a real <b>mission</b>. Let's get to work.</p><p><span class="ui">Tap <b>Next</b> (or press Enter) when you're ready.</span></p>` },
   // ---------- Chapter A: the scope ----------
   { ch: 1, id: 'scope1', type: 'info', range: 15, hl: { ship: true }, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
     say: `<p>This is your <b>radar scope</b>. Picture a map seen from straight above, with <b>north at the top</b>.</p><p>The <span class="k">ship</span> is always in the center. The bright rotating line is the <b>sweep</b>, the radar antenna turning. Each time it passes an aircraft, the target <b>jumps</b> to its new spot. That's why targets move in little steps.</p>` },
@@ -474,7 +575,7 @@ const STEPS = [
     opts: [{ t: 'North, heading 360', why: 'The trail dots are <b>above</b> it, so it came from the north and is flying <b>south</b>.' }, { t: 'East, heading 090', why: 'It isn\'t moving sideways. Follow the dots: it\'s moving down the scope.' }, { t: 'South, heading 180', ok: 1 }, { t: 'West, heading 270', why: 'It isn\'t moving sideways. Follow the dots: it\'s moving down the scope.' }],
     good: `Nice. Dots behind it to the north, moving down the scope: <b>heading 180</b>, south.` },
   { ch: 1, id: 'priSec', type: 'info', range: 15, vis: 'both', visToggle: true, acs: [LT21({ x: -5, y: 6, hdg: 120, alt: 3000, spd: 250 }), NH41({ x: 6, y: -5, hdg: 330, alt: 1500, spd: 120 })],
-    say: `<p>Radar gives you two kinds of picture:</p><p><b>Primary</b>: the raw radar echo bouncing off the aircraft. It shows <i>where</i> something is, but not who it is or how high.</p><p><b>Secondary</b>: the aircraft's transponder answering the radar. That's what gives you the <b>data block</b> (callsign, altitude, speed).</p><p>Try the buttons below to see each one.</p>` },
+    say: `<p>Radar gives you two kinds of picture:</p><p><b>Primary</b>: the raw radar echo bouncing off the aircraft. It shows <i>where</i> something is, but not who it is or how high.</p><p><b>Secondary</b>: the aircraft's transponder answering the radar. That's what gives you the <b>data block</b> (callsign, altitude, speed).</p><p><span class="ui">Try the buttons below to see each one.</span></p>` },
   { ch: 1, id: 'qPri', type: 'choice', range: 15, vis: 'primary', acs: [LT21({ x: -5, y: 6, hdg: 120, alt: 3000, spd: 250 }), NH41({ x: 6, y: -5, hdg: 330, alt: 1500, spd: 120 })],
     say: `<p>Uh oh, the data blocks just vanished, but the targets are still moving.</p>`, q: `What are you looking at now?`,
     opts: [{ t: 'Primary only (raw radar echoes)', ok: 1 }, { t: 'Secondary only', why: 'Secondary is what <b>draws</b> the data block. No blocks means you\'re seeing primary only.' }, { t: 'The aircraft have landed', why: 'They\'re still moving, just without their transponder data.' }],
@@ -570,6 +671,7 @@ const STEPS = [
     hint: 'Lightning 24, cleared to land', good: 'Here it comes…' },
   { ch: 4, id: 'done', type: 'done', range: 10, course: true, acs: [] },
 ];
+const sayOf = st => typeof st.say === 'function' ? st.say() : (st.say || '');
 const GRADED = STEPS.filter(s => ['click', 'choice', 'chips', 'voice'].includes(s.type));
 
 /* ===================== state + persistence ===================== */
@@ -602,14 +704,15 @@ function show(i, first) {
   hush(); stopRec();
   cur = Math.max(0, Math.min(STEPS.length - 1, i));
   const st = STEPS[cur];
-  R = { done: st.type === 'info', tries: 0, built: [], landed: false };
+  R = { done: st.type === 'info' || (st.type === 'name' && !!(localStorage.getItem(LS_NAME) || '').trim()), tries: 0, built: [], landed: false };
   setScene(st, first);
   $('fb').className = ''; $('fb').innerHTML = '';
   if (st.type === 'done') { renderDone(); save(); updProg(); return; }
-  $('say').innerHTML = st.say || '';
+  const sayHtml = sayOf(st);
+  $('say').innerHTML = sayHtml;
   renderTask(st);
-  speak(st.say, 'mentor');
-  if (st.pilot) speak(st.pilot.replace(/Lightning 24/g, 'Lightning two four'), 'pilot');
+  speak(sayHtml, 'mentor');
+  if (st.pilot) speak(st.pilot, 'pilot');
   updNav(); updProg(); save();
   $('pscroll').scrollTop = 0;
 }
@@ -656,6 +759,15 @@ function renderTask(st) {
     if (st.voiceHelp) t.insertAdjacentHTML('beforeend', `<div class="notice">${voiceNotice() || '🎙 Speech recognition works in this browser. Have your mic ready.'}</div>`);
     return;
   }
+  if (st.type === 'name') {
+    const cur0 = (localStorage.getItem(LS_NAME) || '').trim();
+    t.insertAdjacentHTML('beforeend', `<div class="task">🎯 Tell Aero your <b>name or callsign</b>.</div>
+      <form class="nameF" id="nameF" autocomplete="off"><input id="nameIn" maxlength="24" placeholder="e.g. Alex, or Maverick" aria-label="Your name or callsign" value="${esc(cur0)}" enterkeyhint="done" autocapitalize="words"><button type="submit">That's me ▸</button></form>
+      <div class="row"><button id="bVoice2" title="Choose Aero's voice">🗣 Change Aero's voice</button></div>`);
+    $('nameF').addEventListener('submit', e => { e.preventDefault(); setName(st, $('nameIn').value); });
+    $('bVoice2').onclick = () => toggleVoicePanel(true);
+    return;
+  }
   if (st.task) t.insertAdjacentHTML('beforeend', `<div class="task">${st.task}</div>`);
   if (st.dlg) t.insertAdjacentHTML('beforeend', `<div class="dlg">${st.dlg.map(([w, s]) => `<div class="${w}"><span class="lbl">${w === 'you' ? 'YOU' : 'PILOT'}</span>${esc(s)}</div>`).join('')}</div>`);
   if (st.type === 'click') { t.insertAdjacentHTML('beforeend', `<div class="small">Tap or click right on the target. Keyboard: ${st.acs.map((a, i) => (i + 1) + ' = ' + a.cs).join(', ')}.</div>`); return; }
@@ -673,6 +785,16 @@ function renderTask(st) {
     t.append(built, pool, row); return;
   }
   if (st.type === 'voice') renderVoice(st);
+}
+function setName(st, raw) {
+  const nm = String(raw || '').replace(/[<>"&]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
+  try { localStorage.setItem(LS_NAME, nm); } catch (e) {}
+  const n = nm || 'Controller';
+  hush(); R.done = true; markResult(st, true);
+  const msg = `Great to meet you, <b>${esc(n)}</b>! I've got your back tonight. Let's head out to the ship.`;
+  feedback('ok', `✅ ${msg}<span class="ui"> Tap <b>Next</b> to start.</span>`); speak(msg, 'mentor');
+  $('nameIn').blur(); updNav(); updProg();
+  setTimeout(() => { try { $('bNext').focus({ preventScroll: true }); } catch (e) {} }, 50);
 }
 function shuffle(a) { let s = 7; for (let i = a.length - 1; i > 0; i--) { s = (s * 9301 + 49297) % 233280; const j = Math.floor(s / 233280 * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 function choose(st, i, b) {
@@ -842,7 +964,7 @@ function evaluate(st, p) {
 let txBusy = false;
 function handleTx(raw, src) {
   const st = STEPS[cur]; if (st.type !== 'voice') return false;
-  if (R.done) { feedback('info', 'Already done. Tap <b>Next</b> to continue.'); return false; }
+  if (R.done) { feedback('info', 'Already done. <span class="ui">Tap <b>Next</b> to continue.</span>'); return false; }
   if (txBusy) return false;
   const a = W.acs.find(x => !x.landed); if (!a) return false;
   let text = raw;
@@ -869,7 +991,7 @@ function handleTx(raw, src) {
       txBusy = false;
       if (STEPS[cur] !== st) return;
       if (ev.ok) succeed(st, ev.tips.join('<br>'));
-      else fail(st, ev.issues.join('<br>') + (ev.tips.length ? '<br>' + ev.tips.join('<br>') : '') + '<br>Try again (tap <b>↺ Reset aircraft</b> if it wandered off).');
+      else fail(st, ev.issues.join('<br>') + (ev.tips.length ? '<br>' + ev.tips.join('<br>') : '') + '<br>Try again<span class="ui"> (tap <b>↺ Reset aircraft</b> if it wandered off)</span>.');
     }, 600);
   }, 650);
   return true;
@@ -878,11 +1000,11 @@ function onEvent(kind, a) {
   const st = STEPS[cur];
   if (kind === 'landed') {
     addLog('sys', `${tel(a.cs)} is aboard. Trap!`);
-    if (st.waitLand) { R.landed = true; if (st.id in res) { R.done = true; feedback('ok', `✅ <b>${tel(a.cs)} is safely aboard!</b> You just ran your first recovery. Tap <b>Finish</b>.`); speak(telSay(a.cs) + ' is safely aboard. You just ran your first recovery!', 'mentor'); updNav(); updProg(); try { $('bNext').focus({ preventScroll: true }); } catch (e) {} } }
+    if (st.waitLand) { R.landed = true; if (st.id in res) { R.done = true; feedback('ok', `✅ <b>${tel(a.cs)} is safely aboard!</b> You just ran your first recovery. <span class="ui">Tap <b>Finish</b>.</span>`); speak(tel(a.cs) + ' is safely aboard. ' + userName() + ', you just ran your first recovery!', 'mentor'); updNav(); updProg(); try { $('bNext').focus({ preventScroll: true }); } catch (e) {} } }
   } else if (kind === 'noClearance' && st.waitLand && !R.done) {
     a.gpOn = false; a.tgtAlt = 1200; W.flash = { t: W.t, txt: 'WAVE OFF' };
     addLog('plt', `${tel(a.cs)}, no landing clearance, waving off.`); speak(telSay(a.cs) + ', no landing clearance, waving off.', 'pilot');
-    fail(st, 'It got close to the deck without a landing clearance, so the pilot waved off. Tap <b>↺ Reset aircraft</b> and clear it to land a bit sooner.');
+    fail(st, 'It got close to the deck without a landing clearance, so the pilot waved off. <span class="ui">Tap <b>↺ Reset aircraft</b> and </span>Clear it to land a bit sooner next time.');
   }
 }
 
@@ -890,7 +1012,7 @@ function onEvent(kind, a) {
 function renderDone() {
   const got = GRADED.filter(s => res[s.id] === 1).length, tot = GRADED.length, pct = got / tot;
   const stars = pct >= 0.85 ? 3 : pct >= 0.6 ? 2 : 1;
-  $('say').innerHTML = `<p><b>Mission complete.</b> Lightning 24 is safely aboard USS Stinger. Welcome to the team, controller.</p>`;
+  $('say').innerHTML = `<p><b>Mission complete.</b> Lightning 24 is safely aboard USS Stinger. Welcome to the team, ${esc(userName())}.</p>`;
   $('task').innerHTML = `<div class="row"><button id="bAgain">↺ Restart intro</button><button id="bResult">Show results</button></div>`;
   $('bAgain').onclick = restart; $('bResult').onclick = renderDone;
   updNav();
@@ -907,7 +1029,7 @@ function renderDone() {
       <a href="index.html" style="color:var(--dim);border-color:var(--gdd)">Home</a>
     </div>`);
   $('ovRestart').onclick = restart;
-  speak(`Mission complete! ${got} of ${tot} on the first try. ${stars} star${stars > 1 ? 's' : ''}.`, 'mentor');
+  speak(`Mission complete! ${got} of ${tot} on the first try. ${stars} star${stars > 1 ? 's' : ''}. Awesome flying with you, ${userName()}.`, 'mentor');
 }
 function openOv(html) { $('ovCard').innerHTML = html; $('ov').classList.add('open'); setTimeout(() => { const b = $('ovCard').querySelector('button,a'); if (b) try { b.focus({ preventScroll: true }); } catch (e) {} }, 30); }
 function closeOv() { $('ov').classList.remove('open'); }
@@ -918,6 +1040,10 @@ const advance = () => { if (R.done && STEPS[cur].type !== 'done') show(cur + 1, 
 $('bNext').onclick = advance;
 $('bBack').onclick = () => { if (cur > 0) show(cur - 1, true); };
 $('bMute').onclick = () => setMute(!muted);
+$('bVoice').onclick = () => toggleVoicePanel();
+$('vClose').onclick = () => toggleVoicePanel(false);
+$('vSel').onchange = () => { try { localStorage.setItem(LS_VOICE, $('vSel').value); } catch (e) {} loadVoices(); hush(); speak(`Hi ${userName()}, this is how I'll sound.`, 'mentor'); };
+$('vTest').onclick = () => { hush(); if (muted) setMute(false); speak(`Hi ${userName()}, I'm Aero, your guide. Let's bring them home.`, 'mentor'); speak('Stinger Approach, Lightning two four, angels four.', 'pilot'); };
 $('bRestart').onclick = () => { if (confirm('Restart the intro from the beginning? Your progress will be cleared.')) restart(); };
 $('ov').addEventListener('keydown', e => { if (e.key === 'Escape' && STEPS[cur].type === 'done') closeOv(); });
 cv.addEventListener('pointerdown', e => {
@@ -936,6 +1062,7 @@ document.addEventListener('keydown', e => {
   if ((e.key === 'Enter' && !onBtn) || e.key === 'ArrowRight') { if (R.done) { e.preventDefault(); advance(); } return; }
   if (e.key === 'ArrowLeft' && cur > 0) { show(cur - 1, true); return; }
   if (e.key === 'm' || e.key === 'M') { setMute(!muted); return; }
+  if (e.key === 'Escape' && $('vpick').classList.contains('open')) { toggleVoicePanel(false); return; }
   if (/^[1-9]$/.test(e.key)) {
     const i = +e.key - 1;
     if (st.type === 'choice') { const b = $('task').querySelectorAll('.opts button')[i]; if (b && !b.disabled) b.click(); }
@@ -949,13 +1076,13 @@ buildProg(); setMute(muted); resize(); requestAnimationFrame(frame);
 (function boot() {
   const saved = load(), resume = saved && saved.i > 0 && saved.i < STEPS.length - 1 ? saved : null;
   if (resume) { cur = resume.i; res = resume.res || {}; }
-  setScene(STEPS[cur], true); updProg(); $('say').innerHTML = STEPS[cur].say || ''; updNav();
+  setScene(STEPS[cur], true); updProg(); $('say').innerHTML = sayOf(STEPS[cur]); updNav();
   // nothing speaks until the first tap (iOS needs a user gesture for audio)
   const go = `style="background:#123f1a;border-color:var(--g);color:#d8ffde;font-weight:bold"`;
   openOv(`<h1>FIRST NIGHT ABOARD STINGER</h1><h2>A guided intro to air traffic control</h2>
-    <p>No experience needed. Your mentor, Aero, will teach you to <b>read the radar scope</b> and <b>talk like a controller</b>. Then you'll bring an aircraft aboard the ship yourself, by voice.</p>
+    <p>No experience needed. <b>Aero</b>, your personal AI guide, will teach you to <b>read the radar scope</b> and <b>talk like a controller</b>. Then you'll bring an aircraft aboard the ship yourself, by voice.</p>
     <p class="small">About 10 minutes · progress saves automatically · 🔊 voices on (toggle with the speaker button or M)</p>
-    <div class="btns">${resume ? `<button id="ovGo" ${go}>Continue: ${CHAPTERS[STEPS[cur].ch]}, step ${cur + 1}</button><button id="ovRe">↺ Restart from the beginning</button>` : `<button id="ovGo" ${go}>Start the mission ▸</button>`}</div>`);
+    <div class="btns">${resume ? `<button id="ovGo" ${go}>Continue: ${CHAPTERS[STEPS[cur].ch]}, step ${cur + 1}</button><button id="ovRe">↺ Restart from the beginning</button>` : `<button id="ovGo" ${go}>Meet Aero ▸</button>`}</div>`);
   $('ovGo').onclick = () => { closeOv(); show(cur, true); };
   if ($('ovRe')) $('ovRe').onclick = restart;
 })();
@@ -963,7 +1090,7 @@ buildProg(); setMute(muted); resize(); requestAnimationFrame(frame);
 /* test hook for headless tests: inject a recognized string exactly as the voice path delivers it */
 window.__intro = {
   inject: t => handleTx(t, 'voice'), type: t => handleTx(t, 'typed'), parse: t => parse(t, W.acs.map(a => a.cs)),
-  get i() { return cur; }, get id() { return STEPS[cur].id; }, get type() { return STEPS[cur].type; }, get done() { return R.done; },
+  get i() { return cur; }, get id() { return STEPS[cur].id; }, get type() { return STEPS[cur].type; }, get done() { return R.done; }, name: n => setName(STEPS[cur], n), speechOf: h => chunks(h).map(c => c.t), voice: () => ({ aero: aeroV && aeroV.name, pilot: pilotV && pilotV.name }), score: n => voiceScore({ name: n, lang: 'en-US' }),
   acs: () => W.acs.map(a => ({ cs: a.cs, x: +a.x.toFixed(2), y: +a.y.toFixed(2), hdg: Math.round(a.hdg) % 360, tgtHdg: a.tgtHdg, turn: a.turn, alt: Math.round(a.alt), tgtAlt: a.tgtAlt, spd: Math.round(a.spd), tgtSpd: a.tgtSpd, freq: a.freq, gpOn: a.gpOn, trackCL: a.trackCL, cleared: a.cleared, landed: a.landed, hit: a.hit ? { x: Math.round(a.hit.x), y: Math.round(a.hit.y) } : null })),
   go: i => show(i, true), steps: STEPS.map(s => ({ id: s.id, type: s.type, ch: s.ch, answer: s.answer, ok: s.opts ? s.opts.findIndex(o => o.ok) : null, target: s.target || null, hint: s.hint || null })),
   res: () => res, fast: k => { window.__fastK = k; },
