@@ -3912,6 +3912,8 @@ function appPanel() {
   if (stripsEl.innerHTML !== html) stripsEl.innerHTML = html;
 }
 /* AATCC-style PPI (SPN-43 air search look): black scope, green phosphor, 4 s sweep, TPX-42 style beacon blocks. Visual only. */
+const CONE_NM = 1.0;   // cone of confusion: hide primary + secondary (data block) within this NM of the ship (display only)
+const inCone = a => Math.hypot(a.e, a.n) < CONE_NM || !!(a.paint && Math.hypot(a.paint.e, a.paint.n) < CONE_NM);
 const PPI = { G: '120,255,140', sweepT: 4000, lastAng: null, scan: null };
 function ppiCol(a) { return `rgba(${PPI.G},${a})`; }
 function appView(w, h) {   // rectangular scope geometry (CSS px): half-extents and px per NM
@@ -3959,7 +3961,8 @@ function drawApp(now) {
     if (a.phase !== 'app' || a.st === 'dep') continue;   // not shown until checked in
     if (!a.paint || crossed(appBrg(a))) a.paint = { e: a.e, n: a.n, t: now, alt: a.alt, gs: a.gs, hdg: a.hdg };   // displayed position/readouts latch on each sweep pass
     a.dispE = a.paint.e; a.dispN = a.paint.n; a.dispAlt = a.paint.alt; a.dispGs = a.paint.gs; a.dispHdg = a.paint.hdg;
-    if (a.priCut) continue;   // instructor SECONDARY ONLY: no primary paint
+    a.cone = inCone(a);   // quiet flag: over the ship, paints are suppressed (sim / voice still run)
+    if (a.priCut || a.cone) continue;   // instructor SECONDARY ONLY, or cone of confusion: no primary paint
     const age = (now - a.paint.t) / PPI.sweepT, al = Math.max(0, 1 - age);
     if (al <= 0) continue;
     const Q = P(a.paint.e, a.paint.n);
@@ -3992,6 +3995,7 @@ function drawApp(now) {
   for (const a of G.ac) {
     if (a.phase !== 'app' || a.st === 'dep') continue;   // not shown until checked in
     if (!a.code) a.code = '4' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 8)).join('');   // octal Mode 3/A code
+    if (a.cone) { a.hitR = null; continue; }   // cone of confusion: hide beacon / data block (not clickable)
     const sel = a === G.selected, fin = a.st === 'final' || a.st === 'mfinal' || a.st === 'purple' || a.st === 'lowout', Q = a.paint ? P(a.paint.e, a.paint.n) : P(a.e, a.n);   // sweep-latched position
     if (a.sq === false) {   // no squawk: primary (raw) return only, no data block
       if (a.priCut) { a.hitR = null; continue; }   // instructor cut primary + no squawk: nothing on the scope

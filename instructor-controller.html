@@ -296,6 +296,8 @@ function drawLand(cx, cy, RX, RY, sc, B) {   // same coastline as the master sco
   ctx.drawImage(landCv, cx - RX, cy - RY, 2 * RX, 2 * RY);
 }
 function brc() { for (const s of ['MARSHAL', 'APPROACH', 'FINAL']) if (live(s) && I.src[s].brc != null) return I.src[s].brc; return 360; }
+const CONE_NM = 1.0;   // cone of confusion: hide primary + secondary + history trail within this NM of the ship (display only)
+const inCone = a => Math.hypot(a.e, a.n) < CONE_NM || !!(I.disp[a.key] && Math.hypot(I.disp[a.key].e, I.disp[a.key].n) < CONE_NM);
 function draw() {
   const { cx, cy, RX, RY, sc } = geom(), P = (e, n) => [cx + e * sc, cy - n * sc];
   ctx.fillStyle = '#0b0d0b'; ctx.fillRect(0, 0, W, H);
@@ -323,8 +325,10 @@ function draw() {
     let D = I.disp[a.key]; const brgA = nrm(Math.atan2(a.e, a.n) / DEG);
     if (!D || crossed(brgA)) { if (D) { tr.push({ e: D.e, n: D.n }); if (tr.length > 5) tr.shift(); } D = I.disp[a.key] = { e: a.e, n: a.n, alt: a.alt, gs: a.gs || a.ias, hdg: a.hdg }; }   // latch on sweep pass
     a.dispE = D.e; a.dispN = D.n; a.dispAlt = D.alt; a.dispGs = D.gs;
+    a.cone = inCone(a);   // quiet flag: over the ship, paints are suppressed (sim / voice still run)
+    if (a.cone) { a.hit = null; delete HIT[a.key]; continue; }   // cone of confusion: hide primary, data block, and trail
     const Q = P(D.e, D.n);
-    ctx.fillStyle = ppi(0.3); for (const p of tr) { const q = P(p.e, p.n); ctx.fillRect(q[0] - 1, q[1] - 1, 2, 2); }
+    ctx.fillStyle = ppi(0.3); for (const p of tr) { if (Math.hypot(p.e, p.n) < CONE_NM) continue; const q = P(p.e, p.n); ctx.fillRect(q[0] - 1, q[1] - 1, 2, 2); }
     const sel = a.key === I.sel, f = freqOf(a), col = sel ? 'rgba(220,255,225,1)' : ppi(0.9);
     ctx.globalAlpha = a.priCut ? 0.35 : 1; ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); ctx.arc(Q[0], Q[1], 4.5, 0, 2 * Math.PI); ctx.stroke(); ctx.lineWidth = 1; ctx.globalAlpha = 1;
     if (sel) { ctx.strokeStyle = 'rgba(46,230,230,0.9)'; ctx.strokeRect(Q[0] - 9, Q[1] - 9, 18, 18); }
