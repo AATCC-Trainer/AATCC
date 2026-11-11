@@ -39,6 +39,12 @@ const ALIASES = [
   [/\bgo(?:\s+to)?\s+(?:sliver|silvar|sylver|sylvia)\b/g, 'go silver'],
   [/\bgo(?:\s+to)?\s+(?:people|pupil|purpel|purpal)\b/g, 'go purple'],
   [/\bgo(?:\s+to)?\s+(?:cooper|coper|kopper|cupper|coppers)\b/g, 'go copper'],
+  // "call purple" / "cold purple" / "go perple" ... (recognizer swaps go -> call/cold/goal/gold; v90)
+  [/\b(?:call|called|cold|coal|colt|goal|gold|go|grow|go\s+on|go\s+to|going\s+to)\s+(?:purple|perple|purpel|purpal|purpil|burple|pupple|people|pupil)(?:\s+button)?\b/g, 'go purple'],
+  [/\b(?:call|called|cold|coal|colt|goal|gold)\s+(?:to\s+)?(?:red|read|redd|rhett)\b/g, 'go red'],
+  [/\b(?:call|called|cold|coal|colt|goal|gold)\s+(?:to\s+)?(?:silver|sliver|silvar|sylver|sylvia)\b/g, 'go silver'],
+  [/\b(?:call|called|cold|coal|colt|goal|gold|go)\s+(?:to\s+)?(?:copper|cooper|coper|kopper|cupper|coppers|proper|hopper|chopper|copper's)\b/g, 'go copper'],
+  [/\b(?:cold|coal|colt|goal|gold)\s+green\b/g, 'go green'],
   [/\bbutton\s+(?:people|pupil|purpel)\b/g, 'button purple'],
   // signal buster
   [/\b(?:single|signals|cigna|sigma|cymbal|signal)\s+(?:buster|busta|bust\s+her|busters|duster)\b/g, 'signal buster'],
@@ -64,6 +70,13 @@ const ALIASES = [
   // Final course calls
   [/\b(?:farther|father|further)\s+(left|right)\b/g, 'further $1'],
   [/\b(left|right)\s+of\s+(?:cores|corse|coarse)\b/g, '$1 of course'],
+  [/\b(left|right)\s+(?:a|uh|off|the|of\s+the|have|if)\s+(?:course|cores|corse|coarse|chorus|horse|force)\b/g, '$1 of course'],
+  [/\b(left|right)\s+of\s+(?:chorus|horse|force|cross)\b/g, '$1 of course'],
+  [/\blightly\s+(left|right|above|below|high|low)\b/g, 'slightly $1'],
+  // begin descent / cleared to land (v90)
+  [/\b(begin|start|commence)\s+(?:the\s+|to\s+|a\s+|your\s+)?(?:descending|descends|the\s+sent|scent|sent|cent|dissent|decent|descent)\b/g, '$1 descent'],
+  [/\bclear(?:ed)?\s+(?:to|too|two|2|for)\s+(?:land|lands|lend|landing)\b/g, 'cleared to land'],
+  [/\bclear(?:ed)?\s+(?:the|a)\s+land\b/g, 'cleared to land'],
   // marshal / Case III
   [/\bout\s*-?\s*bound\b/g, 'outbound'],
   [/\b(?:expect(?:ed|ing)?|accepted)\s+(?:a\s+)?(?:proach|approach)\s+(?:times|dime|dimes|tie|tim)\b/g, 'expected approach time'],
@@ -71,6 +84,30 @@ const ALIASES = [
   // headings
   [new RegExp('\\b(turn|come)\\s+(?:write|wright|rite)\\s+(?=heading|' + NW + ')', 'g'), '$1 right '],
 ];
+
+/* ---------- 1b. number homophones in number contexts (v90): "lightning to one" -> "lightning two one" ----------
+   to/too -> two, for/fore -> four, won -> one, ate -> eight, tree/free -> three, only next to a number, a callsign name,
+   or after heading / angels / point / squawk / BRC, so "descend to", "reduce speed to", "cleared for" are left alone. */
+const DIGW = new Set(['zero', 'oh', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'niner']);
+const HOMO = { to: 'two', too: 'two', for: 'four', fore: 'four', won: 'one', ate: 'eight', tree: 'three', free: 'three' };
+const NUMCTX = new Set(['heading', 'angels', 'angel', 'angles', 'point', 'squawk', 'brc', 'radial', 'state']);
+function numberHomophones(s, csWords) {
+  const t = s.split(/(\s+)/), words = [], idx = [];
+  t.forEach((w, i) => { if (w && !/^\s+$/.test(w)) { words.push(w); idx.push(i); } });
+  const isNum = w => /^\d+$/.test(w) || DIGW.has(w);
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i], rep = HOMO[w]; if (!rep) continue;
+    const prev = words[i - 1] || '', next = words[i + 1] || '', next2 = words[i + 2] || '';
+    const TO = w === 'to' || w === 'too' || w === 'for' || w === 'fore';
+    let ok = false;
+    if (!TO) ok = w === 'won' || isNum(prev) || isNum(next) || csWords.has(prev) || NUMCTX.has(prev);   // won / ate / tree / free
+    else if (csWords.has(prev) || NUMCTX.has(prev)) ok = true;                                    // "lightning to one", "angels to", "point to"
+    else if (isNum(prev)) ok = isNum(next) || next === '' || next === ',' || /^(?:knots|turn|descend|climb|maintain|slightly|cleared|begin|on|fly|reduce|increase|signal|well|above|below|correction)$/.test(next);   // "two to zero", "lightning 2 for, ..."
+    else if ((w === 'to' || w === 'too') && prev === 'maintain' && next === 'zero') ok = true;   // "maintain to zero zero knots"
+    if (ok) { words[i] = rep; t[idx[i]] = rep; }
+  }
+  return t.join('');
+}
 
 /* ---------- 2. fuzzy snap ---------- */
 function lev(a, b) {
@@ -109,6 +146,8 @@ function normalize(raw, opts) {
   const protect = new Set(CALLSIGNS.concat(opts.protect || []).map(x => String(x).toLowerCase()).flatMap(x => x.split(/\s+/)));
   let s = ' ' + String(raw == null ? '' : raw).toLowerCase().replace(/[’‘`]/g, "'").replace(/[“”]/g, '"') + ' ';
   s = s.replace(/[.!?;]+(?=\s|$)/g, ' ');   // sentence punctuation (decimals like 1.2 are kept)
+  s = s.replace(/(\w)-(\w)/g, '$1 $2');   // "two-one", "lightning-21"
+  if (opts.numbers !== false) s = numberHomophones(s.replace(/,/g, ' , '), protect).replace(/\s+,/g, ',');
   // spoken numbers: canonical words only (the scope parsers turn words into digits themselves)
   s = s.replace(/\b(twenty|thirty|forty|fourty|fifty|sixty|seventy|eighty|ninety)-(one|two|three|four|five|six|seven|eight|nine|niner)\b/g, '$1 $2');
   s = s.replace(/\bniner\b/g, 'nine').replace(/\btree\b(?=\s*(?:,|\d|zero|one|two|three|four|five|six|seven|eight|nine|recovery|miles?|o'clock|$))/g, 'three')
@@ -120,7 +159,7 @@ function normalize(raw, opts) {
   for (const [re, rep] of ALIASES) s = s.replace(re, rep);
   return s.replace(/\s+/g, ' ').replace(/\s+,/g, ',').trim();
 }
-const api = { normalize, snapWord, phon, lev, VOCAB, ALIASES, version: 1 };
+const api = { normalize, snapWord, phon, lev, numberHomophones, VOCAB, ALIASES, version: 2 };
 if (typeof window !== 'undefined') window.PhraseMatch = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

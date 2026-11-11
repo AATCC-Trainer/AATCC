@@ -1,6 +1,7 @@
 <!doctype html><html lang="en"><head>
 <script src="gate.js"></script>
 <script src="phrase-match.js"></script>
+<script src="warm-mic.js"></script>
 <script src="shorthand.js"></script>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Intro</title><meta name="apple-mobile-web-app-title" content="Intro"><meta name="apple-mobile-web-app-capable" content="yes">
@@ -97,6 +98,13 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
 .stars{font-size:40px;letter-spacing:6px;color:var(--amber);margin:8px 0}.stars .e{color:#2a3a2c}
 .f-red{color:var(--red);border-color:var(--red)}.f-silver{color:var(--silver);border-color:var(--silver)}.f-purple{color:var(--purple);border-color:var(--purple)}.f-copper{color:var(--copper);border-color:var(--copper)}
 #prog .seg .sh{display:none}
+.spdL{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--g);border:1px solid var(--gd);border-radius:4px;padding:2px 6px;min-height:30px}
+.spdL select{font-family:inherit;font-size:13px;background:#030803;color:#d8ffde;border:1px solid var(--gdd);border-radius:3px;padding:2px}
+.spdRow{display:flex;flex-wrap:wrap;gap:5px;align-items:center;font-size:12px;color:var(--dim)}
+.spdRow button{min-height:30px;padding:3px 9px;font-size:13px;border-radius:14px}.spdRow button.on{background:#123f1a;border-color:var(--g);color:#d8ffde}
+#cue{display:none;margin:0 10px 0;padding:7px 10px;border:1px solid var(--amber);border-radius:6px;color:#ffe1a0;background:#1a1405;font-size:14px;text-align:center}
+#cue.on{display:block}#cue.go{border-color:var(--ok);color:#c9ffd3;background:#0c2611;animation:pulse 1.2s infinite}
+#bNext.wait{opacity:.55}
 @media (max-width:820px),(orientation:portrait) and (max-width:1100px){
   #main{flex-direction:column}
   #scopeBox{flex:none;height:42vh;height:42dvh;min-height:220px}
@@ -113,6 +121,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
     <div class="ttl"><b>AATCC INTRO</b> · <span id="chName"></span></div>
     <div id="prog" aria-label="Chapter progress"></div>
     <button id="bVoice" title="Choose Aero's voice" aria-label="Choose Aero's voice">🗣<span class="wide"> Voice</span></button>
+    <label class="spdL" title="Talking speed and aircraft (demo) speed" for="spdSel">⏩<span class="wide"> Speed</span> <select id="spdSel" aria-label="Talking and aircraft speed"></select></label>
     <button id="bMute" title="Mute / unmute voices (M)" aria-label="Mute">🔊</button>
     <button id="bRestart" title="Restart the intro from the beginning" aria-label="Restart intro">↺<span class="wide"> Restart</span></button>
   </header>
@@ -124,10 +133,11 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
     <section id="scopeBox" aria-label="Radar scope"><canvas id="cv"></canvas><div id="scopeTag"></div></section>
     <section id="panel">
       <div id="pscroll">
-        <div id="mentor" aria-live="polite"><div class="who"><span class="av">A</span><b>AERO</b><span>Your AI guide</span><span class="bars" aria-hidden="true"><i></i><i></i><i></i></span></div><div id="say"></div></div>
+        <div id="mentor" aria-live="polite"><div class="who"><span class="av">A</span><b>AERO</b><span>Your Personal Air Traffic Control Guide</span><span class="bars" aria-hidden="true"><i></i><i></i><i></i></span></div><div id="say"></div></div>
         <div id="task"></div>
         <div id="fb" aria-live="polite"></div>
       </div>
+      <div id="cue" aria-live="polite"></div>
       <div id="nav"><button id="bBack" title="Previous step (←)">◂ Back</button><span id="stepNo"></span><button id="bNext" title="Next step (Enter)">Next ▸</button></div>
     </section>
   </main>
@@ -142,12 +152,14 @@ const TURN_RATE = 3;           // deg/s, standard rate turn
 const CLIMB_FPM = 2000, SPD_RATE = 3, NM_FT = 6076.12, GP_TAN = Math.tan(3 * Math.PI / 180), SWEEP_MS = 4000;
 const FCOL = { red: '#ff5a6e', silver: '#c9ced6', purple: '#b48cff', copper: '#e0915a', none: '#a8f0b2' };
 const FNAME = { red: 'Marshal · Red', silver: 'Approach · Silver', purple: 'Final · Purple', copper: 'Final · Copper' };
-const LS_KEY = 'aatccIntro.v2', LS_MUTE = 'aatccIntroMute';
+const LS_KEY = 'aatccIntro.v2', LS_MUTE = 'aatccIntroMute', LS_SPEED = 'aatccIntroSpeed';
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+let SPEED = (() => { try { const v = parseFloat(localStorage.getItem(LS_SPEED)); return SPEEDS.includes(v) ? v : 1; } catch (e) { return 1; } })();   // talking speed + aircraft (demo) speed
 const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
 
 /* ===================== callsigns + spoken numbers (mirrors approach-controller.html) ===================== */
 const AIRLINES = [
-  { icao: 'LTNG', tel: 'Lightning', words: ['lightning', 'lightening'] },
+  { icao: 'LTNG', tel: 'Lightning', words: ['lightning', 'lightening', 'lighting', 'lightnin', 'lightnings', 'light ning', 'flightning'] },
   { icao: 'NHWK', tel: 'Nighthawk', words: ['nighthawk', 'night hawk', 'nite hawk', 'night hawks'] },
   { icao: 'VIPR', tel: 'Viper', words: ['viper', 'vipers', 'piper'] },
   { icao: 'VENM', tel: 'Venom', words: ['venom'] },
@@ -201,7 +213,7 @@ function normalizeSpeech(raw) {
   s = s.replace(/\b(\d+)(miles?|knots|kts|feet|ft)\b/g, '$1 $2');
   s = s.replace(/\bglide\s*(?:path|slope|pass|bath|past)\b|\bglideslope\b/g, ' glidepath ');
   s = s.replace(/\b(dissent|decent|descents)\b/g, 'descent');
-  s = s.replace(/\bnight\s*hawks?\b/g, 'nighthawk');
+  s = s.replace(/\bnight\s*hawks?\b/g, 'nighthawk').replace(/\blight\s+ning\b/g, 'lightning');
   s = s.replace(/\bgo\s+round\b|\bgoaround\b/g, 'go around');
   s = s.replace(/\bb\s+r\s+c\b/g, 'brc');
   s = s.replace(/\bwrite\b|\bwright\b/g, 'right').replace(/\bleft\s+of\s+cores\b/g, 'left of course');
@@ -248,7 +260,7 @@ const PATTERNS = [
   [/\bgo(?:\s+(?:to|too|two))?\s+red(?:\s+buttons?)?\b/g, () => ({ k: 'freq', v: 'red' })],
   [/\bgo(?:\s+(?:to|too|two))?\s+(?:silver|sliver|silvar)(?:\s+buttons?)?\b/g, () => ({ k: 'freq', v: 'silver' })],
   [/\b(?:the\s+)?deck\s+is\s+clear\b/g, () => ({ k: 'deckClear' })],
-  [/\bcleared\s+(?:to\s+)?land(?:ing)?\b(?:\s+(?:on\s+spot|spot)\s+\d{1,2})?/g, () => ({ k: 'clearLand' })],
+  [/\bclear(?:ed)?\s+(?:to\s+|for\s+)?land(?:ing)?\b(?:\s+(?:on\s+spot|spot)\s+\d{1,2})?/g, () => ({ k: 'clearLand' })],
   [/\bwave off(?:\s+wave off)*\b|\bgo around\b|\bexecute\s+(?:a\s+)?missed approach\b|\bmissed approach\b/g, () => ({ k: 'ga' })],
   [/\b(?:take\s+|climb\s+(?:and\s+maintain\s+|to\s+)?|descend\s+(?:and\s+maintain\s+|to\s+)?|maintain\s+)?angels\s+(\d+(?:\.\d+)?)\b/g, m => { const n = parseFloat(m[1]); return { k: 'alt', v: Math.round(n < 100 ? n * 1000 : n) }; }],
   [/\b(?:climb|descend)(?:\s+and\s+maintain|\s+to|\s+maintain)?\s+(\d{2,5})(?:\s+feet)?\b|\bmaintain\s+(\d{4,5})(?:\s+feet)?\b/g, m => { let v = +(m[1] || m[2]); if (v < 100) v *= 100; return { k: 'alt', v }; }],
@@ -265,11 +277,27 @@ const PATTERNS = [
   [/\b(?:(?:signal|signals|single|sigma)\s+)?(?:buster|busters|busta)\b/g, () => ({ k: 'buster' })],
   [/\b(?:reduce|increase|maintain|slow)(?:\s+(?:your\s+)?speed)?(?:\s+to)?\s+(\d{2,3})(?:\s+knots)?\b|\bspeed\s+(\d{2,3})(?:\s+knots)?\b|\b(\d{2,3})\s+knots\b/g, m => ({ k: 'spd', v: +(m[1] || m[2] || m[3]) })],
 ];
-const PM = t => { try { return window.PhraseMatch ? window.PhraseMatch.normalize(t, { protect: AIRLINES.flatMap(a => a.words) }) : String(t); } catch (e) { return String(t); } };
+const PM = t => { try { return window.PhraseMatch ? window.PhraseMatch.normalize(t, { protect: AIRLINES.flatMap(a => a.words) }) : String(t); } catch (e) { return String(t); } };   // same shared matcher as the scopes (phrase-match.js): sound-alikes, number homophones, fuzzy key words
+// callsign name heard slightly wrong ("lightly 21", "litening two one"): snap a near-miss word right before a number onto an airline on the scope
+function snapAirline(s, known) {
+  const names = AIRLINES.filter(a => known.some(k => k.startsWith(a.icao))).map(a => a.words[0]);
+  const L = (x, y) => window.PhraseMatch ? PhraseMatch.lev(x, y) : (x === y ? 0 : 9);
+  return s.replace(/\b([a-z]{5,})(?=\s+\d)/g, w => { if (AIRLINES.some(a => a.words.includes(w))) return w; let best = null; for (const n of names) { const d = L(w, n); if (d <= 2 && (!best || d < best.d)) best = { n, d }; } return best ? best.n : w; });
+}
+// callsign digits heard slightly wrong ("Lightning 12" / "Lightning 2" when only Lightning 21 is on the scope): snap to the aircraft actually there
+function snapCallsign(csr, known) {
+  if (!csr.cs || !csr.unknown) return csr;
+  const pre = csr.cs.replace(/\d+$/, ''), d = csr.cs.slice(pre.length), same = known.filter(k => k.startsWith(pre) && /^\d+$/.test(k.slice(pre.length)));
+  const L = (x, y) => window.PhraseMatch ? PhraseMatch.lev(x, y) : 9, swap = (x, y) => x.length === 2 && y.length === 2 && x[0] === y[1] && x[1] === y[0];
+  let best = null;
+  for (const k of same) { const kd = k.slice(pre.length), dd = swap(d, kd) ? 1 : L(d, kd); if ((dd <= 1 || (same.length === 1 && dd <= 2)) && (!best || dd < best.dd)) best = { k, dd }; }
+  if (best) { csr.cs = best.k; csr.unknown = false; csr.snapped = true; }
+  return csr;
+}
 function parse(raw, known) {
-  const norm = normalizeSpeech(PM(raw));
+  const norm = normalizeSpeech(snapAirline(PM(raw), known));
   let s = norm.replace(/\bheading\s+(\d{3})(\d+)\b/g, 'heading $1 $2');
-  const csr = extractCallsign(s, known); s = csr.s;
+  const csr = snapCallsign(extractCallsign(s, known), known); s = csr.s;
   const used = new Array(s.length).fill(false), found = [];
   for (const [re, fn] of PATTERNS) {
     re.lastIndex = 0; let m;
@@ -348,8 +376,8 @@ function stepAc(a, dt) {
 function tick(dt) {
   W.t += dt;
   const prev = W.sweep; W.sweep = (W.t * 1000 / SWEEP_MS * 360) % 360;   // one sweep every 4 s, like the scopes
-  const simDt = dt * SIM * (window.__fastK || 1), n = Math.max(1, Math.ceil(simDt / 0.1));
-  for (const a of W.acs) for (let i = 0; i < n; i++) stepAc(a, simDt / n);
+  const simDt = dt * SIM * SPEED * (window.__fastK || 1), n = Math.max(1, Math.ceil(simDt / 0.1));
+  if (!W.frozen) for (const a of W.acs) for (let i = 0; i < n; i++) stepAc(a, simDt / n);   // voice steps: aircraft hold until the right call
   for (const a of W.acs) {
     if (a.landed) continue;
     const b = (Math.atan2(a.x, a.y) * 180 / Math.PI + 360) % 360;
@@ -503,16 +531,16 @@ function squelch() {   // tiny radio key-up click before pilot transmissions (We
 }
 function setTalking(on) { const m = $('mentor'); if (m) m.classList.toggle('talking', !!on); }
 function nextChunk() {
-  if (!sq.length) { sqBusy = false; setTalking(false); return; }
+  if (!sq.length) { sqBusy = false; setTalking(false); speechIdle(); return; }
   sqBusy = true;
   const c = sq.shift(), gen = sqGen;
   let doneOnce = false;
   const done = () => { if (doneOnce || gen !== sqGen) return; doneOnce = true; clearTimeout(wd); if (c.who === 'aero' && !(sq[0] && sq[0].who === 'aero')) setTalking(false); setTimeout(() => { if (gen === sqGen) nextChunk(); }, c.gap); };
-  const wd = setTimeout(done, 2500 + c.t.split(' ').length * 650);   // watchdog in case onend never fires (Safari)
+  const wd = setTimeout(done, (2500 + c.t.split(' ').length * 650) / Math.min(1, SPEED));   // watchdog in case onend never fires (Safari)
   try {
     const u = new SpeechSynthesisUtterance(c.t); u.lang = 'en-US';
-    if (c.who === 'pilot') { if (pilotV) u.voice = pilotV; u.rate = 1.13; u.pitch = pilotV === aeroV ? 0.8 : 0.9; u.volume = 0.9; squelch(); }
-    else { if (aeroV) u.voice = aeroV; u.rate = 1.0; u.pitch = 0.97; u.volume = 1; }
+    if (c.who === 'pilot') { if (pilotV) u.voice = pilotV; u.rate = Math.min(2, 1.13 * SPEED); u.pitch = pilotV === aeroV ? 0.8 : 0.9; u.volume = 0.9; squelch(); }
+    else { if (aeroV) u.voice = aeroV; u.rate = SPEED; u.pitch = 0.97; u.volume = 1; }
     u.onstart = () => { if (c.who === 'aero' && gen === sqGen) setTalking(true); };
     u.onend = done; u.onerror = done;
     speechSynthesis.speak(u);
@@ -525,7 +553,7 @@ function speak(text, who) {
   cs.forEach(c => sq.push(Object.assign(c, { who: w })));
   if (!sqBusy) nextChunk();
 }
-function hush() { sqGen++; sq = []; sqBusy = false; setTalking(false); if (TTS) try { speechSynthesis.cancel(); } catch (e) {} }
+function hush() { sqGen++; sq = []; sqBusy = false; setTalking(false); if (TTS) try { speechSynthesis.cancel(); } catch (e) {} speechIdle(); }
 function setMute(m) { muted = m; try { localStorage.setItem(LS_MUTE, m ? '1' : '0'); } catch (e) {} $('bMute').textContent = m ? '🔇' : '🔊'; $('bMute').setAttribute('aria-label', m ? 'Unmute voices' : 'Mute voices'); if (m) hush(); }
 function toggleVoicePanel(open) { const p = $('vpick'); const o = open ?? !p.classList.contains('open'); p.classList.toggle('open', o); if (o) loadVoices(); }
 const userName = () => { try { return (localStorage.getItem(LS_NAME) || '').trim() || 'Controller'; } catch (e) { return 'Controller'; } };
@@ -540,11 +568,11 @@ const PRACTICE = () => [LT21({ x: 6, y: -6, hdg: 360, alt: 3000, spd: 250, freq:
 const STEPS = [
   // ---------- Briefing ----------
   { ch: 0, id: 'meet', type: 'name', range: 15, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
-    say: `<p>Hey there, and welcome! I'm <b>Aero</b>, your personal AI guide for this training.</p><p>Think of me as your coach in the headset. I'll show you how to read the radar scope, teach you the radio calls controllers use, and let you know the moment you nail one. Mess something up? No problem. I'll explain it and we'll run it again.</p><p>I'll be right here with you the whole way, from your first look at the scope to bringing a jet aboard the ship.</p><p>First things first: what should I call you? Your name or a callsign works.</p>` },
+    say: `<p>Hey there, and welcome! I'm <b>Aero</b>, your Personal Air Traffic Control Guide for this training.</p><p>Think of me as your coach in the headset. I'll show you how to read the radar scope, teach you the radio calls controllers use, and let you know the moment you nail one. Mess something up? No problem. I'll explain it and we'll run it again.</p><p>I'll be right here with you the whole way, from your first look at the scope to bringing a jet aboard the ship.</p><p>First things first: what should I call you? Your name or a callsign works.</p>` },
   { ch: 0, id: 'welcome', type: 'info', range: 15, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
     say: () => `<p>Alright, <b>${esc(userName())}</b>, welcome aboard <b>USS Stinger</b>. Tonight you're working your first <b>night recovery</b>: bringing aircraft back aboard the ship in the dark.</p><p>At night pilots can't see much, so they rely on <b>you</b>, the controller, watching them on radar and talking them home.</p><p>We'll do it in four short chapters: <b>the scope</b>, <b>the flow</b>, <b>phraseology</b>, then a real <b>mission</b>. Let's get to work.</p><p><span class="ui">Tap <b>Next</b> (or press Enter) when you're ready.</span></p>` },
   // ---------- Chapter A: the scope ----------
-  { ch: 1, id: 'scope1', type: 'info', range: 15, hl: { ship: true }, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
+  { ch: 1, id: 'scope1', type: 'info', watch: true, range: 15, hl: { ship: true }, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
     say: `<p>This is your <b>radar scope</b>. Picture a map seen from straight above, with <b>north at the top</b>.</p><p>The <span class="k">ship</span> is always in the center. The bright rotating line is the <b>sweep</b>, the radar antenna turning. Each time it passes an aircraft, the target <b>jumps</b> to its new spot. That's why targets move in little steps.</p>` },
   { ch: 1, id: 'rings', type: 'click', range: 15, hl: { rings: true },
     acs: [LT21({ x: 3.5, y: 3.6, hdg: 200, alt: 3000, spd: 220 }), NH41({ x: -7.1, y: -7.0, hdg: 45, alt: 1500, spd: 120 }), VP12({ x: 14.2, y: -4.4, hdg: 300, alt: 2000, spd: 130 })],
@@ -562,33 +590,29 @@ const STEPS = [
     say: `<p>The little mark is the <b>target</b>: where the aircraft is. The text beside it is the <b>data block</b>, sent automatically by the aircraft's equipment:</p><p><span class="ex">LTNG21 ← callsign, "Lightning 21"<br>030 ← altitude in hundreds of feet (3,000 ft)<br>25 ← speed in tens of knots (250 knots)<br>4213 ← its beacon code</span></p><p>Navy controllers say altitude in <b>angels</b>: one angel = <b>1,000 feet</b>. So 3,000 feet is <b>angels 3</b>.</p>` },
   { ch: 1, id: 'qAlt', type: 'choice', range: 15, hl: { block: 'LTNG21' }, acs: [LT21({ x: -5, y: 6, hdg: 120, alt: 3000, spd: 250 })],
     say: `<p>Quick check. Look at Lightning 21's data block.</p>`, q: `What altitude is Lightning 21 at?`,
-    opts: [{ t: 'Angels 3 (3,000 feet)', ok: 1 }, { t: 'Angels 30', why: '030 is in <b>hundreds</b> of feet: 030 × 100 = 3,000 ft, which is angels 3.' }, { t: '300 feet', why: 'Close, but it\'s hundreds of feet: 30 hundred = 3,000 ft.' }, { t: 'Angels 42', why: '4213 is the <b>beacon code</b>, not the altitude.' }],
-    good: `Yes: 030 means 3,000 feet, <b>angels 3</b>.` },
+    opts: [{ t: 'Angels 3', ok: 1 }, { t: 'Angels 30', why: '030 is in <b>hundreds</b> of feet: thirty hundred is angels 3, not 30.' }, { t: '300 feet', why: 'Close, but it\'s in hundreds of feet: thirty hundred, which is angels 3.' }, { t: 'Angels 42', why: '4213 is the <b>beacon code</b>, not the altitude.' }],
+    good: `Yes: 030 means <b>angels 3</b>.` },
   { ch: 1, id: 'qSpd', type: 'choice', range: 15, hl: { block: 'LTNG21' }, acs: [LT21({ x: -5, y: 6, hdg: 120, alt: 3000, spd: 250 })],
     say: `<p>And the speed?</p>`, q: `How fast is Lightning 21 going?`,
     opts: [{ t: '25 knots', why: 'Speed is shown in <b>tens</b> of knots: 25 × 10 = 250.' }, { t: '250 knots', ok: 1 }, { t: '4,213 knots', why: 'That\'s the beacon code.' }, { t: '30 knots', why: '030 is the altitude.' }],
     good: `Correct, <b>250 knots</b>.` },
-  { ch: 1, id: 'hdg', type: 'info', range: 15, hl: { ac: 'LTNG21', brg: 30 }, acs: [LT21({ x: 4, y: 7, hdg: 270, alt: 3000, spd: 250, seedTrail: true })],
+  { ch: 1, id: 'hdg', type: 'info', watch: true, range: 15, hl: { ac: 'LTNG21', brg: 30 }, acs: [LT21({ x: 4, y: 7, hdg: 270, alt: 3000, spd: 250, seedTrail: true })],
     say: `<p><b>Bearing</b> tells you where an aircraft <i>is</i> from the ship. <b>Heading</b> is where its <i>nose points</i>: the direction it's flying.</p><p>Lightning 21 is on bearing about <b>030</b> from mother, but it's <b>heading 270</b> (west). The fading dots behind the target are its <b>history trail</b>, showing where it came from.</p>` },
-  { ch: 1, id: 'qHdg', type: 'choice', range: 15, acs: [LT21({ x: -6, y: 8, hdg: 180, alt: 2000, spd: 250, seedTrail: true })],
+  { ch: 1, id: 'qHdg', type: 'choice', watch: true, range: 15, acs: [LT21({ x: -6, y: 8, hdg: 180, alt: 2000, spd: 250, seedTrail: true })],
     say: `<p>Watch Lightning 21 and its history dots for a couple of sweeps.</p>`, q: `Which way is Lightning 21 heading?`,
     opts: [{ t: 'North, heading 360', why: 'The trail dots are <b>above</b> it, so it came from the north and is flying <b>south</b>.' }, { t: 'East, heading 090', why: 'It isn\'t moving sideways. Follow the dots: it\'s moving down the scope.' }, { t: 'South, heading 180', ok: 1 }, { t: 'West, heading 270', why: 'It isn\'t moving sideways. Follow the dots: it\'s moving down the scope.' }],
     good: `Nice. Dots behind it to the north, moving down the scope: <b>heading 180</b>, south.` },
   { ch: 1, id: 'priSec', type: 'info', range: 15, vis: 'both', visToggle: true, acs: [LT21({ x: -5, y: 6, hdg: 120, alt: 3000, spd: 250 }), NH41({ x: 6, y: -5, hdg: 330, alt: 1500, spd: 120 })],
-    say: `<p>Radar gives you two kinds of picture:</p><p><b>Primary</b>: the raw radar echo bouncing off the aircraft. It shows <i>where</i> something is, but not who it is or how high.</p><p><b>Secondary</b>: the aircraft's transponder answering the radar. That's what gives you the <b>data block</b> (callsign, altitude, speed).</p><p><span class="ui">Try the buttons below to see each one.</span></p>` },
+    say: `<p>Radar gives you two kinds of picture:</p><p><b>Primary</b>: the radar's own return, bounced off the aircraft. It shows <i>where</i> something is, but not who it is or how high.</p><p><b>Secondary</b>: the aircraft's transponder answering the radar. That's what gives you the <b>data block</b> (callsign, altitude, speed).</p><p><span class="ui">Try the buttons below to see each one.</span></p>` },
   { ch: 1, id: 'qPri', type: 'choice', range: 15, vis: 'primary', acs: [LT21({ x: -5, y: 6, hdg: 120, alt: 3000, spd: 250 }), NH41({ x: 6, y: -5, hdg: 330, alt: 1500, spd: 120 })],
     say: `<p>Uh oh, the data blocks just vanished, but the targets are still moving.</p>`, q: `What are you looking at now?`,
-    opts: [{ t: 'Primary only (raw radar echoes)', ok: 1 }, { t: 'Secondary only', why: 'Secondary is what <b>draws</b> the data block. No blocks means you\'re seeing primary only.' }, { t: 'The aircraft have landed', why: 'They\'re still moving, just without their transponder data.' }],
+    opts: [{ t: 'Primary only', ok: 1 }, { t: 'Secondary only', why: 'Secondary is what <b>draws</b> the data block. No blocks means you\'re seeing primary only.' }, { t: 'The aircraft have landed', why: 'They\'re still moving, just without their transponder data.' }],
     good: `That's it, <b>primary only</b>. You can still see where they are, so you can still work them; you just have to ask the pilot for things like altitude.` },
   // ---------- Chapter B: the flow ----------
-  { ch: 2, id: 'flowM', type: 'info', range: 20, hold: { x: 4, y: -15, r: 2 },
+  { ch: 2, id: 'flowM', type: 'info', range: 20, watch: true, hold: { x: 4, y: -15, r: 2 },
     acs: [LT21({ x: 4, y: -13, hdg: 90, alt: 6000, spd: 250, freq: 'red', mode: 'hold', hold: { x: 4, y: -15, r: 2, ang: 0 } })],
-    say: `<p>Now the big picture. Every aircraft coming home passes through three controllers, each on their own radio frequency with its own <b>color</b>:</p><p><b class="f-red">1. MARSHAL (Red)</b>: aircraft check in and wait their turn in a holding pattern, stacked at different altitudes so they stay apart. Marshal sends them down one at a time.</p>` },
-  { ch: 2, id: 'flowA', type: 'info', range: 20, keep: true, course: true,
-    acs: [LT21({ x: 4, y: -13, hdg: 90, alt: 6000, spd: 250, freq: 'red', mode: 'hold', hold: { x: 4, y: -15, r: 2, ang: 0 } })],
-    enter: () => { const a = W.acs[0]; if (!a) return; a.mode = 'free'; a.freq = 'silver'; a.tgtHdg = 300; a.turn = 0; a.tgtAlt = 1200; a.tgtSpd = 200; W.hold = null; },
-    say: `<p><b class="f-silver">2. APPROACH (Silver)</b>: gives the pilot <b>vectors</b> (headings, altitudes and speeds) to line them up behind the ship on the <b>final approach course</b>, the dashed line.</p><p>Watch Lightning 21 switch to Silver and start down.</p>` },
-  { ch: 2, id: 'flowF', type: 'info', range: 10, course: true,
+    say: `<p>Now the big picture. Every aircraft coming home passes through three controllers, each on their own radio frequency with its own <b>color</b>:</p><p><b class="f-red">1. MARSHAL (Red)</b>: aircraft check in and wait their turn in a holding pattern, stacked at different altitudes so they stay apart. Marshal sends them down one at a time.</p><p><b class="f-silver">2. APPROACH (Silver)</b>: gives the pilot <b>vectors</b> (headings, altitudes and speeds) to line them up behind the ship on the <b>final approach course</b>.</p>` },
+  { ch: 2, id: 'flowF', type: 'info', range: 10, course: true, watch: 'land',
     acs: [LT21({ x: 0.2, y: -6.5, hdg: 360, alt: 1200, spd: 150, freq: 'purple', mode: 'final' })],
     say: `<p><b class="f-purple">3. FINAL</b> (<span class="f-purple">Purple</span> or <span class="f-copper">Copper</span>: two Final frequencies, so two controllers can work at once) talks the pilot down the last few miles, keeping them on <b>course</b> (left/right) and on the <b>glidepath</b> (the right descent angle) all the way to the deck.</p><p>Watch it come aboard.</p>` },
   { ch: 2, id: 'qFlow', type: 'choice', range: 20, course: true, acs: [LT21({ x: 4, y: -13, hdg: 300, alt: 5000, spd: 250, freq: 'red' })],
@@ -692,19 +716,20 @@ function updProg() {
   $('chName').textContent = st.type === 'done' ? 'Mission complete' : CHAPTERS[st.ch];
   $('stepNo').textContent = st.type === 'done' ? '' : `Step ${cur + 1} of ${STEPS.length - 1}`;
 }
-function updTag() { const a = W.acs[0]; $('scopeTag').innerHTML = a && a.freq && a.freq !== 'none' ? `<b class="f-${a.freq}">${FNAME[a.freq]}</b>${W.range} NM` : `${W.range} NM range`; }
+function updTag() { const a = W.acs[0]; $('scopeTag').innerHTML = (a && a.freq && a.freq !== 'none' ? `<b class="f-${a.freq}">${FNAME[a.freq]}</b>${W.range} NM` : `${W.range} NM range`) + (W.frozen && W.acs.length ? ' · <b style="color:var(--amber);border-color:var(--amber)">⏸ HOLDING FOR YOUR CALL</b>' : '') + (SPEED !== 1 ? ` · ${SPEED}×` : ''); }
 function setScene(st, first) {
   W.range = st.range || 15; W.course = !!st.course; W.vis = st.vis || 'both'; W.hl = st.hl || {}; W.hold = st.hold ? Object.assign({}, st.hold) : null; W.mark = null;
   const have = st.keep && !first && st.acs && W.acs.length === st.acs.length && st.acs.every(a => W.acs.some(x => x.cs === a.cs && !x.landed));
   if (!have) W.acs = (st.acs || []).map(a => mk(JSON.parse(JSON.stringify(a))));
   if (st.enter) st.enter(first);
+  W.frozen = st.type === 'voice' && !(R && R.done && STEPS[cur] === st);
   updTag();
 }
 function show(i, first) {
   hush(); stopRec();
   cur = Math.max(0, Math.min(STEPS.length - 1, i));
   const st = STEPS[cur];
-  R = { done: st.type === 'info' || (st.type === 'name' && !!(localStorage.getItem(LS_NAME) || '').trim()), tries: 0, built: [], landed: false };
+  R = { done: st.type === 'info' || (st.type === 'name' && !!(localStorage.getItem(LS_NAME) || '').trim()), tries: 0, built: [], landed: false, narr: !TTS || muted, demo: st.watch !== 'land', cued: false };
   setScene(st, first);
   $('fb').className = ''; $('fb').innerHTML = '';
   if (st.type === 'done') { renderDone(); save(); updProg(); return; }
@@ -713,6 +738,7 @@ function show(i, first) {
   renderTask(st);
   speak(sayHtml, 'mentor');
   if (st.pilot) speak(st.pilot, 'pilot');
+  if (!sqBusy && !sq.length) R.narr = true;
   updNav(); updProg(); save();
   $('pscroll').scrollTop = 0;
 }
@@ -721,8 +747,22 @@ function updNav() {
   $('bBack').disabled = cur === 0;
   $('bNext').disabled = !R.done || st.type === 'done';
   $('bNext').textContent = cur >= STEPS.length - 2 ? 'Finish ▸' : 'Next ▸';
-  $('bNext').classList.toggle('pulse', R.done && st.type !== 'info' && st.type !== 'done');
+  const ready = R.done && R.narr && R.demo && st.type !== 'done';
+  $('bNext').classList.toggle('pulse', ready);
+  $('bNext').classList.toggle('wait', R.done && !ready && st.type !== 'done');
+  const cue = $('cue'), last = cur >= STEPS.length - 2, nx = last ? 'Finish' : 'Next';
+  let txt = '', go = false;
+  if (st.type === 'done') txt = '';
+  else if (ready) { txt = `✅ Press <b>${nx} ▸</b> when you're ready.`; go = true; }
+  else if (R.done && !R.demo) txt = `👀 Watch the aircraft. <b>${nx}</b> lights up when it lands (use ⏩ Speed to hurry it up).`;
+  else if (R.done) txt = `🔊 Aero is talking. <b>${nx}</b> lights up when Aero finishes (you can press it any time).`;
+  else if (st.type === 'voice') txt = `🎯 Say the call above. <b>${nx}</b> unlocks when you get it right.`;
+  else if (st.type === 'name') txt = `🎯 Enter your name above to unlock <b>${nx}</b>.`;
+  else txt = `🎯 Answer above to unlock <b>${nx}</b>.`;
+  cue.innerHTML = txt; cue.classList.toggle('on', !!txt); cue.classList.toggle('go', go);
+  if (ready && !R.cued) { R.cued = true; if (TTS && !muted) setTimeout(() => { if (STEPS[cur] === st && R.cued) speak(last ? 'Press Finish when you\'re ready.' : 'Press Next when you\'re ready.', 'mentor'); }, 250); }
 }
+function speechIdle() { if (R && !R.narr) { R.narr = true; try { updNav(); } catch (e) {} } }
 function feedback(kind, html) { const f = $('fb'); f.className = kind; f.innerHTML = html; if (html) setTimeout(() => { try { f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {} }, 30); }
 function succeed(st, extra) {
   markResult(st, R.tries === 0);
@@ -741,14 +781,26 @@ function fail(st, html, sayIt) {
   feedback('bad', `❌ ${html}${more}`); speak(sayIt || plain(html), 'mentor');
   if (st.type === 'voice' && R.tries >= 3 && !$('bSkip')) {
     const b = document.createElement('button'); b.id = 'bSkip'; b.textContent = 'Skip this one';
-    b.onclick = () => { markResult(st, false); const a = W.acs[0]; if (a) execute(a, st.expect.need.map(n => Object.assign({}, n))); R.done = true; b.remove(); updNav(); updProg(); };
+    b.onclick = () => { markResult(st, false); const a = W.acs[0]; if (a) execute(a, st.expect.need.map(n => Object.assign({}, n))); W.frozen = false; updTag(); R.done = !st.waitLand; b.remove(); updNav(); updProg(); };
     $('task').appendChild(b);
   }
 }
 
+/* ===================== speed (talking + aircraft) ===================== */
+function setSpeed(v) {
+  SPEED = SPEEDS.includes(+v) ? +v : 1; try { localStorage.setItem(LS_SPEED, String(SPEED)); } catch (e) {}
+  const sel = $('spdSel'); if (sel) sel.value = String(SPEED);
+  document.querySelectorAll('.spdRow button').forEach(b => b.classList.toggle('on', +b.dataset.v === SPEED));
+  updTag();
+}
+function fillSpeed() { $('spdSel').innerHTML = SPEEDS.map(v => `<option value="${v}"${v === SPEED ? ' selected' : ''}>${v}×</option>`).join(''); }
+function speedRow() { return `<div class="spdRow" role="group" aria-label="Talking and aircraft speed">⏩ Speed (talking + aircraft): ${SPEEDS.map(v => `<button data-v="${v}" class="${v === SPEED ? 'on' : ''}">${v}×</button>`).join('')}</div>`; }
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('.spdRow button'); if (b) setSpeed(b.dataset.v); });
+
 /* ===================== task renderers ===================== */
 function renderTask(st) {
   const t = $('task'); t.innerHTML = '';
+  if (st.watch || st.type === 'voice') t.insertAdjacentHTML('beforeend', speedRow());
   if (st.pilot) t.insertAdjacentHTML('beforeend', `<div class="dlg"><div class="plt"><span class="lbl">PILOT</span>${esc(st.pilot)}</div></div>`);
   if (st.type === 'info') {
     if (st.visToggle) {
@@ -861,7 +913,7 @@ function pttStart() {
   if (recOn) return;
   hush(); recFinal = ''; recInter = ''; recAlts = [];
   try {
-    rec = new SR(); rec.lang = 'en-US'; rec.continuous = !MOBILE; rec.interimResults = true; rec.maxAlternatives = 5;
+    rec = window.WarmMic ? WarmMic.create(SR) : new SR();   /* warm PTT mic (warm-mic.js): instant capture on desktop Chrome/Edge */ rec.lang = 'en-US'; rec.continuous = !MOBILE; rec.interimResults = true; rec.maxAlternatives = 5;
     rec.onresult = e => { let f = '', it = ''; const alts = [];
       for (let i = 0; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) { const a = []; for (let j = 0; j < r.length; j++) a.push(r[j].transcript); alts.push(a); f += r[0].transcript + ' '; } else it += r[0].transcript + ' '; }
       recFinal = f; recInter = it; recAlts = alts; const h = $('heard'); if (h) h.innerHTML = `Hearing: <b>${esc((f + it).trim())}</b>`; };
@@ -935,17 +987,17 @@ function evaluate(st, p) {
     const c = p.cmds.find(x => x.k === n.k);
     if (!c) { issues.push(`The task needed "<b>${describeNeed(n)}</b>", and I didn't hear that in your call.`); continue; }
     if (n.k === 'hdg') {
-      if (c.v % 360 !== n.v % 360) issues.push(`You said heading <b>${sayDigits(h3(c.v))}</b> (${h3(c.v)}), but the task was <b>${h3(n.v)}</b>. The pilot flew exactly what you said.`);
-      else if (c.dir && n.dir && c.dir !== n.dir) issues.push(`You said turn <b>${c.dir === 'L' ? 'left' : 'right'}</b>, but the task was a <b>${n.dir === 'L' ? 'left' : 'right'}</b> turn, so it went the long way around!`);
+      if (c.v % 360 !== n.v % 360) issues.push(`You said heading <b>${sayDigits(h3(c.v))}</b> (${h3(c.v)}), but the task was <b>${h3(n.v)}</b>. A real pilot would fly exactly what you said.`);
+      else if (c.dir && n.dir && c.dir !== n.dir) issues.push(`You said turn <b>${c.dir === 'L' ? 'left' : 'right'}</b>, but the task was a <b>${n.dir === 'L' ? 'left' : 'right'}</b> turn, so a real pilot would go the long way around!`);
       else if (!c.dir && n.dir) tips.push(`Tip: "fly heading" lets the pilot pick the shorter way. "Turn <b>${n.dir === 'L' ? 'left' : 'right'}</b> heading…" removes any doubt.`);
     }
     if (n.k === 'alt' && c.v !== n.v) issues.push(`You said <b>${cmdStr(c)}</b>, but the task was <b>angels ${angTxt(n.v)}</b> (${n.v.toLocaleString('en-US')} ft).`);
     if (n.k === 'spd' && c.v !== n.v) issues.push(`You said <b>${c.v} knots</b>, but the task was <b>${n.v} knots</b>.`);
     if (n.k === 'freq' && c.v !== n.v) issues.push(`You sent it to <b>${c.v}</b>, but Final is waiting on <b>${n.v}</b>.`);
-    if (n.k === 'course' && c.side !== n.side) issues.push(`It's <b>left</b> of the line, so the call is "slightly <b>left</b> of course". The pilot then corrects back right. Saying "right of course" made it drift further left.`);
+    if (n.k === 'course' && c.side !== n.side) issues.push(`It's <b>left</b> of the line, so the call is "slightly <b>left</b> of course". The pilot then corrects back right. Saying "right of course" would make it drift further left.`);
   }
   const extra = p.cmds.filter(c => !ex.need.some(n => n.k === c.k) && !INFO_K.has(c.k));
-  if (extra.length) issues.push(`You also said "<b>${extra.map(cmdStr).join('", "')}</b>", which wasn't part of this task, and the pilot did it anyway.`);
+  if (extra.length) issues.push(`You also said "<b>${extra.map(cmdStr).join('", "')}</b>", which wasn't part of this task, and a real pilot would do it too.`);
   return { ok: !issues.length, issues, tips };
 }
 let txBusy = false;
@@ -971,14 +1023,14 @@ function handleTx(raw, src) {
       fail(st, p.hdgMissing ? 'The pilot heard a turn but no usable <b>heading number</b>, so they answered <b>unable</b>. Say the heading as three digits.' : `The pilot couldn't pick out an instruction, so they answered <b>unable</b>. Try the call again.${src === 'voice' ? ' If the mic misheard you, speak a little slower, or type it.' : ''}`);
       return;
     }
-    execute(a, p.cmds);
-    addLog('plt', `${tel(a.cs)}.`); speak(`${telSay(a.cs)}.`, 'pilot');   // pilots answer with their callsign only
     const ev = evaluate(st, p);
+    if (ev.ok) { execute(a, p.cmds); W.frozen = false; updTag(); }   // the aircraft holds until the right call, then flies it
+    addLog('plt', `${tel(a.cs)}.`); speak(`${telSay(a.cs)}.`, 'pilot');   // pilots answer with their callsign only
     setTimeout(() => {
       txBusy = false;
       if (STEPS[cur] !== st) return;
       if (ev.ok) succeed(st, ev.tips.join('<br>'));
-      else fail(st, ev.issues.join('<br>') + (ev.tips.length ? '<br>' + ev.tips.join('<br>') : '') + '<br>Try again<span class="ui"> (tap <b>↺ Reset aircraft</b> if it wandered off)</span>.');
+      else fail(st, ev.issues.join('<br>') + (ev.tips.length ? '<br>' + ev.tips.join('<br>') : '') + '<br>The aircraft is holding until you get it right. Try again.');
     }, 600);
   }, 650);
   return true;
@@ -987,6 +1039,7 @@ function onEvent(kind, a) {
   const st = STEPS[cur];
   if (kind === 'landed') {
     addLog('sys', `${tel(a.cs)} is aboard. Trap!`);
+    if (st.watch === 'land' && !R.demo) { R.demo = true; updNav(); }
     if (st.waitLand) { R.landed = true; if (st.id in res) { R.done = true; feedback('ok', `✅ <b>${tel(a.cs)} is safely aboard!</b> You just ran your first recovery. <span class="ui">Tap <b>Finish</b>.</span>`); speak(tel(a.cs) + ' is safely aboard. ' + userName() + ', you just ran your first recovery!', 'mentor'); updNav(); updProg(); try { $('bNext').focus({ preventScroll: true }); } catch (e) {} } }
   } else if (kind === 'noClearance' && st.waitLand && !R.done) {
     a.gpOn = false; a.tgtAlt = 1200; W.flash = { t: W.t, txt: 'WAVE OFF' };
@@ -1028,9 +1081,10 @@ $('bNext').onclick = advance;
 $('bBack').onclick = () => { if (cur > 0) show(cur - 1, true); };
 $('bMute').onclick = () => setMute(!muted);
 $('bVoice').onclick = () => toggleVoicePanel();
+fillSpeed(); $('spdSel').onchange = () => setSpeed($('spdSel').value);
 $('vClose').onclick = () => toggleVoicePanel(false);
 $('vSel').onchange = () => { try { localStorage.setItem(LS_VOICE, $('vSel').value); } catch (e) {} loadVoices(); hush(); speak(`Hi ${userName()}, this is how I'll sound.`, 'mentor'); };
-$('vTest').onclick = () => { hush(); if (muted) setMute(false); speak(`Hi ${userName()}, I'm Aero, your guide. Let's bring them home.`, 'mentor'); speak('Stinger Approach, Lightning two four, angels four.', 'pilot'); };
+$('vTest').onclick = () => { hush(); if (muted) setMute(false); speak(`Hi ${userName()}, I'm Aero, your Personal Air Traffic Control Guide. Let's bring them home.`, 'mentor'); speak('Stinger Approach, Lightning two four, angels four.', 'pilot'); };
 $('bRestart').onclick = () => { if (confirm('Restart the intro from the beginning? Your progress will be cleared.')) restart(); };
 $('ov').addEventListener('keydown', e => { if (e.key === 'Escape' && STEPS[cur].type === 'done') closeOv(); });
 cv.addEventListener('pointerdown', e => {
@@ -1067,7 +1121,7 @@ buildProg(); setMute(muted); resize(); requestAnimationFrame(frame);
   // nothing speaks until the first tap (iOS needs a user gesture for audio)
   const go = `style="background:#123f1a;border-color:var(--g);color:#d8ffde;font-weight:bold"`;
   openOv(`<h1>FIRST NIGHT ABOARD STINGER</h1><h2>A guided intro to air traffic control</h2>
-    <p>No experience needed. <b>Aero</b>, your personal AI guide, will teach you to <b>read the radar scope</b> and <b>talk like a controller</b>. Then you'll bring an aircraft aboard the ship yourself, by voice.</p>
+    <p>No experience needed. <b>Aero</b>, your Personal Air Traffic Control Guide, will teach you to <b>read the radar scope</b> and <b>talk like a controller</b>. Then you'll bring an aircraft aboard the ship yourself, by voice.</p>
     <p class="small">About 10 minutes · progress saves automatically · 🔊 voices on (toggle with the speaker button or M)</p>
     <div class="btns">${resume ? `<button id="ovGo" ${go}>Continue: ${CHAPTERS[STEPS[cur].ch]}, step ${cur + 1}</button><button id="ovRe">↺ Restart from the beginning</button>` : `<button id="ovGo" ${go}>Meet Aero ▸</button>`}</div>`);
   $('ovGo').onclick = () => { closeOv(); show(cur, true); };
@@ -1080,7 +1134,7 @@ window.__intro = {
   get i() { return cur; }, get id() { return STEPS[cur].id; }, get type() { return STEPS[cur].type; }, get done() { return R.done; }, name: n => setName(STEPS[cur], n), speechOf: h => chunks(h).map(c => c.t), voice: () => ({ aero: aeroV && aeroV.name, pilot: pilotV && pilotV.name }), score: n => voiceScore({ name: n, lang: 'en-US' }),
   acs: () => W.acs.map(a => ({ cs: a.cs, x: +a.x.toFixed(2), y: +a.y.toFixed(2), hdg: Math.round(a.hdg) % 360, tgtHdg: a.tgtHdg, turn: a.turn, alt: Math.round(a.alt), tgtAlt: a.tgtAlt, spd: Math.round(a.spd), tgtSpd: a.tgtSpd, freq: a.freq, gpOn: a.gpOn, trackCL: a.trackCL, cleared: a.cleared, landed: a.landed, hit: a.hit ? { x: Math.round(a.hit.x), y: Math.round(a.hit.y) } : null })),
   go: i => show(i, true), steps: STEPS.map(s => ({ id: s.id, type: s.type, ch: s.ch, answer: s.answer, ok: s.opts ? s.opts.findIndex(o => o.ok) : null, target: s.target || null, hint: s.hint || null })),
-  res: () => res, fast: k => { window.__fastK = k; },
+  res: () => res, fast: k => { window.__fastK = k; }, get frozen() { return !!W.frozen; }, get speed() { return SPEED; }, setSpeed: v => setSpeed(v), get cue() { return $('cue').textContent; }, get narr() { return R.narr; }, idle: () => speechIdle(), norm: t => normalizeSpeech(PM(t)).trim(),
 };
 </script>
 </body></html>

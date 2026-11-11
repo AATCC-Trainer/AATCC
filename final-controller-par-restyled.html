@@ -3,6 +3,7 @@
 <head>
 <script src="gate.js"></script>
 <script src="phrase-match.js"></script>
+<script src="warm-mic.js"></script>
 <script src="shorthand.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -2052,7 +2053,7 @@ function pttStart() {
   const id = ++utterId; curUtter = { id, final: '', interim: '', done: false };
   renderTranscript('', '');
   try {
-    rec = new SR();
+    rec = window.WarmMic ? WarmMic.create(SR) : new SR();   /* warm PTT mic (warm-mic.js): instant capture on desktop Chrome/Edge */
     rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
     rec.onresult = e => {
       if (!curUtter || curUtter.id !== id) return;
