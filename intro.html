@@ -260,6 +260,7 @@ const PATTERNS = [
   [/\bgo(?:\s+(?:to|too|two))?\s+red(?:\s+buttons?)?\b/g, () => ({ k: 'freq', v: 'red' })],
   [/\bgo(?:\s+(?:to|too|two))?\s+(?:silver|sliver|silvar)(?:\s+buttons?)?\b/g, () => ({ k: 'freq', v: 'silver' })],
   [/\b(?:the\s+)?deck\s+is\s+clear\b/g, () => ({ k: 'deckClear' })],
+  [/\b(?:(?:3|three)\s+quarters?(?:\s+of\s+a)?\s+miles?\s*,?\s*|\.75\s+miles?\s*,?\s*)?call\s+(?:the\s+|your\s+|a\s+)?(?:ball|balls|bowl|bull|bol|bal)\b/g, () => ({ k: 'callBall' })],
   [/\bclear(?:ed)?\s+(?:to\s+|for\s+)?land(?:ing)?\b(?:\s+(?:on\s+spot|spot)\s+\d{1,2})?/g, () => ({ k: 'clearLand' })],
   [/\bwave off(?:\s+wave off)*\b|\bgo around\b|\bexecute\s+(?:a\s+)?missed approach\b|\bmissed approach\b/g, () => ({ k: 'ga' })],
   [/\b(?:take\s+|climb\s+(?:and\s+maintain\s+|to\s+)?|descend\s+(?:and\s+maintain\s+|to\s+)?|maintain\s+)?angels\s+(\d+(?:\.\d+)?)\b/g, m => { const n = parseFloat(m[1]); return { k: 'alt', v: Math.round(n < 100 ? n * 1000 : n) }; }],
@@ -295,6 +296,7 @@ function snapCallsign(csr, known) {
   return csr;
 }
 function parse(raw, known) {
+  raw = String(raw).replace(/\b3\s*\/\s*4\b|¾/g, ' three quarter ').replace(/\bthree\s*-\s*quarters?\b/gi, 'three quarter');
   const norm = normalizeSpeech(snapAirline(PM(raw), known));
   let s = norm.replace(/\bheading\s+(\d{3})(\d+)\b/g, 'heading $1 $2');
   const csr = snapCallsign(extractCallsign(s, known), known); s = csr.s;
@@ -323,6 +325,7 @@ function cmdStr(c) {
     case 'buster': return 'signal buster';
     case 'freq': return 'go ' + c.v;
     case 'clearLand': return 'cleared to land';
+    case 'callBall': return 'three-quarter mile, call the ball';
     case 'deckClear': return 'deck is clear';
     case 'ga': return 'wave off';
     case 'course': return (c.q === 'going' ? 'going ' : (c.q ? c.q + ' ' : '')) + (c.side === 'L' ? 'left' : 'right') + ' of course';
@@ -394,6 +397,7 @@ window.addEventListener('resize', resize);
 function draw(now) {
   if (CW < 2) resize();
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (W.par) { drawPar(now); return; }
   ctx.fillStyle = '#050b06'; ctx.fillRect(0, 0, CW, CH);
   const cx = CW / 2, cy = CH / 2 + 6, R = Math.max(40, Math.min(CW, CH) / 2 - 22), sc = R / W.range;
   const P = (x, y) => [cx + x * sc, cy - y * sc];
@@ -447,6 +451,65 @@ function draw(now) {
     if (W.mark && W.mark.cs === a.cs) { ctx.strokeStyle = W.mark.ok ? '#6dff86' : '#ff6a6a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(Qp[0], Qp[1], 16, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1; }
   }
   if (W.flash && W.t - W.flash.t < 4) { ctx.fillStyle = 'rgba(109,255,134,' + (1 - (W.t - W.flash.t) / 4) + ')'; ctx.font = `bold ${small ? 16 : 22}px Consolas,Menlo,monospace`; const tw = ctx.measureText(W.flash.txt).width; ctx.fillText(W.flash.txt, cx - tw / 2, cy - 30); }
+}
+/* ===================== PAR view (Final portion): same look as final-controller-par-restyled.html ===================== */
+// elevation pane on top, azimuth pane below; x = miles from touchdown (ship at the left), course offset right = up (as in Final)
+const PAR_RMIN = -0.4, PAR_RMAX = 10.3, PAR_ZMAX = 3600, PAR_YMAX = 2200, PAR_SCAN = 1.0;
+const PC = { gd: 'rgba(120,255,140,', bg: '#0b0d0b', tgt: 'rgba(220,255,225,1)', hl: 'rgba(255,191,60,' };
+const parFont = sz => `${sz}px Consolas, Menlo, "DejaVu Sans Mono", monospace`;
+function parPaint(a) {   // the PAR paints each target once per scan (1 s), like Final
+  if (!a.pp || W.t - a.pp.t >= PAR_SCAN || a.pp.t > W.t) a.pp = { t: W.t, r: -a.y, yft: a.x * NM_FT, z: a.alt };
+  return a.pp;
+}
+function drawPar(now) {
+  const left = 18, right = 18, top = 18, bottom = 30, gap = 24, avail = CH - top - bottom - gap, eh = avail * 0.5, ah = avail - eh, plotW = CW - left - right;
+  const eTop = top, eBot = top + eh, aTop = eBot + gap, aBot = aTop + ah, aMid = (aTop + aBot) / 2;
+  const xr = r => left + (r - PAR_RMIN) / (PAR_RMAX - PAR_RMIN) * plotW, ez = z => eBot - z / PAR_ZMAX * eh, ay = y => aMid - y / PAR_YMAX * (ah / 2), px5 = v => Math.round(v) + 0.5;
+  const line = (x1, y1, x2, y2) => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+  const glow = (on, col, blur) => { ctx.shadowColor = on ? col : 'transparent'; ctx.shadowBlur = on ? (blur || 6) : 0; };
+  const hl = W.hl || {};
+  glow(false);
+  ctx.fillStyle = PC.bg; ctx.fillRect(0, 0, CW, CH);
+  { const g = ctx.createRadialGradient(CW / 2, CH / 2, Math.min(CW, CH) * 0.35, CW / 2, CH / 2, Math.hypot(CW, CH) / 2);
+    g.addColorStop(0, '#1b201b'); g.addColorStop(0.5, '#2a302a'); g.addColorStop(1, '#0e110e'); ctx.fillStyle = g; ctx.fillRect(3, 3, CW - 6, CH - 6); }
+  for (const [t, b, k] of [[eTop, eBot, 'parE'], [aTop, aBot, 'parA']]) {
+    const cx = left + plotW / 2, cy = (t + b) / 2, g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(plotW, b - t) / 2);
+    g.addColorStop(0, '#031006'); g.addColorStop(1, '#000300'); ctx.fillStyle = g; ctx.fillRect(left, t, plotW, b - t);
+    ctx.strokeStyle = hl[k] ? PC.hl + '0.95)' : PC.gd + '0.5)'; ctx.lineWidth = hl[k] ? 2 : 1; ctx.strokeRect(px5(left), px5(t), Math.round(plotW) - 1, Math.round(b - t) - 1); ctx.lineWidth = 1;
+  }
+  glow(true, 'rgba(120,255,140,0.35)', 2);
+  ctx.font = parFont(11);
+  for (let n = 0; n <= 10; n++) {   // one range line per mile, numbered under each pane
+    const x = px5(xr(n)); ctx.strokeStyle = PC.gd + '0.18)'; line(x, eTop, x, eBot); line(x, aTop, x, aBot);
+    ctx.fillStyle = hl.ranges ? PC.hl + '0.95)' : PC.gd + '0.8)'; ctx.textAlign = 'center'; ctx.fillText(String(n), x, eBot + 12); ctx.fillText(String(n), x, aBot + 12);
+  }
+  ctx.textAlign = 'left';
+  // trainer captions (Final's scope has no text; these help a first-timer)
+  glow(false); ctx.font = parFont(10); ctx.fillStyle = hl.parE ? PC.hl + '0.95)' : PC.gd + '0.45)'; ctx.textAlign = 'right'; ctx.fillText('ELEVATION · glidepath (up = high)', left + plotW - 6, eTop + 13);
+  ctx.fillStyle = hl.parA ? PC.hl + '0.95)' : PC.gd + '0.45)'; ctx.fillText('AZIMUTH · course (up = right)', left + plotW - 6, aTop + 13);
+  ctx.fillStyle = PC.gd + '0.45)'; ctx.textAlign = 'right'; ctx.fillText('miles from touchdown', left + plotW - 6, eBot - 6); ctx.textAlign = 'left';
+  glow(true, 'rgba(120,255,140,0.35)', 2);
+  // elevation: glidepath (dashed)
+  ctx.save(); ctx.beginPath(); ctx.rect(left, eTop, plotW, eh); ctx.clip();
+  ctx.setLineDash([2, 3]); ctx.strokeStyle = hl.gp ? PC.hl + '0.95)' : PC.gd + '0.6)'; ctx.lineWidth = hl.gp ? 2 : 1.2; line(xr(0), ez(gpAlt(0)), xr(PAR_RMAX), ez(gpAlt(PAR_RMAX)));
+  ctx.setLineDash([]); ctx.lineWidth = 1; ctx.restore();
+  // azimuth: course line (solid)
+  ctx.save(); ctx.beginPath(); ctx.rect(left, aTop, plotW, ah); ctx.clip();
+  ctx.strokeStyle = hl.course ? PC.hl + '0.95)' : PC.gd + '0.6)'; ctx.lineWidth = hl.course ? 2 : 1; line(xr(PAR_RMIN), px5(ay(0)), xr(PAR_RMAX), px5(ay(0))); ctx.lineWidth = 1; ctx.restore();
+  // targets: plain tick on each pane (same size rule as Final)
+  const k = Math.max(0.6, Math.min(1.6, eh / 362)), TW = Math.max(2, Math.round(3 * k)), TH = Math.round(32 * k);
+  glow(true, 'rgba(120,255,140,0.8)', 6); ctx.fillStyle = PC.tgt;
+  for (const a of W.acs) {
+    if (a.landed) { a.parHit = null; continue; }
+    const pp = parPaint(a); if (pp.r > PAR_RMAX + 0.2 || pp.r < PAR_RMIN - 0.2) { a.parHit = null; continue; }
+    const X = xr(pp.r), YE = ez(pp.z), YA = ay(Math.max(-PAR_YMAX, Math.min(PAR_YMAX, pp.yft)));
+    ctx.save(); ctx.beginPath(); ctx.rect(left, eTop, plotW, eh); ctx.clip(); ctx.fillRect(Math.round(X - TW / 2), Math.round(YE - TH / 2), TW, TH); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.rect(left, aTop, plotW, ah); ctx.clip(); ctx.fillRect(Math.round(X - TW / 2), Math.round(YA - TH / 2), TW, TH); ctx.restore();
+    a.parHit = { x: Math.round(X), ye: Math.round(YE), ya: Math.round(YA), gpY: Math.round(ez(gpAlt(pp.r))), crsY: Math.round(ay(0)) };
+    glow(false); ctx.font = parFont(10); ctx.fillStyle = PC.gd + '0.6)'; ctx.fillText(a.cs, X + 6, YE - TH / 2 - 3); glow(true, 'rgba(120,255,140,0.8)', 6); ctx.fillStyle = PC.tgt;
+  }
+  glow(false);
+  if (W.flash && W.t - W.flash.t < 4) { ctx.fillStyle = 'rgba(109,255,134,' + (1 - (W.t - W.flash.t) / 4) + ')'; ctx.font = `bold ${CW < 500 ? 16 : 22}px Consolas,Menlo,monospace`; const tw = ctx.measureText(W.flash.txt).width; ctx.fillText(W.flash.txt, CW / 2 - tw / 2, aTop - 6); }
 }
 let lastT = performance.now();
 function frame(now) { const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now; if (!document.hidden) { tick(dt); draw(now); } requestAnimationFrame(frame); }
@@ -559,7 +622,7 @@ function toggleVoicePanel(open) { const p = $('vpick'); const o = open ?? !p.cla
 const userName = () => { try { return (localStorage.getItem(LS_NAME) || '').trim() || 'Controller'; } catch (e) { return 'Controller'; } };
 
 /* ===================== the story ===================== */
-const CHAPTERS = ['Briefing', 'The scope', 'The flow', 'Phraseology', 'Mission'], CH_SHORT = ['Brief', 'Scope', 'Flow', 'Radio', 'Mission'];
+const CHAPTERS = ['Briefing', 'The scope', 'The flow', 'Phraseology', 'Mission', 'Final'], CH_SHORT = ['Brief', 'Scope', 'Flow', 'Radio', 'Mission', 'Final'];
 const LT21 = o => Object.assign({ cs: 'LTNG21', code: '4213' }, o);
 const LT24 = o => Object.assign({ cs: 'LTNG24', code: '4247' }, o);
 const NH41 = o => Object.assign({ cs: 'NHWK41', code: '4302' }, o);
@@ -612,9 +675,9 @@ const STEPS = [
   { ch: 2, id: 'flowM', type: 'info', range: 20, watch: true, hold: { x: 4, y: -15, r: 2 },
     acs: [LT21({ x: 4, y: -13, hdg: 90, alt: 6000, spd: 250, freq: 'red', mode: 'hold', hold: { x: 4, y: -15, r: 2, ang: 0 } })],
     say: `<p>Now the big picture. Every aircraft coming home passes through three controllers, each on their own radio frequency with its own <b>color</b>:</p><p><b class="f-red">1. MARSHAL (Red)</b>: aircraft check in and wait their turn in a holding pattern, stacked at different altitudes so they stay apart. Marshal sends them down one at a time.</p><p><b class="f-silver">2. APPROACH (Silver)</b>: gives the pilot <b>vectors</b> (headings, altitudes and speeds) to line them up behind the ship on the <b>final approach course</b>.</p>` },
-  { ch: 2, id: 'flowF', type: 'info', range: 10, course: true, watch: 'land',
+  { ch: 2, id: 'flowF', type: 'info', range: 10, course: true, watch: 'land', par: true,
     acs: [LT21({ x: 0.2, y: -6.5, hdg: 360, alt: 1200, spd: 150, freq: 'purple', mode: 'final' })],
-    say: `<p><b class="f-purple">3. FINAL</b> (<span class="f-purple">Purple</span> or <span class="f-copper">Copper</span>: two Final frequencies, so two controllers can work at once) talks the pilot down the last few miles, keeping them on <b>course</b> (left/right) and on the <b>glidepath</b> (the right descent angle) all the way to the deck.</p><p>Watch it come aboard.</p>` },
+    say: `<p><b class="f-purple">3. FINAL</b> (<span class="f-purple">Purple</span> or <span class="f-copper">Copper</span>: two Final frequencies, so two controllers can work at once) talks the pilot down the last few miles, keeping them on <b>course</b> (left/right) and on the <b>glidepath</b> (the right descent angle) all the way to the deck.</p><p>Final has its own radar, the <b>PAR</b>, shown here: the top view is <b>height</b>, the bottom view is <b>left/right</b>, and the ship is at the left edge. You'll learn to read it later.</p><p>Watch it come aboard.</p>` },
   { ch: 2, id: 'qFlow', type: 'choice', range: 20, course: true, acs: [LT21({ x: 4, y: -13, hdg: 300, alt: 5000, spd: 250, freq: 'red' })],
     say: `<p>Let's check the flow.</p>`, q: `Marshal is done with Lightning 21 and it needs vectors to final. Which frequency does it go to?`,
     opts: [{ t: 'Red (Marshal)', why: 'It\'s already on Red. Marshal hands it <b>on</b> to the next controller.' }, { t: 'Silver (Approach)', ok: 1 }, { t: 'Purple (Final)', why: 'Final comes <b>after</b> Approach has lined it up.' }],
@@ -681,19 +744,34 @@ const STEPS = [
   { ch: 4, id: 'm4', type: 'voice', range: 15, course: true, keep: true, acs: [LT24({ x: 0.05, y: -9, hdg: 360, alt: 1200, spd: 150, freq: 'silver' })],
     say: `<p>It's lined up. Time to hand it to Final Control on <b class="f-purple">Purple</b>.</p>`, task: `🎯 Switch Lightning 24 to <b>Purple</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'freq', v: 'purple' }] },
     hint: 'Lightning 24, go purple', good: 'Handed off to Final.' },
-  { ch: 4, id: 'm5', type: 'info', range: 10, course: true, acs: [LT24({ x: -0.05, y: -8, hdg: 360, alt: 1200, spd: 150, freq: 'purple' })],
+  // ---------- Chapter F: how Final works (PAR) ----------
+  { ch: 5, id: 'pf1', type: 'info', range: 10, course: true, par: true, watch: true, hl: { parE: true, parA: true }, acs: [LT24({ x: 0, y: -8.5, hdg: 360, alt: 1200, spd: 150, freq: 'purple', trackCL: true })],
+    say: `<p><b>How Final works.</b> Lightning 24 is on <b class="f-purple">Purple</b> now, so the scope switched to the Final radar: the <b>PAR</b>, or <b>precision approach radar</b>.</p><p>Instead of a round map, PAR shows the same aircraft in <b>two views</b>. The <b>top</b> view is <b>elevation</b>, a side view that shows how high it is. The <b>bottom</b> view is <b>azimuth</b>, a top-down view that shows left and right.</p><p>The ship is at the <b>left edge</b>. The numbers along the bottom are <b>miles from touchdown</b>, so the aircraft moves from right to left as it comes home.</p>` },
+  { ch: 5, id: 'pf2', type: 'choice', range: 10, course: true, par: true, hl: { parA: true, course: true }, acs: [LT24({ x: -0.13, y: -6, hdg: 360, alt: 1200, spd: 150, freq: 'purple' })],
+    say: `<p><b>The azimuth view</b> (bottom) looks down from above. The solid line is the <b>final approach course</b> into the deck.</p><p>A target <b>above</b> the line is <b>right of course</b>. <b>Below</b> the line is <b>left of course</b>. The farther from the line, the bigger the call: <b>on course</b>, <b>slightly left</b>, <b>left</b>, <b>well left</b>.</p>`,
+    q: `Lightning 24's mark sits below the course line in the azimuth view. Where is it?`,
+    opts: [{ t: 'Left of course', ok: 1 }, { t: 'Right of course', why: 'In the azimuth view <b>above</b> the line is right of course. Below the line is <b>left</b>.' }, { t: 'Below glidepath', why: 'Glidepath is the <b>top</b> view. The bottom view is left/right only.' }],
+    good: `Right: below the line in azimuth means <b>left of course</b>. The pilot then corrects back to the right.` },
+  { ch: 5, id: 'pf3', type: 'choice', range: 10, course: true, par: true, hl: { parE: true, gp: true }, acs: [LT24({ x: 0, y: -4, hdg: 360, alt: 1900, spd: 150, freq: 'purple', trackCL: true })],
+    say: `<p><b>The elevation view</b> (top) is a side view. The dashed line is the <b>glidepath</b>, the 3° slope down to the deck.</p><p>A target <b>above</b> the dashed line is <b>above glidepath</b>, <b>below</b> it is <b>below glidepath</b>. Until the glidepath comes down to meet the aircraft it flies level; when they meet, you say "<b>begin descent</b>".</p>`,
+    q: `Look at the top view. Where is Lightning 24?`,
+    opts: [{ t: 'Above glidepath', ok: 1 }, { t: 'Below glidepath', why: 'The mark is <b>over</b> the dashed line, so it is above glidepath.' }, { t: 'On glidepath', why: 'On glidepath means the dashed line runs through the middle of the mark. This one is clearly over it.' }],
+    good: `Yes, <b>above glidepath</b>. The pilot would ease the descent to get back down onto the dashed line.` },
+  { ch: 5, id: 'pf4', type: 'info', range: 10, course: true, par: true, watch: true, hl: { ranges: true }, acs: [LT24({ x: 0, y: -5, hdg: 360, alt: Math.round(5 * NM_FT * GP_TAN + 60), spd: 150, freq: 'purple', trackCL: true, gpOn: true })],
+    say: `<p><b>Your job on Final</b> is a steady stream of short calls, all the way down:</p><p><span class="ex">Course: "on course", "slightly left of course"…<br>Glidepath: "on glidepath", "slightly above glidepath"…<br>Range, every mile: "four miles", "three miles"…</span></p><p>The pilot answers with just the <b>callsign</b> and keeps flying.</p><p>Close in comes the <b>deck call</b>, which clears the aircraft to land. Jets get "<b>three-quarter mile, call the ball</b>". The pilot answers "<b>Lightning 24, ball, state 4.9</b>" (4.9 is the fuel state), and that reply is the landing clearance. Helicopters get "<b>one mile, go green</b>" instead.</p>` },
+  { ch: 5, id: 'm5', type: 'info', range: 10, course: true, par: true, acs: [LT24({ x: -0.05, y: -8, hdg: 360, alt: 1200, spd: 150, freq: 'purple' })],
     pilot: 'Stinger Final, Lightning 24, eight miles, level one thousand two hundred, heading three six zero.',
-    say: `<p>Now <b>you</b> are the <b class="f-purple">Final controller</b>. The scope has zoomed in to 10 miles.</p><p>On final you give a steady stream of short calls: <b>left/right of course</b>, <b>begin descent</b>, <b>on glidepath</b>, <b>above/below glidepath</b>. The pilot just answers with the <b>callsign</b> and corrects; they're busy flying.</p><p>Remember: "<b>slightly left of course</b>" says where the aircraft <i>is</i> (left of the line), so the pilot corrects back to the <b>right</b>.</p>` },
-  { ch: 4, id: 'm6', type: 'voice', range: 10, course: true, acs: [LT24({ x: -0.2, y: -6.8, hdg: 356, alt: 1200, spd: 150, freq: 'purple' })],
-    say: `<p>Uh oh, it's drifting to the <b>left</b> of the dashed line.</p>`, task: `🎯 Tell Lightning 24 it's <b>slightly left of course</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'course', side: 'L' }] },
-    hint: 'Lightning 24, slightly left of course', good: 'The pilot answers "Lightning 24". See it ease back right onto the line?' },
-  { ch: 4, id: 'm7', type: 'voice', range: 10, course: true, acs: [LT24({ x: 0, y: -3.7, hdg: 360, alt: 1200, spd: 150, freq: 'purple', trackCL: true })],
-    say: `<p>It's reaching the <b>glidepath</b>, the 3° slope down to the deck. The pilot stays level until you tell them.</p>`, task: `🎯 Tell Lightning 24 to <b>begin descent</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'beginDescent' }] },
-    hint: 'Lightning 24, begin descent', good: 'Watch the altitude start dropping as it rides the glidepath.' },
-  { ch: 4, id: 'm8', type: 'voice', range: 10, course: true, waitLand: true, acs: [LT24({ x: 0, y: -2.6, hdg: 360, alt: Math.round(2.6 * NM_FT * GP_TAN + 60), spd: 150, freq: 'purple', trackCL: true, gpOn: true })],
-    say: `<p>On course, on glidepath. The flight deck is clear.</p>`, task: `🎯 Clear Lightning 24 to <b>land</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'clearLand' }] },
-    hint: 'Lightning 24, cleared to land', good: 'Here it comes…' },
-  { ch: 4, id: 'done', type: 'done', range: 10, course: true, acs: [] },
+    say: `<p>Your turn. <b>You</b> are the <b class="f-purple">Final controller</b>, and Lightning 24 just checked in on Purple at 8 miles.</p><p>Remember: "<b>slightly left of course</b>" says where the aircraft <i>is</i> (below the line in the azimuth view), so the pilot corrects back to the <b>right</b>.</p>` },
+  { ch: 5, id: 'm6', type: 'voice', range: 10, course: true, par: true, acs: [LT24({ x: -0.2, y: -6.8, hdg: 356, alt: 1200, spd: 150, freq: 'purple' })],
+    say: `<p>Uh oh: in the azimuth view it's sitting <b>below</b> the course line. It's drifting <b>left</b>.</p>`, task: `🎯 Tell Lightning 24 it's <b>slightly left of course</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'course', side: 'L' }] },
+    hint: 'Lightning 24, slightly left of course', good: 'The pilot answers "Lightning 24". Watch the mark ease back up onto the course line.' },
+  { ch: 5, id: 'm7', type: 'voice', range: 10, course: true, par: true, acs: [LT24({ x: 0, y: -3.7, hdg: 360, alt: 1200, spd: 150, freq: 'purple', trackCL: true })],
+    say: `<p>In the elevation view the dashed <b>glidepath</b> has come down to meet the mark. The pilot stays level until you tell them.</p>`, task: `🎯 Tell Lightning 24 to <b>begin descent</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'beginDescent' }] },
+    hint: 'Lightning 24, begin descent', good: 'Watch the mark ride down the dashed line in the top view.' },
+  { ch: 5, id: 'm8', type: 'voice', range: 10, course: true, par: true, waitLand: true, acs: [LT24({ x: 0, y: -0.78, hdg: 360, alt: Math.round(0.78 * NM_FT * GP_TAN + 60), spd: 150, freq: 'purple', trackCL: true, gpOn: true })],
+    say: `<p>On course, on glidepath, three-quarters of a mile out, and the deck is clear. Time for the deck call.</p>`, task: `🎯 Give Lightning 24 the jet deck call: <b>three-quarter mile, call the ball</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'callBall' }] },
+    hint: 'Lightning 24, three-quarter mile, call the ball', good: 'The pilot\'s "ball" reply is the landing clearance. Here it comes…' },
+  { ch: 5, id: 'done', type: 'done', par: true, range: 10, course: true, acs: [] },
 ];
 const sayOf = st => typeof st.say === 'function' ? st.say() : (st.say || '');
 const GRADED = STEPS.filter(s => ['click', 'choice', 'chips', 'voice'].includes(s.type));
@@ -716,9 +794,9 @@ function updProg() {
   $('chName').textContent = st.type === 'done' ? 'Mission complete' : CHAPTERS[st.ch];
   $('stepNo').textContent = st.type === 'done' ? '' : `Step ${cur + 1} of ${STEPS.length - 1}`;
 }
-function updTag() { const a = W.acs[0]; $('scopeTag').innerHTML = (a && a.freq && a.freq !== 'none' ? `<b class="f-${a.freq}">${FNAME[a.freq]}</b>${W.range} NM` : `${W.range} NM range`) + (W.frozen && W.acs.length ? ' · <b style="color:var(--amber);border-color:var(--amber)">⏸ HOLDING FOR YOUR CALL</b>' : '') + (SPEED !== 1 ? ` · ${SPEED}×` : ''); }
+function updTag() { const a = W.acs[0]; $('scopeTag').innerHTML = (W.par ? `<b class="f-purple">Final · PAR</b>10 NM` : a && a.freq && a.freq !== 'none' ? `<b class="f-${a.freq}">${FNAME[a.freq]}</b>${W.range} NM` : `${W.range} NM range`) + (W.frozen && W.acs.length ? ' · <b style="color:var(--amber);border-color:var(--amber)">⏸ HOLDING FOR YOUR CALL</b>' : '') + (SPEED !== 1 ? ` · ${SPEED}×` : ''); }
 function setScene(st, first) {
-  W.range = st.range || 15; W.course = !!st.course; W.vis = st.vis || 'both'; W.hl = st.hl || {}; W.hold = st.hold ? Object.assign({}, st.hold) : null; W.mark = null;
+  W.par = !!st.par; W.range = st.range || 15; W.course = !!st.course; W.vis = st.vis || 'both'; W.hl = st.hl || {}; W.hold = st.hold ? Object.assign({}, st.hold) : null; W.mark = null;
   const have = st.keep && !first && st.acs && W.acs.length === st.acs.length && st.acs.every(a => W.acs.some(x => x.cs === a.cs && !x.landed));
   if (!have) W.acs = (st.acs || []).map(a => mk(JSON.parse(JSON.stringify(a))));
   if (st.enter) st.enter(first);
@@ -963,7 +1041,7 @@ function execute(a, cmds) {
     else if (c.k === 'freq') { a.freq = c.v; updTag(); }
     else if (c.k === 'course' || c.k === 'onCourse') { if (a.freq === 'purple' || a.freq === 'copper') { a.trackCL = true; a.tgtHdg = null; a.turn = 0; } }
     else if (c.k === 'beginDescent') { a.gpOn = true; a.tgtAlt = Math.min(a.tgtAlt, a.alt); }
-    else if (c.k === 'clearLand') a.cleared = true;
+    else if (c.k === 'clearLand' || c.k === 'callBall') a.cleared = true;
     else if (c.k === 'ga') { a.gpOn = false; a.cleared = false; a.trackCL = false; a.tgtAlt = Math.max(1200, a.tgtAlt); a.tgtHdg = 0; a.turn = 0; W.flash = { t: W.t, txt: 'WAVE OFF' }; }
   }
 }
@@ -976,6 +1054,7 @@ function describeNeed(n) {
     case 'course': return 'slightly left of course';
     case 'beginDescent': return 'begin descent';
     case 'clearLand': return 'cleared to land';
+    case 'callBall': return 'three-quarter mile, call the ball';
   }
   return n.k;
 }
@@ -984,7 +1063,7 @@ function evaluate(st, p) {
   if (!p.cs) issues.push(p.bare ? `You said "${p.bare}" but not the <b>number</b>. With several Lightnings airborne, the pilot needs the full callsign: <b>${tel(ex.cs)}</b>.` : `No callsign. Start every call with <b>who</b> you're talking to: "<b>${tel(ex.cs)}</b>, …"`);
   else if (p.csLate) tips.push('Tip: put the callsign <b>first</b> so the pilot knows the call is for them before the instruction starts.');
   for (const n of ex.need) {
-    const c = p.cmds.find(x => x.k === n.k);
+    const c = p.cmds.find(x => x.k === n.k) || (n.k === 'callBall' ? p.cmds.find(x => x.k === 'clearLand') : null);   // 'cleared to land' still accepted silently
     if (!c) { issues.push(`The task needed "<b>${describeNeed(n)}</b>", and I didn't hear that in your call.`); continue; }
     if (n.k === 'hdg') {
       if (c.v % 360 !== n.v % 360) issues.push(`You said heading <b>${sayDigits(h3(c.v))}</b> (${h3(c.v)}), but the task was <b>${h3(n.v)}</b>. A real pilot would fly exactly what you said.`);
@@ -996,7 +1075,7 @@ function evaluate(st, p) {
     if (n.k === 'freq' && c.v !== n.v) issues.push(`You sent it to <b>${c.v}</b>, but Final is waiting on <b>${n.v}</b>.`);
     if (n.k === 'course' && c.side !== n.side) issues.push(`It's <b>left</b> of the line, so the call is "slightly <b>left</b> of course". The pilot then corrects back right. Saying "right of course" would make it drift further left.`);
   }
-  const extra = p.cmds.filter(c => !ex.need.some(n => n.k === c.k) && !INFO_K.has(c.k));
+  const extra = p.cmds.filter(c => !ex.need.some(n => n.k === c.k || (n.k === 'callBall' && c.k === 'clearLand')) && !INFO_K.has(c.k));
   if (extra.length) issues.push(`You also said "<b>${extra.map(cmdStr).join('", "')}</b>", which wasn't part of this task, and a real pilot would do it too.`);
   return { ok: !issues.length, issues, tips };
 }
@@ -1025,7 +1104,8 @@ function handleTx(raw, src) {
     }
     const ev = evaluate(st, p);
     if (ev.ok) { execute(a, p.cmds); W.frozen = false; updTag(); }   // the aircraft holds until the right call, then flies it
-    addLog('plt', `${tel(a.cs)}.`); speak(`${telSay(a.cs)}.`, 'pilot');   // pilots answer with their callsign only
+    if (ev.ok && p.cmds.some(c => c.k === 'callBall')) { addLog('plt', `${tel(a.cs)}, ball, state 4.9.`); speak(`${telSay(a.cs)}, ball, state four point niner.`, 'pilot'); }   // the ball reply is the landing clearance (as in Final)
+    else { addLog('plt', `${tel(a.cs)}.`); speak(`${telSay(a.cs)}.`, 'pilot'); }   // pilots answer with their callsign only
     setTimeout(() => {
       txBusy = false;
       if (STEPS[cur] !== st) return;
@@ -1041,10 +1121,10 @@ function onEvent(kind, a) {
     addLog('sys', `${tel(a.cs)} is aboard. Trap!`);
     if (st.watch === 'land' && !R.demo) { R.demo = true; updNav(); }
     if (st.waitLand) { R.landed = true; if (st.id in res) { R.done = true; feedback('ok', `✅ <b>${tel(a.cs)} is safely aboard!</b> You just ran your first recovery. <span class="ui">Tap <b>Finish</b>.</span>`); speak(tel(a.cs) + ' is safely aboard. ' + userName() + ', you just ran your first recovery!', 'mentor'); updNav(); updProg(); try { $('bNext').focus({ preventScroll: true }); } catch (e) {} } }
-  } else if (kind === 'noClearance' && st.waitLand && !R.done) {
+  } else if (kind === 'noClearance' && st.waitLand && !R.done) {   // (cannot happen while the aircraft holds for the call)
     a.gpOn = false; a.tgtAlt = 1200; W.flash = { t: W.t, txt: 'WAVE OFF' };
     addLog('plt', `${tel(a.cs)}, no landing clearance, waving off.`); speak(telSay(a.cs) + ', no landing clearance, waving off.', 'pilot');
-    fail(st, 'It got close to the deck without a landing clearance, so the pilot waved off. <span class="ui">Tap <b>↺ Reset aircraft</b> and </span>Clear it to land a bit sooner next time.');
+    fail(st, 'It got close to the deck without a landing clearance, so the pilot waved off. <span class="ui">Tap <b>↺ Reset aircraft</b> and </span>Give the deck call a bit sooner next time.');
   }
 }
 
@@ -1134,7 +1214,7 @@ window.__intro = {
   get i() { return cur; }, get id() { return STEPS[cur].id; }, get type() { return STEPS[cur].type; }, get done() { return R.done; }, name: n => setName(STEPS[cur], n), speechOf: h => chunks(h).map(c => c.t), voice: () => ({ aero: aeroV && aeroV.name, pilot: pilotV && pilotV.name }), score: n => voiceScore({ name: n, lang: 'en-US' }),
   acs: () => W.acs.map(a => ({ cs: a.cs, x: +a.x.toFixed(2), y: +a.y.toFixed(2), hdg: Math.round(a.hdg) % 360, tgtHdg: a.tgtHdg, turn: a.turn, alt: Math.round(a.alt), tgtAlt: a.tgtAlt, spd: Math.round(a.spd), tgtSpd: a.tgtSpd, freq: a.freq, gpOn: a.gpOn, trackCL: a.trackCL, cleared: a.cleared, landed: a.landed, hit: a.hit ? { x: Math.round(a.hit.x), y: Math.round(a.hit.y) } : null })),
   go: i => show(i, true), steps: STEPS.map(s => ({ id: s.id, type: s.type, ch: s.ch, answer: s.answer, ok: s.opts ? s.opts.findIndex(o => o.ok) : null, target: s.target || null, hint: s.hint || null })),
-  res: () => res, fast: k => { window.__fastK = k; }, get frozen() { return !!W.frozen; }, get speed() { return SPEED; }, setSpeed: v => setSpeed(v), get cue() { return $('cue').textContent; }, get narr() { return R.narr; }, idle: () => speechIdle(), norm: t => normalizeSpeech(PM(t)).trim(),
+  res: () => res, fast: k => { window.__fastK = k; }, get frozen() { return !!W.frozen; }, get par() { return !!W.par; }, parHit: () => W.acs.map(a => a.parHit || null), get speed() { return SPEED; }, setSpeed: v => setSpeed(v), get cue() { return $('cue').textContent; }, get narr() { return R.narr; }, idle: () => speechIdle(), norm: t => normalizeSpeech(PM(t)).trim(),
 };
 </script>
 </body></html>
