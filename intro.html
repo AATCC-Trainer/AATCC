@@ -617,18 +617,18 @@ const STEPS = [
     target: ['Lightning 21', 'turn right', 'heading', 'zero', 'niner', 'zero'], extra: ['turn left', 'ninety', 'nine'],
     good: `"<b>Lightning 21, turn right heading zero niner zero.</b>" Spot on.` },
   { ch: 3, id: 'readback', type: 'info', range: 15, acs: PRACTICE(),
-    say: `<p>After you give an instruction, the pilot <b>reads it back</b>, repeating the key numbers so you both know it was heard right.</p><p><span class="ex">You: "Lightning 21, turn left heading two seven zero."<br>Pilot: "Lightning 21, left heading two seven zero."</span></p><p>Your job is to <b>listen</b> to every readback. If it's wrong, say "<b>negative</b>" and give the correct instruction again.</p>` },
+    say: `<p>After you give an instruction, the pilot answers with just their <b>callsign</b>. That means "heard you, doing it".</p><p><span class="ex">You: "Lightning 21, turn left heading two seven zero."<br>Pilot: "Lightning 21."</span></p><p>Then <b>watch the scope</b> to confirm it does what you said. If <b>you</b> misspoke, say "<b>correction</b>" and give the right instruction. "Correction" is the only correction word: everything you said before it is thrown out.</p>` },
   { ch: 3, id: 'spot1', type: 'choice', range: 15, acs: PRACTICE(),
-    say: `<p>Listen to this exchange.</p>`,
-    dlg: [['you', 'Lightning 21, turn right heading one eight zero, descend and maintain angels two.'], ['plt', 'Lightning 21, right heading one eight zero, descend and maintain angels three.']],
-    q: `What do you say next?`,
-    opts: [{ t: '"Lightning 21, negative, descend and maintain angels two."', ok: 1 }, { t: 'Nothing, the readback was fine.', why: 'Listen again: you said angels <b>two</b>, the pilot read back angels <b>three</b>.' }, { t: '"Lightning 21, negative, turn right heading one eight zero."', why: 'The heading was read back correctly. It\'s the <b>altitude</b> that\'s wrong.' }, { t: '"Roger."', why: '"Roger" would accept the wrong altitude.' }],
-    good: `Good ears. You caught the wrong altitude and corrected just that part.` },
+    say: `<p>Listen to this exchange. You meant to send Lightning 21 down to <b>angels two</b>.</p>`,
+    dlg: [['you', 'Lightning 21, turn right heading one eight zero, descend and maintain angels three.'], ['plt', 'Lightning 21.']],
+    q: `You said angels three by mistake. What do you say next?`,
+    opts: [{ t: '"Lightning 21, correction, descend and maintain angels two."', ok: 1 }, { t: '"Lightning 21, negative, descend and maintain angels two."', why: 'Use "<b>correction</b>". It is the only correction word the pilots know.' }, { t: 'Nothing, the pilot answered.', why: 'The callsign reply only means the pilot heard you. They will fly angels <b>three</b>, exactly what you said.' }, { t: '"Roger."', why: '"Roger" fixes nothing: the pilot still descends to angels three.' }],
+    good: `Good catch. "Correction" throws out the wrong call, and the pilot flies the new one.` },
   { ch: 3, id: 'spot2', type: 'choice', range: 15, acs: PRACTICE(),
     say: `<p>You called: "<b>Lightning 24, turn left heading three three zero, maintain two zero zero knots.</b>"</p>`,
-    q: `Which pilot readback is WRONG?`,
-    opts: [{ t: '"Lightning 24, left heading three three zero, maintain two zero zero knots."', why: 'That one matches perfectly.' }, { t: '"Left heading three three zero, two zero zero knots, Lightning 24."', why: 'Callsign at the end is still a fine readback; all the numbers match.' }, { t: '"Lightning 24, right heading three three zero, maintain two zero zero knots."', ok: 1 }],
-    good: `Yes: <b>right</b> instead of <b>left</b>. You'd answer "Lightning 24, negative, turn <b>left</b> heading three three zero."` },
+    q: `What does the pilot answer?`,
+    opts: [{ t: '"Lightning 24."', ok: 1 }, { t: '"Lightning 24, left heading three three zero, maintain two zero zero knots."', why: 'In this trainer pilots don\'t repeat the instruction. They answer with just their <b>callsign</b>.' }, { t: '"Wilco."', why: 'Pilots answer with their <b>callsign</b>, so you know which aircraft heard you.' }],
+    good: `Yes: just "<b>Lightning 24</b>". Then watch the data block turn left to 330 and slow to 200 knots.` },
   { ch: 3, id: 'voiceIntro', type: 'info', range: 15, acs: PRACTICE(), voiceHelp: true,
     say: `<p>Time to talk for real. From here on you'll <b>say</b> your calls out loud, and the aircraft will fly <b>exactly</b> what you say, so watch the scope!</p><p><b>Hold</b> the 🎙 button (or the <b>Space bar</b>) while you talk and let go when you're done. Or tap it once to start and again to stop. The first time, your browser will ask for microphone permission.</p><p>No mic, or a browser without speech recognition? Just <b>type</b> the call in the box instead.</p>` },
   { ch: 3, id: 'v1', type: 'voice', range: 15, acs: PRACTICE(),
@@ -659,10 +659,10 @@ const STEPS = [
     hint: 'Lightning 24, go purple', good: 'Handed off to Final.' },
   { ch: 4, id: 'm5', type: 'info', range: 10, course: true, acs: [LT24({ x: -0.05, y: -8, hdg: 360, alt: 1200, spd: 150, freq: 'purple' })],
     pilot: 'Stinger Final, Lightning 24, eight miles, level one thousand two hundred, heading three six zero.',
-    say: `<p>Now <b>you</b> are the <b class="f-purple">Final controller</b>. The scope has zoomed in to 10 miles.</p><p>On final you give a steady stream of short calls: <b>left/right of course</b>, <b>begin descent</b>, <b>on glidepath</b>, <b>above/below glidepath</b>. The pilot corrects <b>without reading back</b>; they're busy flying.</p><p>Remember: "<b>slightly left of course</b>" says where the aircraft <i>is</i> (left of the line), so the pilot corrects back to the <b>right</b>.</p>` },
+    say: `<p>Now <b>you</b> are the <b class="f-purple">Final controller</b>. The scope has zoomed in to 10 miles.</p><p>On final you give a steady stream of short calls: <b>left/right of course</b>, <b>begin descent</b>, <b>on glidepath</b>, <b>above/below glidepath</b>. The pilot just answers with the <b>callsign</b> and corrects; they're busy flying.</p><p>Remember: "<b>slightly left of course</b>" says where the aircraft <i>is</i> (left of the line), so the pilot corrects back to the <b>right</b>.</p>` },
   { ch: 4, id: 'm6', type: 'voice', range: 10, course: true, acs: [LT24({ x: -0.2, y: -6.8, hdg: 356, alt: 1200, spd: 150, freq: 'purple' })],
     say: `<p>Uh oh, it's drifting to the <b>left</b> of the dashed line.</p>`, task: `🎯 Tell Lightning 24 it's <b>slightly left of course</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'course', side: 'L' }] },
-    hint: 'Lightning 24, slightly left of course', good: 'See it ease back right onto the line? No readback needed.' },
+    hint: 'Lightning 24, slightly left of course', good: 'The pilot answers "Lightning 24". See it ease back right onto the line?' },
   { ch: 4, id: 'm7', type: 'voice', range: 10, course: true, acs: [LT24({ x: 0, y: -3.7, hdg: 360, alt: 1200, spd: 150, freq: 'purple', trackCL: true })],
     say: `<p>It's reaching the <b>glidepath</b>, the 3° slope down to the deck. The pilot stays level until you tell them.</p>`, task: `🎯 Tell Lightning 24 to <b>begin descent</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'beginDescent' }] },
     hint: 'Lightning 24, begin descent', good: 'Watch the altitude start dropping as it rides the glidepath.' },
@@ -901,20 +901,7 @@ function recError(code) {
   const i = $('typedIn'); if (i && micBlocked) i.focus();
 }
 
-/* ===================== transmissions: parse → readback → aircraft flies it → Aero checks ===================== */
-function readbackParts(a, cmds) {
-  const parts = [];
-  for (const c of cmds) {
-    if (c.k === 'hdg') parts.push((c.dir ? (c.dir === 'L' ? 'left ' : 'right ') : '') + 'heading ' + sayDigits(h3(c.v)));
-    else if (c.k === 'alt') { const chg = Math.abs(c.v - a.tgtAlt) > 50 || Math.abs(c.v - a.alt) > 50; parts.push((chg ? (c.v > a.alt ? 'climb and maintain ' : 'descend and maintain ') : 'maintain ') + (c.v % 100 === 0 && c.v < 18000 ? 'angels ' + angSay(c.v) : sayDigits(c.v) + ' feet')); }
-    else if (c.k === 'spd') parts.push('maintain ' + sayDigits(c.v) + ' knots');
-    else if (c.k === 'buster') parts.push('buster');
-    else if (c.k === 'freq') parts.push('going ' + c.v);
-    else if (c.k === 'clearLand') parts.push('cleared to land');
-    else if (c.k === 'ga') parts.push('waving off');
-  }
-  return parts;
-}
+/* ===================== transmissions: parse → callsign-only reply → aircraft flies it → Aero checks ===================== */
 function execute(a, cmds) {
   for (const c of cmds) {
     if (c.k === 'hdg') { a.trackCL = false; a.mode = 'free'; a.tgtHdg = c.v % 360; a.turn = c.dir === 'L' ? -1 : c.dir === 'R' ? 1 : 0; }
@@ -969,7 +956,9 @@ function handleTx(raw, src) {
   const a = W.acs.find(x => !x.landed); if (!a) return false;
   let text = raw;
   if (src === 'typed' && window.Shorthand) { try { const r = Shorthand.expand(raw, { scope: a.freq === 'purple' || a.freq === 'copper' ? 'final' : 'approach', airlines: AIRLINES, selected: tel(a.cs), callsigns: W.acs.map(x => ({ cs: x.cs, tel: tel(x.cs) })) }); if (r && r.shorthand) text = r.text; } catch (e) {} }
-  const p = parse(text, W.acs.map(x => x.cs));
+  let p = parse(text, W.acs.map(x => x.cs));
+  { const cm = /^([\s\S]*)\bcorrection\b[\s,.;:!-]*([\s\S]*)$/i.exec(text);   // 'correction': everything before the last one is thrown out; the callsign carries over
+    if (cm) { const q = parse(cm[2], W.acs.map(x => x.cs)), q0 = parse(cm[1], W.acs.map(x => x.cs)); if (!q.cs && q0.cs) { q.cs = q0.cs; q.csLate = false; q.bare = null; } p = q; } }
   const h = $('heard'); if (h) h.innerHTML = `${src === 'voice' ? 'Heard' : 'Sent'}: <b>${esc(text)}</b><br>Understood: ${p.cs ? esc(tel(p.cs)) : '<span style="color:var(--bad)">no callsign</span>'} · ${p.cmds.length ? esc(p.cmds.map(cmdStr).join(', ')) : '<span style="color:var(--bad)">no instruction</span>'}`;
   addLog('you', text); feedback('', '');
   txBusy = true;
@@ -982,10 +971,8 @@ function handleTx(raw, src) {
       fail(st, p.hdgMissing ? 'The pilot heard a turn but no usable <b>heading number</b>, so they answered <b>unable</b>. Say the heading as three digits.' : `The pilot couldn't pick out an instruction, so they answered <b>unable</b>. Try the call again.${src === 'voice' ? ' If the mic misheard you, speak a little slower, or type it.' : ''}`);
       return;
     }
-    const parts = readbackParts(a, p.cmds);
     execute(a, p.cmds);
-    if (parts.length) { addLog('plt', `${tel(a.cs)}, ${parts.join(', ')}.`); speak(`${telSay(a.cs)}, ${parts.join(', ')}.`, 'pilot'); }
-    else addLog('sys', '(no readback: on final the pilot just corrects; routine calls aren\'t acknowledged)');
+    addLog('plt', `${tel(a.cs)}.`); speak(`${telSay(a.cs)}.`, 'pilot');   // pilots answer with their callsign only
     const ev = evaluate(st, p);
     setTimeout(() => {
       txBusy = false;

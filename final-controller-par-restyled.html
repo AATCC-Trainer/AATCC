@@ -229,9 +229,9 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
     <h2>Voice settings</h2>
     <div class="set"><label for="sPhr">Phraseology</label><select id="sPhr"><option value="ship">Ship: amphibious assault ship (LHA/LHD)</option><option value="tower">Tower: shore runway PAR</option></select></div>
     <div class="set"><label for="sIn">Voice input (push-to-talk)</label><input type="checkbox" id="sIn" style="width:22px;height:22px"></div>
-    <div class="set"><label for="sOut">Pilot voices (spoken readbacks)</label><input type="checkbox" id="sOut" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sOut">Pilot voices (spoken replies)</label><input type="checkbox" id="sOut" style="width:22px;height:22px"></div>
     <div class="set"><label for="sVoice">Pilot voice</label><select id="sVoice"></select></div>
-    <div class="set"><label for="sVol">Readback volume</label><input type="range" id="sVol" min="0" max="1" step="0.05"></div>
+    <div class="set"><label for="sVol">Pilot voice volume</label><input type="range" id="sVol" min="0" max="1" step="0.05"></div>
     <div class="set"><label for="sRate">Pilot speaking rate</label><input type="range" id="sRate" min="0.8" max="1.5" step="0.05"></div>
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
     <div class="set"><label for="sSweep">Radar scan line</label><input type="checkbox" id="sSweep" style="width:22px;height:22px"></div>
@@ -1567,7 +1567,7 @@ function execute(p, src) {
   if (['landed', 'missed'].includes(a.phase) && !p.cmds.every(c => ['tower', 'sayCs', 'hear', 'alt', 'hdg', 'ga'].includes(c.k))) { log('sys', `${a.cs} is ${a.phase === 'landed' ? ph('on deck', 'on the ground') : ph('waving off', 'on the missed approach')}.`); }
   const rb = [], rbSay = [];
   let speakAnyway = false, goAround = false, special = false, ngUnable = false;
-  const ngRb = t => { special = true; if (!silentBefore) pilotSay(a, `${t.charAt(0).toUpperCase() + t.slice(1)}.`, `${t}.`, true, false, true); };   // short no-gyro readbacks (silent after DNA)
+  const ngRb = () => { special = true; if (!silentBefore) pilotSay(a, `${a.tel}.`, `${a.telSay}.`, true, false, true); };   // no-gyro turn calls: callsign-only ack (silent after DNA)
   if (p.cmds.some(c => c.k === 'laa') && PAR_PHASES.includes(a.phase)) {
     const q = laaParts(p.raw), full = q.alert && q.check && q.alt && p.cs === a.cs;
     if (!full) log('warn', `Incomplete low altitude alert to ${a.cs} (needs ${[p.cs === a.cs ? '' : 'the callsign', q.alert ? '' : '"low altitude alert"', q.check ? '' : '"check your altitude immediately"', q.alt ? '' : '"altimeter two niner niner two"'].filter(Boolean).join(', ')}); not accepted.`);
@@ -1599,7 +1599,7 @@ function execute(p, src) {
       case 'ngStart':
         if (!PAR_PHASES.includes(a.phase) && a.phase !== 'linkin') break;
         a.ng = true; a.ngTurn = null; a.ngHalf = false; a.tgtHdg = a.hdg; a.turnDir = null; special = true;
-        if (!p.cmds.some(x => x.k === 'asrStart')) pilotSay(a, `${a.tel}, no gyro approach.`, `${a.telSay}, no gyro approach.`, true, false, true); break;
+        if (!p.cmds.some(x => x.k === 'asrStart')) pilotSay(a, `${a.tel}.`, `${a.telSay}.`, true, false, true); break;   // ack: callsign only
       case 'asrStart': {
         if (!PAR_PHASES.includes(a.phase) && a.phase !== 'linkin') break;
         special = true;
@@ -1610,7 +1610,7 @@ function execute(p, src) {
           if (ok) a.pts += 3;
           judge(a, ok, 'this will be a surveillance approach', `${a.r.toFixed(2)} NM (announce it at or outside ${R.start} miles for ${isHelo(a) ? 'rotary' : 'fixed'} wing)`);
         }
-        pilotSay(a, `${a.tel}, ${a.ng ? 'no gyro ' : ''}surveillance approach.`, `${a.telSay}, ${a.ng ? 'no gyro ' : ''}surveillance approach.`, true, false, true); break; }
+        pilotSay(a, `${a.tel}.`, `${a.telSay}.`, true, false, true); break; }   // ack: callsign only
       case 'asrPrep': {
         if (!PAR_PHASES.includes(a.phase)) break;
         if (!a.asr) { judge(a, false, 'prepare to descend in one mile', 'a PAR approach (no ASR descent calls)'); break; }
@@ -1627,7 +1627,7 @@ function execute(p, src) {
         judge(a, v === ASR_MDA, `minimum descent altitude ${v}`, `the MDA is ${ASR_MDA}`);
         a.mda = v; special = true;
         if (a.phase === 'final') { a.phase = 'descent'; a.vs = 0; a.sinkR = 0; }
-        pilotSay(a, `${a.tel}, descending to ${v}.`, `${a.telSay}, descending to ${sayDigits(v)}.`, true, false, true); break; }
+        pilotSay(a, `${a.tel}.`, `${a.telSay}.`, true, false, true); break; }   // ack: callsign only
       case 'asrMins': case 'asrIfNot': {
         if (c.k === 'asrIfNot' && p.cmds.some(x => x.k === 'asrMins')) break;
         if (!PAR_PHASES.includes(a.phase) || a.asrMinsCalled) break;
@@ -1652,7 +1652,7 @@ function execute(p, src) {
       case 'ngHalf': a.ngHalf = true; ngRb('half standard rate'); break;
       case 'ngStd': a.ngHalf = false; ngRb('standard rate'); break;
       case 'hdg':
-        if (a.ng) { if (!ngUnable) { ngUnable = true; special = true; pilotSay(a, `Unable heading, no gyro, ${a.tel}.`, `Unable heading, no gyro, ${a.telSay}.`, true, false, true); } break; }
+        if (a.ng) { if (!ngUnable) { ngUnable = true; special = true; pilotSay(a, `${a.tel}, unable heading, no gyro.`, `${a.telSay}, unable heading, no gyro.`, true, false, true); } break; }
         if (a.phase === 'visual' || a.phase === 'landed') break;
         a.tgtHdg = norm(c.v); a.turnDir = Math.abs(angDiff(a.tgtHdg, a.hdg)) < 0.5 ? null : c.dir; a.gaHdgSet = c.v;
         rb.push(`${c.dir === 'L' ? 'left heading' : c.dir === 'R' ? 'right heading' : 'heading'} ${hdg3(c.v)}`);
@@ -1738,11 +1738,11 @@ function execute(p, src) {
       case 'goGreen': {
         if (!isShip()) { log('sys', '"Go green" is ship phraseology (switch Phraseology to Ship).'); break; }
         if (!PAR_PHASES.includes(a.phase)) break;
-        if (isPrac(a)) { judge(a, false, 'one mile, go green', `a practice approach: use "${climbCallOf(a)}"`); pilotSay(a, `${a.tel}, negative, practice approach.`, `${a.telSay}, negative, practice approach.`, true); special = true; break; }
+        if (isPrac(a)) { judge(a, false, 'one mile, go green', `a practice approach: use "${climbCallOf(a)}"`); pilotSay(a, `${a.tel}, unable, practice approach.`, `${a.telSay}, unable, practice approach.`, true); special = true; break; }
         const ok = isHelo(a) && a.r >= 0.6 && a.r <= 1.4;
         if (!a.greenCalled) { a.greenCalled = true; if (ok) a.pts += 3; }
         judge(a, ok, 'one mile, go green', isHelo(a) ? `${a.r.toFixed(2)} NM (call it at about one mile)` : `${a.type} is fixed-wing: use "three-quarter mile, call the ball"`);
-        if (isHelo(a)) { pilotSay(a, 'Going green.', 'Going green.', true); deckClear(a); }
+        if (isHelo(a)) { pilotSay(a, `${a.tel}, going green.`, `${a.telSay}, going green.`, true); deckClear(a); }
         break; }
       case 'callBall': {
         if (!isShip()) { log('sys', '"Call the ball" is ship phraseology (switch Phraseology to Ship).'); break; }
@@ -1758,16 +1758,16 @@ function execute(p, src) {
           } else pilotSay(a, `${a.tel}, clara.`, `${a.telSay}, clara.`, true, false, true);
           break;
         }
-        if (isPrac(a)) { judge(a, false, 'three-quarter mile, call the ball', `a practice approach: use "${climbCallOf(a)}"`); pilotSay(a, `${a.tel}, negative, practice approach.`, `${a.telSay}, negative, practice approach.`, true); special = true; break; }
+        if (isPrac(a)) { judge(a, false, 'three-quarter mile, call the ball', `a practice approach: use "${climbCallOf(a)}"`); pilotSay(a, `${a.tel}, unable, practice approach.`, `${a.telSay}, unable, practice approach.`, true); special = true; break; }
         const ok = !isHelo(a) && a.r >= 0.45 && a.r <= 1.1;
         if (!a.ballAsked) { a.ballAsked = true; if (ok) a.pts += 3; }
         judge(a, ok, 'three-quarter mile, call the ball', !isHelo(a) ? `${a.r.toFixed(2)} NM (call it at about three-quarter mile)` : `${a.type} is a helicopter: use "one mile, go green"`);
-        if (!isHelo(a)) { a.ballCalled = true; const f = fuelOf(a); pilotSay(a, `Ball, state ${f}.`, `Ball, state ${f.replace('.', ' point ').replace(/\d/g, d => DIGW[+d])}.`, true); deckClear(a); }
+        if (!isHelo(a)) { a.ballCalled = true; const f = fuelOf(a); pilotSay(a, `${a.tel}, ball, state ${f}.`, `${a.telSay}, ball, state ${f.replace('.', ' point ').replace(/\d/g, d => DIGW[+d])}.`, true); deckClear(a); }
         break; }
       case 'goRed': {
         a.goFreq = 'red'; log('sys', `${a.cs} switching Red (Marshal).`);
         if (G.linked) try { linkPost({ type: 'handoff', callsign: a.cs, cs: a.cs, from: 'FIN', to: 'MARSHAL', freq: 'red' }); } catch (e) {}
-        pilotSay(a, `${a.tel}, going red.`, `${a.telSay}, going red.`, true);
+        pilotSay(a, `${a.tel}.`, `${a.telSay}.`, true);   // ack: callsign only
         break;
       }
       case 'climbOut': case 'starDelta': {
@@ -1776,11 +1776,11 @@ function execute(p, src) {
         const want = isHelo(a) ? 'starDelta' : 'climbOut', said = c.k === 'climbOut' ? 'execute climb outs, go silver' : 'enter starboard delta, go green';
         special = true;
         if (!isPrac(a)) { judge(a, false, said, `a full stop: use "${isHelo(a) ? 'one mile, go green' : 'three-quarter mile, call the ball'}"`); pilotSay(a, `${a.tel}, unable, full stop.`, `${a.telSay}, unable, full stop.`, true); break; }
-        if (c.k !== want) { judge(a, false, said, `${a.type} is ${isHelo(a) ? 'a helicopter: use "one mile, enter starboard delta, go green"' : 'fixed-wing: use "one mile, execute climb outs, go silver"'}`); pilotSay(a, `${a.tel}, negative, ${isHelo(a) ? 'request starboard delta' : 'request climb out'}.`, `${a.telSay}, negative, ${isHelo(a) ? 'request starboard delta' : 'request climb out'}.`, true); break; }
+        if (c.k !== want) { judge(a, false, said, `${a.type} is ${isHelo(a) ? 'a helicopter: use "one mile, enter starboard delta, go green"' : 'fixed-wing: use "one mile, execute climb outs, go silver"'}`); pilotSay(a, `${a.tel}, unable, ${isHelo(a) ? 'request starboard delta' : 'request climb out'}.`, `${a.telSay}, unable, ${isHelo(a) ? 'request starboard delta' : 'request climb out'}.`, true); break; }
         const ok = a.r >= CLIMB_WIN[0] && a.r <= CLIMB_WIN[1];
         if (ok) a.pts += 3;
         judge(a, ok, said, `${a.r.toFixed(2)} NM (call it at about one mile)`);
-        { const t = isHelo(a) ? 'entering starboard delta' : 'going silver'; pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true); }
+        pilotSay(a, `${a.tel}.`, `${a.telSay}.`, true);   // ack: callsign only
         startClimbout(a, false);
         break; }
       case 'rogerBall': if (isShip() && a.ballCalled) a.rogerBall = true; break;
@@ -1795,7 +1795,7 @@ function execute(p, src) {
     const hd = p.cmds.find(c => c.k === 'hdg'), al = p.cmds.find(c => c.k === 'alt');
     if (hd && !a.ng) { a.tgtHdg = norm(hd.v); a.turnDir = hd.dir; }
     if (al) a.gaAlt = al.v;
-    pilotSay(a, `${ph('Waving off', 'Going around')}, ${hd ? 'heading ' + hdg3(hd.v) : ph('base recovery course', 'runway heading')}, climbing ${fmtAlt(a.gaAlt)}, ${a.tel}.`, `${ph('Waving off', 'Going around')}, ${hd ? 'heading ' + sayDigits(hdg3(hd.v)) : ph('base recovery course', 'runway heading')}, climbing ${sayAlt(a.gaAlt)}, ${a.telSay}.`, true);
+    pilotSay(a, `${a.tel}.`, `${a.telSay}.`, true);   // controller wave-off: callsign-only ack
     return;
   }
   // ---- pilot replies ----
@@ -1805,19 +1805,19 @@ function execute(p, src) {
   const has = k => p.cmds.some(c => c.k === k);
   const deckReply = (has('goGreen') && isShip() && isHelo(a)) || (has('callBall') && isShip() && !isHelo(a));  // already answered above
   const routine = PAR_PHASES.includes(a.phase) || a.phase === 'queue';
-  const generic = () => {
-    let t = rb.join(', '); t = t.charAt(0).toUpperCase() + t.slice(1);
-    let s = rbSay.join(', '); s = s.charAt(0).toUpperCase() + s.slice(1);
+  const generic = () => {   // callsign first; only content replies ("unable …", "loud and clear") follow it, everything else is a callsign-only ack
     const isCs = p.cmds.length === 1 && p.cmds[0].k === 'sayCs';
-    pilotSay(a, isCs ? t + '.' : `${t}, ${a.tel}.`, isCs ? s : `${s}, ${a.telSay}.`, true);
+    const ki = isCs ? [] : rb.map((t, i) => /^(unable|loud and clear)/.test(t) ? i : -1).filter(i => i >= 0);
+    pilotSay(a, ki.length ? `${a.tel}, ${ki.map(i => rb[i]).join(', ')}.` : `${a.tel}.`, ki.length ? `${a.telSay}, ${ki.map(i => rbSay[i]).join(', ')}.` : `${a.telSay}.`, true);
   };
+  const hasUnable = rb.some(t => /^unable/.test(t));
   if (!silentBefore && routine) {
     if (has('hear') && isShip()) {
       // ship contact readback: "[callsign], loud and clear, wheels down, will report see you"
       const hasGear = has('gear'), rep = has('reportSee');
       pilotSay(a, `${a.tel}, loud and clear${hasGear ? ', wheels down' : ''}${rep ? ', will report see you' : ''}.`, `${a.telSay}, loud and clear${hasGear ? ', wheels down' : ''}${rep ? ', will report see you' : ''}.`, true);
-    } else if (has('hear')) pilotSay(a, `Loud and clear, ${a.tel}.`, `Loud and clear, ${a.telSay}.`, true);
-    else if (speakAnyway && rb.length) generic();
+    } else if (has('hear')) pilotSay(a, `${a.tel}, loud and clear.`, `${a.telSay}, loud and clear.`, true);
+    else if ((speakAnyway || hasUnable) && rb.length) generic();
     else if (!deckReply && !special) pilotSay(a, `${a.tel}.`, `${a.telSay}.`, true, true);      // routine ack: callsign only
   } else if (!routine) {
     if (rb.length && (!silentBefore || speakAnyway)) generic();
@@ -2344,8 +2344,8 @@ const TUT = [
    <p>If you need to send it around: "<b>go around, climb and maintain two thousand, fly heading ${BRC_SAY}</b>".</p>`],
   ['4. Sample script', `<div class="say">"Lightning two one, this is your final controller, how do you hear me?"<br>"Turn left heading ${sayDigits(hdg3(BRC - 2))}, slightly right of course, eight miles from touchdown."<br>"Heading ${sayDigits(hdg3(BRC - 2))}, on course."<br>"Approaching glidepath."<br>"Begin descent."<br>"Do not acknowledge further transmissions."<br>"Seven miles from touchdown."<br>"On course, slightly above glidepath."<br>"Turn right heading ${BRC_SAY}, on course, on glidepath, five miles from touchdown, check gear down."<br>"Runway ${RWY_SAY}, cleared to land, wind ${sayDigits(hdg3(BRC + 10))} at four. Four miles from touchdown."<br>"On course, on glidepath, two miles from touchdown."<br>"At decision height." … "Over landing threshold." … "Contact tower."</div>
    <p>Pilots react to glidepath calls: "slightly above" makes them descend a bit faster, "slightly below" a bit slower, and "on glidepath" brings them back to normal. Heading calls are the only way to move them sideways.</p>
-   <p><b>ASR (surveillance) approach</b>: no glidepath; the pilot holds altitude until told to descend to the <b>MDA (470 ft)</b> at the final approach fix and reaches it by the missed approach point (¾ mile). Announce it <b>no later than 4 miles (rotary, incl. MV-22B) / 5 miles (fixed wing)</b>; pilot: "(callsign), surveillance approach". Each scripted call is graded within ±0.3 mile.</p>
-   <div class="say"><b>Rotary wing</b><br>(≥4 mi) "Nighthawk two five, this will be a surveillance approach."<br>(4 mi) "Nighthawk two five, four miles. Prepare to descend in one mile."<br>(3 mi) "Nighthawk two five, three miles. Descend to your minimum descent altitude. Minimum descent altitude four seven zero." <i>("Nighthawk two five, descending to four seven zero")</i><br>(2 mi) "Nighthawk two five, two miles, on course."<br>(1 mi) "Nighthawk two five, one mile, on course."<br>(¾ mi) "Nighthawk two five, surveillance minimums, on course, if runway not in sight, execute missed approach." <i>(stable: "Runway in sight" and lands; otherwise executes the missed approach)</i></div>
+   <p><b>ASR (surveillance) approach</b>: no glidepath; the pilot holds altitude until told to descend to the <b>MDA (470 ft)</b> at the final approach fix and reaches it by the missed approach point (¾ mile). Announce it <b>no later than 4 miles (rotary, incl. MV-22B) / 5 miles (fixed wing)</b>; pilot: "(callsign)". Each scripted call is graded within ±0.3 mile.</p>
+   <div class="say"><b>Rotary wing</b><br>(≥4 mi) "Nighthawk two five, this will be a surveillance approach."<br>(4 mi) "Nighthawk two five, four miles. Prepare to descend in one mile."<br>(3 mi) "Nighthawk two five, three miles. Descend to your minimum descent altitude. Minimum descent altitude four seven zero." <i>("Nighthawk two five")</i><br>(2 mi) "Nighthawk two five, two miles, on course."<br>(1 mi) "Nighthawk two five, one mile, on course."<br>(¾ mi) "Nighthawk two five, surveillance minimums, on course, if runway not in sight, execute missed approach." <i>(stable: "Runway in sight" and lands; otherwise executes the missed approach)</i></div>
    <div class="say"><b>Fixed wing</b><br>(≥5 mi) "Lightning two one, this will be a surveillance approach."<br>(6 mi) "Lightning two one, six miles. Prepare to descend in one mile."<br>(5 mi) "Lightning two one, five miles, descend to your minimum descent altitude. Minimum descent altitude four seven zero."<br>(4 mi) "Lightning two one, four miles, on course."<br>(3 mi) "Lightning two one, three miles, on course."<br>(2 mi) "Lightning two one, two miles, on course."<br>(¾ mi) "Lightning two one, surveillance minimums, if runway not in sight, execute missed approach."</div>`],
   ['5. Scoring', `<ul><li>Time inside the <b>course and glidepath tolerance</b> (up to 30 pts) plus <b>40 for a landing</b>.</li>
    <li><b>Accurate trend calls</b> score; <b>wrong</b> ones (saying "left" when it's right) lose points.</li>
@@ -2382,16 +2382,16 @@ const TUT_SHIP = {
    <li>Every few seconds: "on course, on glidepath", "slightly above glidepath"… and a <b>range every mile</b>: "four miles", "one and a half miles". At <b>2 miles</b> the pilot reports "<b>Lightning two one, see you</b>" (no reply needed; "roger" is fine).</li>
    <li><b>Sinker:</b> on some approaches the aircraft starts sinking below the glidepath and glidepath calls won't stop it. Only "<b>Low altitude alert, Lightning two one, check your altitude immediately, altimeter two niner niner two</b>" does (pilot: "Lightning two one, climbing.", even after "do not acknowledge"); it then climbs back to the glidepath.</li>
    <li>If you didn't say "wheels should be down" on contact: "<b>check wheels down</b>". No separate landing clearance is needed: the deck call exchange below clears the aircraft to land ("deck is clear, cleared to land spot seven" is still accepted).</li>
-   <li><b>Deck call</b> (required before half a mile): helicopters (CH-53E, AH-1Z, UH-1Y, MH-60S) get "<b>one mile, go green</b>" (pilot: "<b>Going green</b>"). Jets (F-35B, AV-8B) get "<b>three-quarter mile, call the ball</b>" (pilot: "<b>Ball, state four point nine</b>", the fuel state). That reply is the landing clearance: the aircraft may land. "Roger ball" is optional. Pilots make these replies even after "do not acknowledge".</li>
-   <li><b>Practice approaches</b>: at check-in each pilot states an intention: "…for the PAR to the ship, <b>full stop</b>" (FS) or "…<b>request multiple practice PARs</b>" (PRAC; shown in the side panel). A practice aircraft gets no deck call. At <b>one mile</b> instead: jets "<b>one mile, execute climb outs, go silver</b>" (pilot: "Lightning two one, going silver"; climbs to 1,200 ft, left turn to ${hdg3(CLIMB_JET.hdg)}); helicopters "<b>one mile, enter starboard delta, go green</b>" (pilot: "Nighthawk two five, entering starboard delta"; climbs to 1,000 ft, right turn to ${hdg3(CLIMB_HELO.hdg)}). It then comes back around for another approach; after 1–3 practice approaches it checks in with "<b>this will be a full stop</b>" and lands.</li>
+   <li><b>Deck call</b> (required before half a mile): helicopters (CH-53E, AH-1Z, UH-1Y, MH-60S) get "<b>one mile, go green</b>" (pilot: "<b>Nighthawk two five, going green</b>"). Jets (F-35B, AV-8B) get "<b>three-quarter mile, call the ball</b>" (pilot: "<b>Lightning two one, ball, state four point nine</b>", the fuel state). That reply is the landing clearance: the aircraft may land. "Roger ball" is optional. Pilots make these replies even after "do not acknowledge".</li>
+   <li><b>Practice approaches</b>: at check-in each pilot states an intention: "…for the PAR to the ship, <b>full stop</b>" (FS) or "…<b>request multiple practice PARs</b>" (PRAC; shown in the side panel). A practice aircraft gets no deck call. At <b>one mile</b> instead: jets "<b>one mile, execute climb outs, go silver</b>" (pilot: "Lightning two one"; climbs to 1,200 ft, left turn to ${hdg3(CLIMB_JET.hdg)}); helicopters "<b>one mile, enter starboard delta, go green</b>" (pilot: "Nighthawk two five"; climbs to 1,000 ft, right turn to ${hdg3(CLIMB_HELO.hdg)}). It then comes back around for another approach; after 1–3 practice approaches it checks in with "<b>this will be a full stop</b>" and lands.</li>
    <li>Full stop, inside half a mile: "<b>over the deck</b>", then "<b>contact Tower</b>" (or "Tower has you").</li></ol>
    <p>If you need to wave it off: "<b>wave off, wave off, climb and maintain two thousand, fly base recovery course ${BRC_SAY}</b>". No deck call (or spot clearance) by half a mile means a <b>fouled deck</b> and the pilot waves off.</p>`],
-  3: ['4. Sample script', `<div class="say">"Lightning two one, ${SHIP_NAME} final, how do you hear me, wheels should be down, report see me." <i>(pilot: "Lightning two one, loud and clear, wheels down, will report see you")</i><br>"Well right of course, come right heading ${sayDigits(hdg3(BRC - 10))}, nine and a half miles." <i>("Lightning two one")</i><br>"Slightly right of course, come right heading ${BRC_SAY}." <i>("Lightning two one")</i><br>"Approaching glidepath." <i>("Lightning two one")</i><br>"Begin descent." <i>("Lightning two one")</i><br>"Do not acknowledge further transmissions." <i>("Lightning two one", then silent)</i><br>"On course, on glidepath, seven miles."<br>"On course, slightly above glidepath."<br>"On course, on glidepath, five miles."<br>"On course, on glidepath, four miles."<br><i>(pilot, at 2 miles: "Lightning two one, see you")</i><br>"On course, on glidepath, one and a half miles."<br>"Three-quarter mile, call the ball." <i>(pilot: "Ball, state four point nine": cleared to land)</i><br>"Over the deck." … "Contact Tower."</div>
-   <p>For a helicopter, the deck call at one mile is "<b>One mile, go green.</b>" <i>(pilot: "Going green": cleared to land)</i>.</p>
-   <p><b>Practice approach</b> (pilot checked in with "request multiple practice PARs"): the same talk-down, but at one mile: jet "<b>One mile, execute climb outs, go silver.</b>" <i>("Lightning two one, going silver": climbs to 1,200, left to ${hdg3(CLIMB_JET.hdg)})</i>; helicopter "<b>One mile, enter starboard delta, go green.</b>" <i>("Nighthawk two five, entering starboard delta": climbs to 1,000, right to ${hdg3(CLIMB_HELO.hdg)})</i>. It comes back for another PAR; the last one starts "…this will be a full stop".</p>
+  3: ['4. Sample script', `<div class="say">"Lightning two one, ${SHIP_NAME} final, how do you hear me, wheels should be down, report see me." <i>(pilot: "Lightning two one, loud and clear, wheels down, will report see you")</i><br>"Well right of course, come right heading ${sayDigits(hdg3(BRC - 10))}, nine and a half miles." <i>("Lightning two one")</i><br>"Slightly right of course, come right heading ${BRC_SAY}." <i>("Lightning two one")</i><br>"Approaching glidepath." <i>("Lightning two one")</i><br>"Begin descent." <i>("Lightning two one")</i><br>"Do not acknowledge further transmissions." <i>("Lightning two one", then silent)</i><br>"On course, on glidepath, seven miles."<br>"On course, slightly above glidepath."<br>"On course, on glidepath, five miles."<br>"On course, on glidepath, four miles."<br><i>(pilot, at 2 miles: "Lightning two one, see you")</i><br>"On course, on glidepath, one and a half miles."<br>"Three-quarter mile, call the ball." <i>(pilot: "Lightning two one, ball, state four point nine": cleared to land)</i><br>"Over the deck." … "Contact Tower."</div>
+   <p>For a helicopter, the deck call at one mile is "<b>One mile, go green.</b>" <i>(pilot: "Nighthawk two five, going green": cleared to land)</i>.</p>
+   <p><b>Practice approach</b> (pilot checked in with "request multiple practice PARs"): the same talk-down, but at one mile: jet "<b>One mile, execute climb outs, go silver.</b>" <i>("Lightning two one": climbs to 1,200, left to ${hdg3(CLIMB_JET.hdg)})</i>; helicopter "<b>One mile, enter starboard delta, go green.</b>" <i>("Nighthawk two five": climbs to 1,000, right to ${hdg3(CLIMB_HELO.hdg)})</i>. It comes back for another PAR; the last one starts "…this will be a full stop".</p>
    <p>Pilots react to glidepath calls: "slightly above" makes them descend a bit faster, "slightly below" a bit slower, and "on glidepath" brings them back to normal. Heading calls are the only way to move them sideways.</p>
-   <p><b>ASR (surveillance) approach</b>: no glidepath; the pilot holds altitude until told to descend to the <b>MDA (470 ft)</b> at the final approach fix and reaches it by the missed approach point (¾ mile). Announce it <b>no later than 4 miles (rotary, incl. MV-22B) / 5 miles (fixed wing)</b>; pilot: "(callsign), surveillance approach". Each scripted call is graded within ±0.3 mile.</p>
-   <div class="say"><b>Rotary wing</b><br>(≥4 mi) "Nighthawk two five, this will be a surveillance approach."<br>(4 mi) "Nighthawk two five, four miles. Prepare to descend in one mile."<br>(3 mi) "Nighthawk two five, three miles. Descend to your minimum descent altitude. Minimum descent altitude four seven zero." <i>("Nighthawk two five, descending to four seven zero")</i><br>(2 mi) "Nighthawk two five, two miles, on course."<br>(1 mi) "Nighthawk two five, one mile, on course."<br>(¾ mi) "Nighthawk two five, surveillance minimums, on course, if mother not in sight, execute missed approach." <i>(stable: "Mother in sight" and lands; otherwise executes the missed approach)</i></div>
+   <p><b>ASR (surveillance) approach</b>: no glidepath; the pilot holds altitude until told to descend to the <b>MDA (470 ft)</b> at the final approach fix and reaches it by the missed approach point (¾ mile). Announce it <b>no later than 4 miles (rotary, incl. MV-22B) / 5 miles (fixed wing)</b>; pilot: "(callsign)". Each scripted call is graded within ±0.3 mile.</p>
+   <div class="say"><b>Rotary wing</b><br>(≥4 mi) "Nighthawk two five, this will be a surveillance approach."<br>(4 mi) "Nighthawk two five, four miles. Prepare to descend in one mile."<br>(3 mi) "Nighthawk two five, three miles. Descend to your minimum descent altitude. Minimum descent altitude four seven zero." <i>("Nighthawk two five")</i><br>(2 mi) "Nighthawk two five, two miles, on course."<br>(1 mi) "Nighthawk two five, one mile, on course."<br>(¾ mi) "Nighthawk two five, surveillance minimums, on course, if mother not in sight, execute missed approach." <i>(stable: "Mother in sight" and lands; otherwise executes the missed approach)</i></div>
    <div class="say"><b>Fixed wing</b><br>(≥5 mi) "Lightning two one, this will be a surveillance approach."<br>(6 mi) "Lightning two one, six miles. Prepare to descend in one mile."<br>(5 mi) "Lightning two one, five miles, descend to your minimum descent altitude. Minimum descent altitude four seven zero."<br>(4 mi) "Lightning two one, four miles, on course."<br>(3 mi) "Lightning two one, three miles, on course."<br>(2 mi) "Lightning two one, two miles, on course."<br>(1 mi, at MDA and on course) "Lightning two one, one mile, call the ball." <i>("Lightning two one, Lightning ball")</i>; if not stable or no ball: (¾ mi) "Lightning two one, surveillance minimums, if mother not in sight, execute missed approach."</div>`],
   4: ['5. Scoring', `<ul><li>Time inside the <b>course and glidepath tolerance</b> (up to 30 pts) plus <b>40 for getting it on deck</b>.</li>
    <li><b>Accurate trend calls</b> score; <b>wrong</b> ones (saying "left" when it's right) lose points.</li>
@@ -2410,7 +2410,7 @@ const TUT_SHIP = {
    <li>adjust / reduce / increase rate of descent</li><li>___ miles · one and a half miles · three-quarter mile · do not acknowledge further transmission(s) (pilots ack every call with their callsign until then)</li>
    <li>[callsign], ${SHIP_NAME} final, how do you hear me, wheels should be down, report see me</li>
    <li>check wheels down · roger · deck is clear, cleared to land spot ___ (winds ___ at ___) · over the deck</li>
-   <li><b>one mile, go green</b> (helos) · <b>three-quarter mile, call the ball</b> (jets): the pilot's "Going green" / "Ball, state …" reply clears it to land · roger ball (optional)</li>
+   <li><b>one mile, go green</b> (helos) · <b>three-quarter mile, call the ball</b> (jets): the pilot's "(callsign), going green" / "(callsign), ball, state …" reply clears it to land · roger ball (optional)</li>
    <li>practice approaches: <b>one mile, execute climb outs, go silver</b> (jets; "climb out" / "climbout" / "climb outs" all work) · <b>one mile, enter starboard delta, go green</b> (helos)</li>
    <li>low altitude alert, (callsign), check your altitude immediately, altimeter two niner niner two</li>
    <li><b>Ship turns (broadcast, no readback):</b> ninety-nine, mother is in port/starboard turn, standby for new BRC · ninety-nine, mother is steady, new BRC is ___ (digit by digit, e.g. "one seven three"; "99", "niner niner", "nine nine" all work)</li>

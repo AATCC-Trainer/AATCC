@@ -236,9 +236,9 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <h2>Voice settings</h2>
     <div class="set"><label for="sPhr">Phraseology</label><select id="sPhr"><option value="ship">Ship: amphibious assault ship (LHA/LHD)</option><option value="tower">Tower: shore runway PAR</option></select></div>
     <div class="set"><label for="sIn">Voice input (push-to-talk)</label><input type="checkbox" id="sIn" style="width:22px;height:22px"></div>
-    <div class="set"><label for="sOut">Pilot voices (spoken readbacks)</label><input type="checkbox" id="sOut" style="width:22px;height:22px"></div>
+    <div class="set"><label for="sOut">Pilot voices (spoken replies)</label><input type="checkbox" id="sOut" style="width:22px;height:22px"></div>
     <div class="set"><label for="sVoice">Pilot voice</label><select id="sVoice"></select></div>
-    <div class="set"><label for="sVol">Readback volume</label><input type="range" id="sVol" min="0" max="1" step="0.05"></div>
+    <div class="set"><label for="sVol">Pilot voice volume</label><input type="range" id="sVol" min="0" max="1" step="0.05"></div>
     <div class="set"><label for="sRate">Pilot speaking rate</label><input type="range" id="sRate" min="0.8" max="1.5" step="0.05"></div>
     <div class="set"><label for="sSfx">Alarm / radio beeps</label><input type="checkbox" id="sSfx" style="width:22px;height:22px"></div>
     <div class="set"><label for="sScope">Scope range (zoom)</label><span style="display:flex;align-items:center;gap:8px"><input type="range" id="sScope" min="5" max="80" step="1" value="50" style="flex:1"><b id="sScopeVal" style="color:var(--cyan);min-width:3.5em;text-align:right">50 NM</b></span></div>
@@ -2170,7 +2170,7 @@ const TUT = [
 "Lightning two one, your climbout instructions are at one mile take angels 2, turn left heading 270."<br>
 "Lightning two one, traffic, two o'clock, 5 miles, northbound, F-35, angels 3."<br>
 "Lightning two one, go purple."</div>
-   <p>Pilots read back headings, angels and frequency changes. Traffic and stored climbout instructions get a short ack / tally-ho. After "go purple" / "go copper" they leave your frequency for Final.</p>`],
+   <p>Pilots answer every instruction with their <b>callsign only</b> (headings, angels, speed, frequency changes, climbout instructions, sectors). Only content replies are spoken after the callsign: "unable …", "loud and clear", "tally-ho" for traffic, and reports such as "established on sector 2". If you misspoke, say "<b>correction</b>" and give the right instruction. After "go purple" / "go copper" they leave your frequency for Final.</p>`],
   ['5. Scoring', `<ul>
    <li>Each graded task is <b>+10</b>: Stinger Approach · radar contact · first angels · vectors for CCA · expect final button · pattern position · climbout instructions · dirty up / landing checks.</li>
    <li><b>−5</b> for late radar contact (past 2 NM), wrong first angels, wrong pattern position / range, or a bad radar-ID call.</li>
@@ -3026,18 +3026,13 @@ function appExecute(p, src) {
     } else if (c.k === 'hear') { rb.push('loud and clear'); rbSay.push('loud and clear'); }
     else if (c.k === 'sayCs') { rb.push(a.tel); rbSay.push(a.telSay); }
   }
-  if (secRb) {   // full readback of the sector instruction (plus anything else the pilot must read back)
-    const ex = rb.filter(t => t !== 'ack' && t !== 'wilco' && t !== 'roger'), exSay = rbSay.filter(t => t !== 'ack' && t !== 'wilco' && t !== 'roger');
-    pilotSay(a, `${a.tel}, ${ex.length ? ex.join(', ') + ', ' : ''}proceed to sector ${secRb}, report established.`, `${a.telSay}, ${exSay.length ? exSay.join(', ') + ', ' : ''}proceed to sector ${NUMW[secRb]}, report established.`);
-    refreshPanel(true); return;
-  }
+  if (secRb) { rb.push('ack'); rbSay.push('ack'); }   // sector: callsign-only ack like every other instruction (the pilot still reports "established on sector N" later)
   if (marked && !rb.length) return;
   if (!rb.length) { pilotSay(a, `${a.tel}, unable.`, `${a.telSay}, unable.`); return; }
-  const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
   // acknowledge with callsign only; keep "unable ..." and "loud and clear" replies
   const keep = rb.map((t, i) => /^(unable|loud and clear)/.test(t) ? i : -1).filter(i => i >= 0);
   if (!keep.length) pilotSay(a, `${a.tel}.`, `${a.telSay}.`);
-  else pilotSay(a, `${cap(keep.map(i => rb[i]).join(', '))}, ${a.tel}.`, `${cap(keep.map(i => rbSay[i]).join(', '))}, ${a.telSay}.`);
+  else pilotSay(a, `${a.tel}, ${keep.map(i => rb[i]).join(', ')}.`, `${a.telSay}, ${keep.map(i => rbSay[i]).join(', ')}.`);   // callsign first
   refreshPanel(true);
 }
 function appReadout(a) {
