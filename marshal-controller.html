@@ -219,6 +219,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div class="row" style="margin:4px 0 2px;gap:8px"><label for="sPhr2" style="color:var(--dim)">Phraseology</label><select id="sPhr2"><option value="ship">Ship: amphibious assault ship (LHA/LHD)</option><option value="tower">Tower: shore runway PAR</option></select></div>
     <div class="row" style="margin:6px 0 2px;gap:8px;align-items:center"><span style="color:var(--dim)">Link to Final Control</span>
       <button id="bLinkOff" style="min-height:34px">OFF (solo)</button><button id="bLinkOn" style="min-height:34px">ON (hand off)</button></div>
+    <div class="row" style="margin:6px 0 2px;gap:8px;align-items:center"><span id="shipInfo" style="font-size:13px"></span><button id="bReroll" title="Pick a new random BRC and land" style="min-height:30px">🎲 Re-roll</button></div>
     <div class="banner" id="startBanner"></div>
     <div class="row" style="margin-top:8px">
       <button id="bStart" class="wide on" style="font-size:16px;min-height:46px">▶ START</button>
@@ -717,10 +718,10 @@ let RWY_NUM = String(Math.round(BRC / 10) || 36).padStart(2, '0'), RWY_SAY = say
 const h3z = v => String(Math.round(norm(v)) % 360 || 360).padStart(3, '0');   // 3 digits, 360 instead of 000
 let nextBRC = null, TBRC = 180;   // TBRC = ship's TRUE course; internal BRC (all geometry, magnetic) = FB = TBRC - MV
 const randBRC = () => 5 * (1 + Math.floor(Math.random() * 72));   // 005..360 in 5 deg steps
-function prepBRC() { nextBRC = TBRC = 360; MV = 0; setBRC(360); /* fixed magnetic BRC 360 for now (was random) */ makeLand((Math.random() * 2 ** 31) >>> 0); try { applyPhrUI(); } catch (e) {} }   // picked when the start screen is shown
+function prepBRC() { nextBRC = TBRC = randBRC(); MV = 0; setBRC(TBRC); /* random BRC 005-360 (5 deg steps), MV 0 so BRC = final bearing; linked scopes follow it */ makeLand((Math.random() * 2 ** 31) >>> 0); try { applyPhrUI(); } catch (e) {} try { shipInfoUI(); } catch (e) {} try { shipStatePush(); } catch (e) {} }   // picked when the start screen is shown
 /* ---------- random land on the outer scope only (visual only; ship and traffic areas stay over water), seeded, generated with the BRC ---------- */
 let LAND = null;
-const MC_LAND_ON = false;   // false: open water only (land still seeded so stats/seed stay valid, but no coast polygons are kept or drawn)
+const MC_LAND_ON = true;   // random land config (coasts / islands) per sim, picked with the BRC on the start screen; false = open water only
 let MV = 7;   // magnetic variation, deg: true = magnetic + MV (scope is magnetic-up)
 const randMV = () => (Math.random() < 0.5 ? -1 : 1) * (1 + Math.floor(Math.random() * 15));   // +/-1..15, never 0
 const fmtMV = () => 'MV' + (MV < 0 ? '-' : '+') + String(Math.abs(MV)).padStart(2, '0');
@@ -813,6 +814,7 @@ function setBRC(v) {   // random BRC per simulation start; everything course-rel
   RWY_NUM = String(Math.round(BRC / 10) || 36).padStart(2, '0'); RWY_SAY = sayDigits(RWY_NUM);
   CLIMB_JET.hdg = norm(BRC - 90); CLIMB_HELO.hdg = norm(BRC + 90);
 }
+const radA = r => h3z(BRC + r);   // relative marshal radial (LH tables) -> spoken magnetic radial (030 at BRC 360)
 const FB = () => BRC, DWH = () => norm(TBRC + 180) % 360 || 360;   // opposite of the TRUE BRC (display/handoff only)
 // course frame: (le, ln) = (e, n) rotated so the final course is inbound 180 from the north (the original geometry)
 const BROT = () => BRC - 180;
@@ -868,7 +870,7 @@ const alive = a => !['landed', 'crashed', 'gone'].includes(a.phase);
 function newGame(diffKey, opts = {}) {
   rng = opts.seed != null ? mulberry32(opts.seed) : Math.random;
   const fromStart = nextBRC != null && opts.brc == null;
-  TBRC = opts.brc != null ? opts.brc : !SHIP_TURNS_ON ? 360 : nextBRC != null ? nextBRC : randBRC(); nextBRC = null;
+  TBRC = opts.brc != null ? opts.brc : nextBRC != null ? nextBRC : randBRC(); nextBRC = null;   // the BRC rolled on the start screen (random 005-360)
   if (opts.mv != null) MV = opts.mv; else if (!SHIP_TURNS_ON) MV = 0; else if (!fromStart) MV = randMV();
   setBRC(norm(TBRC - MV));   // FB (magnetic final bearing) drives everything drawn/spoken
   if (!fromStart || !LAND || opts.mv != null || opts.landSeed != null) makeLand(opts.landSeed != null ? opts.landSeed : LAND && fromStart ? LAND.seed : (Math.random() * 2 ** 31) >>> 0);   // land stays with the BRC shown on the start screen   // the BRC shown on the start screen
@@ -2284,7 +2286,7 @@ function applyPhrUI() {
   $('introP').innerHTML = sh
     ? `You're <b>${SHIP_NAME} Marshal</b> (Red) aboard an amphibious assault ship. Arriving aircraft check in for <b>Case III recovery</b> on BRC ${h3z(TBRC)} (final bearing ${BRC3} magnetic). Using your <b>voice</b> (or typed commands): assign a <b>marshal</b> (radial, DME, angels, BRC, outbound bearing, expected approach time) and an <b>LH-1…LH-5</b> approach, keep the stack altitudes apart, clear them to <b>commence</b>, take the outbound-bearing report, then hand them to <b>Approach</b> ("go silver") or <b>Final</b> ("go purple" / "go copper"). Patterns are drawn on the scope.`
     : applyPhrUI.towerIntro;
-  $('cmdInput').placeholder = sh ? 'Type instead (Enter): venom 21 case three recovery, LH2 approach, marshal 030 at 2, angels 2, BRC 360, outbound bearing 210' : 'Type instead (Enter): venom 21 marshal 030 at 2, angels 2';
+  $('cmdInput').placeholder = sh ? `Type instead (Enter): venom 21 case three recovery, LH2 approach, marshal ${radA(30)} at 2, angels 2, BRC ${h3z(TBRC)}, outbound bearing ${h3z(MAR.outbound())}` : `Type instead (Enter): venom 21 marshal ${radA(30)} at 2, angels 2`;
   if (!helpOv.classList.contains('hidden')) renderTut();
 }
 $('sPhr').addEventListener('change', () => setPhr($('sPhr').value));
@@ -2312,7 +2314,7 @@ function mcSetEatRef(raw) {
   const eat1 = ((n - 6) % 60 + 60) % 60;
   G.eatRef = n; G.eatBase = eat1; G.eatAwait = false;
   const ep = $('eatPrompt'); if (ep) ep.classList.add('hidden');
-  log('sys', `Entered :${String(n).padStart(2, '0')} → 1st Expected Approach Time is :${String(eat1).padStart(2, '0')} (6 min prior). First marshal bird commences at 030/2 at :${String(eat1).padStart(2, '0')}; each marshal bird commences at the EAT you assign.`);
+  log('sys', `Entered :${String(n).padStart(2, '0')} → 1st Expected Approach Time is :${String(eat1).padStart(2, '0')} (6 min prior). First marshal bird commences at ${radA(30)}/2 at :${String(eat1).padStart(2, '0')}; each marshal bird commences at the EAT you assign.`);
   refreshPanel(true);
   return true;
 }
@@ -2322,16 +2324,16 @@ function mcOpenEatPrompt() {
   G.eatAwait = true;
   ep.classList.remove('hidden');
   ei.value = G.eatRef != null ? String(G.eatRef).padStart(2, '0') : '';
-  if (ev) ev.textContent = G.eatBase != null ? `Time :${String(G.eatRef).padStart(2, '0')} → 1st Marshal EAT :${String(G.eatBase).padStart(2, '0')} (6 min prior)` : 'Example: type 18 + Enter → 1st EAT :12 (commences at 030/2 at :12)';
+  if (ev) ev.textContent = G.eatBase != null ? `Time :${String(G.eatRef).padStart(2, '0')} → 1st Marshal EAT :${String(G.eatBase).padStart(2, '0')} (6 min prior)` : `Example: type 18 + Enter → 1st EAT :12 (commences at ${radA(30)}/2 at :12)`;
   setTimeout(() => { if (helpOv.classList.contains('hidden')) ei.focus({ preventScroll: true }); }, 30);
 }
 if ($('eatForm')) {
   const ei = $('eatIn'), ev = $('eatPreview'), ep = $('eatPrompt');
   ei.addEventListener('input', () => {
     const n = mcParseMin(ei.value);
-    if (n == null) { ev.textContent = 'Example: type 18 + Enter → 1st EAT :12 (commences at 030/2 at :12)'; return; }
+    if (n == null) { ev.textContent = `Example: type 18 + Enter → 1st EAT :12 (commences at ${radA(30)}/2 at :12)`; return; }
     const eat1 = ((n - 6) % 60 + 60) % 60;
-    ev.textContent = `Time :${String(n).padStart(2, '0')} → 1st Marshal EAT :${String(eat1).padStart(2, '0')} (commences at 030/2 at :${String(eat1).padStart(2, '0')})`;
+    ev.textContent = `Time :${String(n).padStart(2, '0')} → 1st Marshal EAT :${String(eat1).padStart(2, '0')} (commences at ${radA(30)}/2 at :${String(eat1).padStart(2, '0')})`;
   });
   ei.addEventListener('keydown', e => {
     e.stopPropagation();
@@ -2356,7 +2358,8 @@ function startGame(diff, opts) {
 }
 let linkChoice = localStorage.getItem('stingerLink') === '1';
 const paintLink = () => { $('bLinkOn').classList.toggle('on', linkChoice); $('bLinkOff').classList.toggle('on', !linkChoice); };
-$('bLinkOn').onclick = () => { linkChoice = true; paintLink(); }; $('bLinkOff').onclick = () => { linkChoice = false; paintLink(); }; paintLink();
+$('bLinkOn').onclick = () => { linkChoice = true; paintLink(); try { shipInfoUI(); shipStatePush(); } catch (e) {} }; $('bLinkOff').onclick = () => { linkChoice = false; paintLink(); try { shipInfoUI(); shipStatePush(); } catch (e) {} }; paintLink();
+$('bReroll').onclick = () => { if (G && !G.over) return; prepBRC(); };
 $('bStart').onclick = () => { LINK.setOn(linkChoice); startGame(chosenDiff); };
 $('bTut').onclick = () => openTutorial(0);
 $('bAgain').onclick = () => startGame(lastDiff);
@@ -2393,10 +2396,10 @@ function endGame() {
 
 /* ===================== tutorial ===================== */
 const TUT = [
-  ['1. Marshal & LH approaches', `${FREQ_HELP}<p>All radials are <b>relative to BRC</b>: the 030 radial is bearing BRC+030 from the ship (with BRC 360 they are the listed values), so the whole pattern turns with the ship.</p>
-   <ul><li><b>Marshal</b>: "Venom two one, Case three recovery, LH2 approach with CCA final, marshal 030 at 2, angels 2, BRC 360, outbound bearing 210". The pilot answers with the callsign, flies to 030 at 2 and holds quietly (no established call); only when you say "<b>report commencing</b>" do they report "commencing" at the fix.</li>
+  ['1. Marshal & LH approaches', `${FREQ_HELP}<p>All radials are <b>relative to BRC</b>: the 030 radial is bearing BRC+030 from the ship (with BRC 360 they are the listed values), so the whole pattern turns with the ship. <b>The BRC is random each sim</b> (shown on the start screen and in the scope header), so say the actual radial: BRC + 030 (e.g. BRC 090 → "marshal 120 at 2", outbound bearing = BRC + 210).</p>
+   <ul><li><b>Marshal</b>: "Venom two one, Case three recovery, LH2 approach with CCA final, marshal 030 at 2, angels 2, BRC 360, outbound bearing 210" (at BRC 360). The pilot answers with the callsign, flies to 030 at 2 and holds quietly (no established call); only when you say "<b>report commencing</b>" do they report "commencing" at the fix.</li>
    <li><b>Approach type</b>: "expect / cleared LH-1 … LH-5 approach" ("L H one", "lima hotel one", "LH1" all work; "emergency approach" for the emergency helo marshal). <b>Commence</b>: "Venom two one, commence". <b>Missed approach</b>: "execute missed approach" (pilots also go missed on their own at the MAP). Any heading, altitude, sector or go-purple call cancels the procedure (radar vectors).</li>
-   <li><b>Full marshal call</b>: "Venom two one, case three recovery, LH2 approach with CCA final, marshal 030 at 2, angels 2, BRC 360, outbound bearing 210." The pilot answers with the callsign only. Outbound bearing = DWH + 30 (DWH = BRC + 180), used for every LH type for now.</li>
+   <li><b>Full marshal call</b>: "Venom two one, case three recovery, LH2 approach with CCA final, marshal 030 at 2, angels 2, BRC 360, outbound bearing 210." (example at BRC 360) The pilot answers with the callsign only. Outbound bearing = DWH + 30 (DWH = BRC + 180), used for every LH type for now.</li>
    <li><b>Jets only</b> (whole thousands, minimum angels 2): <b>LH-1</b> 030 radial at 4 DME; <b>LH-2</b> 030 at 2; <b>LH-3</b> 180 at (angels + 15) DME. Missed (0.75 NM): climb on BRC to 1,200; no instructions by 4 NM / 2 min: turn downwind, report abeam.</li>
    <li><b>Helicopters only</b> (500 ft steps, minimum 1,500; 2,500 when jets are also in marshal): <b>LH-4</b> 090 radial at 7 DME; arc 5 NM at 1,000 to final, FAF 3 DME. <b>LH-5</b> 030 at 2 DME; outbound at 1,000, inbound, FAF 3 DME. <b>Emergency marshal</b>: 045 / 090 / 135 radials, 5 NM 1,500 … 12 NM 5,000, flown like LH-4.</li>
    <li>Wrong radial/DME for the type, a jet approach for a helo (or the reverse), a wrong or missing outbound bearing, a wrong BRC, or an angels already in use are flagged in the log.</li>
@@ -3016,7 +3019,7 @@ function appCheckIn(a, again) {
   if (!G.selected) selectAc(a);
 }
 /* ---------- ship turns: random 1-15 deg port/starboard, 5 s warning, ~1 deg/s ---------- */
-const SHIP_TURNS_ON = false;   // ship turns disabled for now (BRC fixed 360); set true to re-enable turns + 99 calls
+const SHIP_TURNS_ON = false;   // ship turns disabled for now (BRC stays as rolled for the whole sim); set true to re-enable turns + 99 calls
 const SHIP_TURN = { firstAfter: 120, every: [240, 480], warn: 5, rate: 1, minDeg: 1, maxDeg: 15, turnCallGrace: 15, steadyCallWin: 30, bonus: 10, steadyBanner: 8 };
 function shipBanner(cls, txt) { const b = $('shipBanner'); if (!b) return; b.className = cls || ''; b.textContent = txt || ''; b.style.display = txt ? 'block' : 'none'; }
 function shipLinkPost(turning) { if (!LINK.on) return; const n3 = v => { v = Math.round(((v % 360) + 360) % 360); return v || 360; };
@@ -3207,7 +3210,7 @@ const MAR = {
     if (!t) return ['radial does not fit any LH approach'];
     if (t.jet !== !isHelo(a)) bad.push(`${t.name} is a ${t.jet ? 'fixed-wing' : 'helicopter'} approach`);
     if (t.jet) {
-      if (!near(R, t.marR)) bad.push(`${t.name} marshal is on the ${h3z(t.marR)} radial (BRC+${h3z(t.marR)})`);
+      if (!near(R, t.marR)) bad.push(`${t.name} marshal is on the ${radA(t.marR)} radial (BRC+${h3z(t.marR)})`);
       if (alt % 1000) bad.push('jet marshal altitudes are whole thousands');
       const want = this.fixD(type, alt);
       if (alt < 2000) bad.push(`${t.name} marshal minimum is angels 2`);
@@ -3216,10 +3219,10 @@ const MAR = {
       const min = this.mixed(a) ? this.HELO_MIN_MIXED : this.HELO_MIN;
       if (alt < min) bad.push(`helicopter marshal minimum is ${fmtAlt(min)}${min > this.HELO_MIN ? ' (mixed ops)' : ''}`);
       if (alt % 500) bad.push('helicopter marshal altitudes are in 500 ft steps');
-      if (type === 'LH4') { if (!near(R, 90)) bad.push('LH-4 marshal is on the 090 radial'); if (Math.abs(D - 7) > 0.5) bad.push('LH-4 marshal is at 7 DME'); }
-      if (type === 'LH5') { if (!near(R, 30)) bad.push('LH-5 marshal is on the 030 radial'); if (Math.abs(D - 2) > 0.5) bad.push('LH-5 marshal is at 2 DME'); }
+      if (type === 'LH4') { if (!near(R, 90)) bad.push(`LH-4 marshal is on the ${radA(90)} radial (BRC+090)`); if (Math.abs(D - 7) > 0.5) bad.push('LH-4 marshal is at 7 DME'); }
+      if (type === 'LH5') { if (!near(R, 30)) bad.push(`LH-5 marshal is on the ${radA(30)} radial (BRC+030)`); if (Math.abs(D - 2) > 0.5) bad.push('LH-5 marshal is at 2 DME'); }
       if (type === 'EMER') {
-        if (!this.EMER_R.some(r => near(R, r))) bad.push('emergency marshal radials are 045 / 090 / 135');
+        if (!this.EMER_R.some(r => near(R, r))) bad.push(`emergency marshal radials are ${radA(45)} / ${radA(90)} / ${radA(135)} (BRC+045 / 090 / 135)`);
         const w = this.EMER_ALT[Math.round(D)];
         if (!w || Math.abs(D - Math.round(D)) > 0.01) bad.push('emergency marshal distances are 5-12 NM');
         else if (w !== alt) bad.push(`emergency marshal at ${Math.round(D)} NM is ${fmtAlt(w)}`);
@@ -3589,12 +3592,12 @@ const MAR = {
     ctx.save(); ctx.strokeStyle = 'rgba(150,200,255,0.28)'; ctx.fillStyle = 'rgba(150,200,255,0.45)'; ctx.lineWidth = 1; ctx.font = FONT(9); ctx.setLineDash([3, 5]);
     const fin = d => { seg(L(0, 0), L(0, d)); fix(L(0, 5), 'FAF'); };
     const obR = norm(this.outbound() - BRC);   // outbound bearing as a relative radial (210 with DWH+30)
-    if (used.has('LH1')) { seg(R2(30, 4), R2(obR, 6.5)); fin(8); fix(R2(30, 4), 'LH1 030/4'); }
-    if (used.has('LH2')) { seg(R2(30, 2), R2(obR, 6.5)); fin(8); fix(R2(30, 2), 'LH2 030/2'); arc(8, 0, 60); }
-    if (used.has('LH3')) { const d3 = Math.max(17, ...G.ac.filter(x => x.mar && (x.mar.run || x.mar.type || x.mar.typeInf) === 'LH3' && x.mar.alt).map(x => x.mar.alt / 1000 + 15)); fin(d3); fix(R2(180, d3), 'LH3 180/ang+15'); }
-    if (used.has('LH4') || used.has('EMER')) { arc(5, 270, 360); seg(L(0, 0), L(0, 5)); fix(L(0, 3), 'FAF'); seg(R2(90, 5), R2(90, 7)); if (used.has('LH4')) fix(R2(90, 7), 'LH4 090/7'); }
+    if (used.has('LH1')) { seg(R2(30, 4), R2(obR, 6.5)); fin(8); fix(R2(30, 4), `LH1 ${radA(30)}/4`); }
+    if (used.has('LH2')) { seg(R2(30, 2), R2(obR, 6.5)); fin(8); fix(R2(30, 2), `LH2 ${radA(30)}/2`); arc(8, 0, 60); }
+    if (used.has('LH3')) { const d3 = Math.max(17, ...G.ac.filter(x => x.mar && (x.mar.run || x.mar.type || x.mar.typeInf) === 'LH3' && x.mar.alt).map(x => x.mar.alt / 1000 + 15)); fin(d3); fix(R2(180, d3), `LH3 ${radA(180)}/ang+15`); }
+    if (used.has('LH4') || used.has('EMER')) { arc(5, 270, 360); seg(L(0, 0), L(0, 5)); fix(L(0, 3), 'FAF'); seg(R2(90, 5), R2(90, 7)); if (used.has('LH4')) fix(R2(90, 7), `LH4 ${radA(90)}/7`); }
     if (used.has('EMER')) for (const r of this.EMER_R) seg(R2(r, 5), R2(r, 12));
-    if (used.has('LH5')) { seg(R2(30, 2), R2(210, 5)); seg(L(0, 0), L(0, 5)); fix(L(0, 3), 'FAF'); fix(R2(30, 2), 'LH5 030/2'); }
+    if (used.has('LH5')) { seg(R2(30, 2), R2(210, 5)); seg(L(0, 0), L(0, 5)); fix(L(0, 3), 'FAF'); fix(R2(30, 2), `LH5 ${radA(30)}/2`); }
     ctx.setLineDash([]);
     for (const m of holds) {   // marshal fix + racetrack
       const F = this.pt(m.R, m.D), u = [Math.sin((m.R + 180) * DEG), Math.cos((m.R + 180) * DEG)], rr = isFinite(m.D) ? 0.9 : 0, nx = [u[1], -u[0]];
@@ -3898,7 +3901,7 @@ ${G.gsp ? `IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} K
 function appPanel() {
   const hint = $('hint');
   hint.style.display = G.d.hints ? 'block' : 'none';
-  if (G.d.hints && MC) { const eEx = G.eatBase != null ? String(G.eatBase).padStart(2, '0') : '12'; hint.innerHTML = `💡 Click a target to accept it, assign marshal + EAT ("<b>${G.selected ? G.selected.tel : 'Venom two one'}</b>, Case three recovery, LH2 approach with CCA final, marshal 030 at 2, angels 2, BRC ${BRC3}, outbound bearing ${h3z(MAR.outbound())}, expected approach time ${eEx}"), and broadcast "<b>99 weather</b>" (1 pt per marshal bird; repeat when new birds arrive). Each marshal bird commences from 030 at 2 at the EAT you assign.`; }
+  if (G.d.hints && MC) { const eEx = G.eatBase != null ? String(G.eatBase).padStart(2, '0') : '12'; hint.innerHTML = `💡 Click a target to accept it, assign marshal + EAT ("<b>${G.selected ? G.selected.tel : 'Venom two one'}</b>, Case three recovery, LH2 approach with CCA final, marshal ${radA(30)} at 2, angels 2, BRC ${BRC3}, outbound bearing ${h3z(MAR.outbound())}, expected approach time ${eEx}"), and broadcast "<b>99 weather</b>" (1 pt per marshal bird; repeat when new birds arrive). Each marshal bird commences from ${radA(30)} at 2 at the EAT you assign.`; }
   else if (G.d.hints) hint.innerHTML = `💡 Vector your launches onto the final approach course (FB ${BRC3}, inbound from ${hdg3(norm(BRC + 180))}) and descend them to 3,000 ft or below inside 3 NM to hand them to ${SHIP_NAME} Final. Aircraft launch from ${SHIP_NAME} one at a time (every 4–6 min), fly up to ${APP_MAX_PARS} practice PARs (low approach, then back to you) and recover full stop on the last. After each check-in, your first altitude must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets (−5 if not). Call <b>radar contact</b> within 2 NM of the ship (−5 if later). To slow down: ${G.selected && G.selected.phase === 'app' ? (isHelo(G.selected) ? `${G.selected.tel} (helo): "<b>perform landing checks</b>"` : `${G.selected.tel} (jet): "<b>dirty up</b>"`) : 'helos "<b>perform landing checks</b>", jets "<b>dirty up</b>"'}.`;
   $('scopeStatus').textContent = `${MC ? 'MARSHAL' : 'APPROACH'} · ${SHIP_NAME.toUpperCase()} · RED · FB ${BRC3} · ${APP_RANGE} NM · WIND ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   $('stLanded').textContent = G.landed; $('stLanded').nextElementSibling.textContent = MC ? 'Approaches' : 'Handed off';
@@ -4132,7 +4135,10 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
 function shipPolys() { if (!LAND || !LAND.polys || !LAND.polys.length) return []; if (LAND.rp && LAND.rpSeed === LAND.seed) return LAND.rp; LAND.rpSeed = LAND.seed;
   return (LAND.rp = LAND.polys.map(p => p.map(([e, n]) => [Math.round(e * 100) / 100, Math.round(n * 100) / 100]))); }
 function shipStateMsg() { const on = !!(LAND && LAND.polys && LAND.polys.length);
-  return { type: 'ship-state', src: 'MARSHAL', master: true, linked: !!(LINK.on || linkChoice), running: !!(G && !G.over), turns: SHIP_TURNS_ON, tbrc: TBRC, mv: MV, fb: BRC, dwh: DWH(), landSeed: LAND ? LAND.seed : null, landOn: on, polys: on ? shipPolys() : [] }; }
+  return { type: 'ship-state', src: 'MARSHAL', master: true, linked: !!(LINK.on || linkChoice), running: !!(G && !G.over), turns: SHIP_TURNS_ON, tbrc: TBRC, mv: MV, fb: BRC, dwh: DWH(), landSeed: LAND ? LAND.seed : null, landOn: on, land: landDesc(), polys: on ? shipPolys() : [] }; }
+function landDesc() { if (!LAND || !LAND.polys || !LAND.polys.length) return 'open water'; const c = LAND.coasts || 0, i = LAND.islands || 0; return [c ? c + (c > 1 ? ' coasts' : ' coast') : '', i ? i + (i > 1 ? ' islands' : ' island') : ''].filter(Boolean).join(', ') || 'open water'; }
+let SHIP_CH = null; function shipStatePush() { try { if (!SHIP_CH && 'BroadcastChannel' in window) SHIP_CH = new BroadcastChannel('stinger-link'); if (SHIP_CH) SHIP_CH.postMessage(shipStateMsg()); } catch (e) {} }   // immediate update after a (re-)roll
+function shipInfoUI() { const el = document.getElementById('shipInfo'); if (!el) return; el.innerHTML = `Ship: <b>BRC ${h3z(TBRC)}</b> · DWH ${h3z(DWH())} · Land: <b>${landDesc()}</b> <span style="color:var(--dim)">(random each sim${linkChoice ? '; linked scopes follow it' : ''})</span>`; }
 /* AATCC Instructor link hook (BroadcastChannel 'stinger-link'). Loaded by Marshal, Approach and Final.
    Always listening (independent of the position's own Link toggle). Messages:
    inst-hello {links:[...]} -> reply inst-state; inst-cmd {to, uid, cs, text, op} -> run on this scope; inst-state / inst-ack out. */
@@ -4290,6 +4296,7 @@ function shipStateMsg() { const on = !!(LAND && LAND.polys && LAND.polys.length)
     const m = e.data || {};
     if (m.type === 'inst-hello') { peerT = Date.now(); wanted = !m.links || m.links.includes(PAGE) || FIN; ciManual = !FIN && wanted && !!m.links && m.links.includes(PAGE) && m.ciMode === 'manual'; if (wanted) send(); }
     else if (m.type === 'ship-state' || m.type === 'ship-set') { if (m.src !== PAGE && typeof shipSyncRecv === 'function') { try { shipSyncRecv(m); } catch (e) {} } }
+    else if (m.type === 'ship-req') { if (PAGE === 'MARSHAL' && typeof shipStateMsg === 'function') { try { ch.postMessage(shipStateMsg()); } catch (e) {} } }   // late joiner asks for the current BRC / land
     else if (m.type === 'inst-cmd' && (m.to === PAGE || m.to === 'ANY')) { peerT = Date.now(); cmd(m); }
     else if (m.type === 'inst-bye') { peerT = 0; ciManual = false; }
   };

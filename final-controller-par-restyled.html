@@ -2903,6 +2903,7 @@ window.PAR = {
   };
   setInterval(() => { if (wanted && Date.now() - peerT < 8000 && Date.now() - lastSend > 200) send(); }, 220);
   try { ch.postMessage({ type: 'inst-state', src: PAGE, ts: Date.now(), running: false, hello: true }); } catch (e) {}
+  try { ch.postMessage({ type: 'ship-req', src: PAGE }); } catch (e) {}   // late joiner: a linked Marshal answers with its current BRC / land
   { const unscroll = () => { if (document.body.scrollTop) document.body.scrollTop = 0; if (document.documentElement.scrollTop) document.documentElement.scrollTop = 0; }; document.body.addEventListener('scroll', unscroll); addEventListener('scroll', unscroll); setInterval(unscroll, 1000); }   // a focused prompt must never scroll the page (it hid the top bar + Scope slider)
   window.__INST = { send, cmd, PAGE }; window.__instStart = (d, o) => startGame(d, o); window.__instScale = s => { try { setScale(s); } catch (e) {} };
 })();

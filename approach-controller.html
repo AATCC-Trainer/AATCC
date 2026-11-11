@@ -769,6 +769,7 @@ function landLayer(cx, cy, RX, RY, sc) {   // offscreen pre-render, rebuilt only
   c.restore(); LAND.cv = cv; LAND.key = key; return cv;
 }
 window.__land = () => LAND && { seed: LAND.seed, coasts: LAND.coasts, islands: LAND.islands, polys: LAND.polys, stats: LAND.stats };
+window.__brc = () => BRC; window.__tbrc = () => TBRC;   // test hooks
 window.__makeLand = s => makeLand(s);
 function setBRC(v) {   // random BRC per simulation start; everything course-related derives from it
   BRC = norm(v) % 360 || 360; RWY = BRC; BRC_OFF = BRC - 270; BRC3 = h3z(BRC); BRC_SAY = sayDigits(BRC3);
@@ -2126,7 +2127,7 @@ function startGame(diff, opts) {
 }
 let linkChoice = localStorage.getItem('stingerLink') === '1';
 const paintLink = () => { $('bLinkOn').classList.toggle('on', linkChoice); $('bLinkOff').classList.toggle('on', !linkChoice); };
-$('bLinkOn').onclick = () => { linkChoice = true; paintLink(); }; $('bLinkOff').onclick = () => { linkChoice = false; paintLink(); }; paintLink();
+$('bLinkOn').onclick = () => { linkChoice = true; paintLink(); try { shipReq(); } catch (e) {} }; $('bLinkOff').onclick = () => { linkChoice = false; paintLink(); }; paintLink();
 $('bStart').onclick = () => { LINK.setOn(linkChoice); try { shipSyncTick(); } catch (e) {} startGame(chosenDiff); { const ms = shipMaster(); if (G && ms) G.shipSync = { src: ms.src, turns: !!ms.turns }; } };
 $('bTut').onclick = () => openTutorial(0);
 $('bAgain').onclick = () => startGame(lastDiff);
@@ -3294,11 +3295,12 @@ function shipSyncTick() {
   if (G && !G.over) { if (SHIPSYNC.warned !== key) { SHIPSYNC.warned = key; log('warn', `Linked ${m.src === 'INSTRUCTOR' ? 'Instructor / ' : ''}Marshal ship is on BRC ${h3z(tb)}; this run uses BRC ${h3z(TBRC)}. Press End and start a new run to match it.`); } return; }
   nextBRC = TBRC = tb; MV = mv; setBRC(norm(TBRC - MV));
   const polys = m.landOn && Array.isArray(m.polys) ? m.polys : [];
-  LAND = { seed, mv: MV, polys, coasts: polys.length ? 1 : 0, islands: 0, stats: { frac: 0, minR: 99, brg: 0, bad: false }, key: '', syncKey: key };
+  LAND = { seed, mv: MV, polys, coasts: polys.length ? 1 : 0, islands: 0, desc: m.land || (polys.length ? 'land' : 'open water'), stats: { frac: 0, minR: 99, brg: 0, bad: false }, key: '', syncKey: key };
   try { applyPhrUI(); } catch (e) {}
 }
 function shipStateMsg() { const on = !!(LAND && LAND.polys && LAND.polys.length), ms = G && !G.over ? G.shipSync : shipMaster();
-  return { type: 'ship-state', src: 'APPROACH', master: false, synced: !!ms, linked: !!(LINK.on || linkChoice), running: !!(G && !G.over), tbrc: TBRC, mv: MV, fb: BRC, dwh: DWH(), landSeed: LAND ? LAND.seed : null, landOn: on, polys: on ? shipPolys() : [] }; }
+  return { type: 'ship-state', src: 'APPROACH', master: false, synced: !!ms, linked: !!(LINK.on || linkChoice), running: !!(G && !G.over), tbrc: TBRC, mv: MV, fb: BRC, dwh: DWH(), landSeed: LAND ? LAND.seed : null, landOn: on, land: LAND && LAND.desc ? LAND.desc : on ? 'land' : 'open water', polys: on ? shipPolys() : [] }; }
+function shipReq() { try { const c = new BroadcastChannel('stinger-link'); c.postMessage({ type: 'ship-req', src: 'APPROACH' }); setTimeout(() => c.close(), 500); } catch (e) {} }   // ask a linked Marshal for its BRC / land now (late join / relink)
 /* AATCC Instructor link hook (BroadcastChannel 'stinger-link'). Loaded by Marshal, Approach and Final.
    Always listening (independent of the position's own Link toggle). Messages:
    inst-hello {links:[...]} -> reply inst-state; inst-cmd {to, uid, cs, text, op} -> run on this scope; inst-state / inst-ack out. */
@@ -3463,6 +3465,7 @@ function shipStateMsg() { const on = !!(LAND && LAND.polys && LAND.polys.length)
     if (wanted && Date.now() - peerT < 8000 && Date.now() - lastSend > 200) send(); }, 220);
   setInterval(() => { if (typeof shipStateMsg === 'function') { try { ch.postMessage(shipStateMsg()); } catch (e) {} } try { if (typeof shipSyncTick === 'function') shipSyncTick(); } catch (e) {} }, 1000);   // linked ship (BRC / MV / land) for late joiners
   try { ch.postMessage({ type: 'inst-state', src: PAGE, ts: Date.now(), running: false, hello: true }); } catch (e) {}
+  try { ch.postMessage({ type: 'ship-req', src: PAGE }); } catch (e) {}   // late joiner: a linked Marshal answers with its current BRC / land
   { const unscroll = () => { if (document.body.scrollTop) document.body.scrollTop = 0; if (document.documentElement.scrollTop) document.documentElement.scrollTop = 0; }; document.body.addEventListener('scroll', unscroll); addEventListener('scroll', unscroll); setInterval(unscroll, 1000); }   // a focused prompt must never scroll the page (it hid the top bar + Scope slider)
   window.__INST = { send, cmd, PAGE }; window.__instStart = (d, o) => startGame(d, o); window.__instScale = s => { try { setScale(s); } catch (e) {} };
 })();

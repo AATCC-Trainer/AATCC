@@ -127,12 +127,13 @@ ch.onmessage = e => {
   else if (m.type === 'inst-ack') { log(m.ok ? 'p' : 'b', `${m.src}${m.cs ? ' · ' + m.cs : ''}: ${m.ok ? '✓ ' : '✗ '}${m.text || ''}`); }
 };
 setInterval(hello, 1500); hello();
-/* ---------- linked ship: one BRC / MV / land for every linked scope. Marshal is the source of truth while it is linked here (fixed BRC 360 for now);
+/* ---------- linked ship: one BRC / MV / land for every linked scope. Marshal is the source of truth while it is linked here (Marshal rolls a random BRC + land each sim);
    the Instructor relays it to Approach, and pages that open late pick it up within a second. Otherwise the Instructor follows Approach. ---------- */
 const shipLive = s => I.ship[s] && Date.now() - I.ship[s].rx < 4000;
 function shipMaster() { if (links().includes('MARSHAL') && shipLive('MARSHAL')) return I.ship.MARSHAL; if (links().includes('APPROACH') && shipLive('APPROACH')) return I.ship.APPROACH; return null; }
 setInterval(() => { const m = shipMaster(); if (!m || m.src !== 'MARSHAL' || !links().includes('APPROACH')) return;
-  try { ch.postMessage({ type: 'ship-set', src: 'INSTRUCTOR', to: 'APPROACH', from: 'MARSHAL', linked: true, turns: !!m.turns, tbrc: m.tbrc, mv: m.mv, fb: m.fb, dwh: m.dwh, landSeed: m.landSeed, landOn: !!m.landOn, polys: m.polys || [] }); } catch (e) {} }, 1000);
+  try { ch.postMessage({ type: 'ship-set', src: 'INSTRUCTOR', to: 'APPROACH', from: 'MARSHAL', linked: true, turns: !!m.turns, tbrc: m.tbrc, mv: m.mv, fb: m.fb, dwh: m.dwh, landSeed: m.landSeed, landOn: !!m.landOn, land: m.land, polys: m.polys || [] }); } catch (e) {} }, 1000);
+try { ch.postMessage({ type: 'ship-req', src: 'INSTRUCTOR' }); } catch (e) {}   // opened late: ask Marshal for its current BRC / land
 addEventListener('beforeunload', () => { try { ch.postMessage({ type: 'inst-bye' }); } catch (e) {} });
 /* ---------- link selector ---------- */
 function setLink(l) { I.link = l; lsSet('instLink', l); document.querySelectorAll('.lk').forEach(b => b.classList.toggle('on', b.dataset.l === l));
@@ -158,7 +159,9 @@ function select(key) { I.sel = key; renderSel(); renderRoster(); }
 function freqOf(a) { const f = (a.src === 'FINAL') ? (a.freq === 'copper' ? 'copper' : 'purple') : a.freq === 'blue' ? 'silver' : (a.freq || SRC_FREQ[a.src]); return f; }
 /* ---------- selected aircraft strip + Text ---------- */
 const CHIPS = ['turn left heading 180', 'angels 3', 'speed 250', 'signal buster', 'marshal 030 at 2, angels 2, BRC 360, outbound bearing 210', 'commence', 'go purple', 'primary only', 'secondary only', 'normal radar'];
-$('chips').innerHTML = CHIPS.map(c => `<span>${esc(c)}</span>`).join('');
+const chipTxt = c => { if (!/^marshal 030 at 2/.test(c)) return c; let B = 360; try { B = Math.round(brc()); } catch (e) {} const z = v => String(((Math.round(v) % 360) + 360) % 360 || 360).padStart(3, '0'); return `marshal ${z(B + 30)} at 2, angels 2, BRC ${z(B)}, outbound bearing ${z(B + 210)}`; };   // follows the linked (random) BRC
+function paintChips() { const h = CHIPS.map(c => `<span>${esc(chipTxt(c))}</span>`).join(''); if ($('chips').innerHTML !== h) $('chips').innerHTML = h; }
+paintChips(); setInterval(() => { try { paintChips(); } catch (e) {} }, 1000);
 $('chips').onclick = e => { if (e.target.tagName === 'SPAN') { $('txIn').value = e.target.textContent; $('txIn').focus(); } };
 function renderSel() {
   const a = selAc(); $('selBox').classList.toggle('has', !!a);
@@ -295,7 +298,7 @@ function drawLand(cx, cy, RX, RY, sc, B) {   // same coastline as the master sco
   }
   ctx.drawImage(landCv, cx - RX, cy - RY, 2 * RX, 2 * RY);
 }
-function brc() { for (const s of ['MARSHAL', 'APPROACH', 'FINAL']) if (live(s) && I.src[s].brc != null) return I.src[s].brc; return 360; }
+function brc() { for (const s of ['MARSHAL', 'APPROACH', 'FINAL']) if (live(s) && I.src[s].brc != null) return I.src[s].brc; const m = shipMaster(); if (m && m.fb != null) return +m.fb; return 360; }
 const CONE_NM = 1.0;   // cone of confusion: hide primary + secondary + history trail within this NM of the ship (display only)
 const inCone = a => Math.hypot(a.e, a.n) < CONE_NM || !!(I.disp[a.key] && Math.hypot(I.disp[a.key].e, I.disp[a.key].n) < CONE_NM);
 function draw() {
@@ -350,10 +353,11 @@ function draw() {
     if (dg % 30 === 0) { ctx.fillStyle = ppi(0.8); ctx.fillText(String(dg).padStart(3, '0'), Math.max(cx - RX + 22, Math.min(cx + RX - 22, ex - nx * 24)), Math.max(cy - RY + 22, Math.min(cy + RY - 14, ey - ny * 20 + 4))); } }
   if (!links().some(x => live(x) && I.src[x].running)) { ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,191,60,0.9)'; ctx.font = FONT(15); ctx.fillText('Waiting for ' + links().filter(x => x !== 'FINAL').map(x => x[0] + x.slice(1).toLowerCase()).join(' / ') + ' / Final simulation to start in its tab…', cx, cy - 40); }
   { const st = ['MARSHAL', 'APPROACH', 'FINAL'].map(x => live(x) ? I.src[x] : null).find(Boolean);   // BRC / DWH / weather block (matches Marshal & Approach)
-    const tb = st ? (st.tbrc != null ? st.tbrc : st.brc) : null, dwh = st && st.dwh != null ? st.dwh : tb != null ? tb + 180 : null, w = st && st.wind;
-    const lines = [`FREQ ${links().filter(x => x !== 'FINAL').map(x => x === 'MARSHAL' ? 'RED' : 'SLVR').join('/')} + PRPL/COPR`, `BRC ${tb != null ? h3(tb) : '---'}  DWH ${dwh != null ? h3(dwh) : '---'}`, `WX ${w ? 'WIND ' + h3(w.dir) + '/' + w.spd + 'KT' : '---'}  T+${curT() != null ? mmss(curT()) : '--:--'}`];
+    const sm = shipMaster(), tb = st ? (st.tbrc != null ? st.tbrc : st.brc) : sm ? sm.tbrc : null, dwh = st && st.dwh != null ? st.dwh : sm && !st ? sm.dwh : tb != null ? tb + 180 : null, w = st && st.wind;
+    const landTxt = sm ? (sm.land || (sm.landOn ? 'land' : 'open water')) : '---';
+    const lines = [`FREQ ${links().filter(x => x !== 'FINAL').map(x => x === 'MARSHAL' ? 'RED' : 'SLVR').join('/')} + PRPL/COPR`, `BRC ${tb != null ? h3(tb) : '---'}  DWH ${dwh != null ? h3(dwh) : '---'}`, `WX ${w ? 'WIND ' + h3(w.dir) + '/' + w.spd + 'KT' : '---'}  T+${curT() != null ? mmss(curT()) : '--:--'}`, `LAND ${landTxt.toUpperCase()}`];
     ctx.font = FONT(12); ctx.textAlign = 'left'; const bw = Math.max(...lines.map(l => ctx.measureText(l).width)) + 14;
-    ctx.fillStyle = 'rgba(6,16,8,0.85)'; ctx.fillRect(cx - RX + 10, cy - RY + 30, bw, 54); ctx.strokeStyle = ppi(0.5); ctx.strokeRect(cx - RX + 10, cy - RY + 30, bw, 54);
+    ctx.fillStyle = 'rgba(6,16,8,0.85)'; ctx.fillRect(cx - RX + 10, cy - RY + 30, bw, 69); ctx.strokeStyle = ppi(0.5); ctx.strokeRect(cx - RX + 10, cy - RY + 30, bw, 69);
     ctx.fillStyle = ppi(0.95); lines.forEach((l, i) => ctx.fillText(l, cx - RX + 17, cy - RY + 47 + i * 15)); }
   ctx.textAlign = 'left'; ctx.fillStyle = ppi(0.8); ctx.font = FONT(11);
   const t = curT(), act = links().filter(live);
