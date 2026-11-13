@@ -62,7 +62,7 @@ td{padding:3px 4px;border-top:1px solid #241d44;vertical-align:top}tr.act{cursor
   <span id="stM" class="badge off">RED · MARSHAL</span><span id="stA" class="badge off">SLVR · APPROACH</span><span id="stF" class="badge wait" title="Final Control is always linked automatically">FINAL: AUTO-LINKED · READY</span>
   <div class="grp"><span class="lbl">Scope</span><button id="zOut" title="Zoom out">−</button><input type="range" id="zSl" min="5" max="80" step="1"><button id="zIn" title="Zoom in">+</button><b id="zVal" style="color:var(--cyan);min-width:4em">30 NM</b></div>
   <div class="grp"><span class="lbl">Rings</span><select id="rgSel"><option value="1">1 NM</option><option value="2">2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option><option value="0">Off</option></select></div>
-  <button id="bPause" title="Pause / resume all linked simulations">⏸ Pause</button><span id="clock" class="badge">T+0:00</span>
+  <button id="bPause" title="Pause / resume all linked simulations">⏸ Pause</button><button id="bRestartSims" title="Start the linked simulations, or restart them as a new sim (same level and settings; Marshal rolls a new BRC + land and the linked scopes follow)">▶ Start sims</button><span id="clock" class="badge">T+0:00</span>
  </div>
  <div id="main">
   <div id="scopeBox"><canvas id="cv"></canvas>
@@ -131,8 +131,9 @@ setInterval(hello, 1500); hello();
    the Instructor relays it to Approach, and pages that open late pick it up within a second. Otherwise the Instructor follows Approach. ---------- */
 const shipLive = s => I.ship[s] && Date.now() - I.ship[s].rx < 4000;
 function shipMaster() { if (links().includes('MARSHAL') && shipLive('MARSHAL')) return I.ship.MARSHAL; if (links().includes('APPROACH') && shipLive('APPROACH')) return I.ship.APPROACH; return null; }
-setInterval(() => { const m = shipMaster(); if (!m || m.src !== 'MARSHAL' || !links().includes('APPROACH')) return;
-  try { ch.postMessage({ type: 'ship-set', src: 'INSTRUCTOR', to: 'APPROACH', from: 'MARSHAL', linked: true, turns: !!m.turns, tbrc: m.tbrc, mv: m.mv, fb: m.fb, dwh: m.dwh, landSeed: m.landSeed, landOn: !!m.landOn, land: m.land, polys: m.polys || [] }); } catch (e) {} }, 1000);
+function relayShip() { const m = shipMaster(); if (!m || m.src !== 'MARSHAL' || !links().includes('APPROACH')) return;
+  try { ch.postMessage({ type: 'ship-set', src: 'INSTRUCTOR', to: 'APPROACH', from: 'MARSHAL', linked: true, turns: !!m.turns, tbrc: m.tbrc, mv: m.mv, fb: m.fb, dwh: m.dwh, landSeed: m.landSeed, landOn: !!m.landOn, land: m.land, polys: m.polys || [] }); } catch (e) {} }
+setInterval(relayShip, 1000);
 try { ch.postMessage({ type: 'ship-req', src: 'INSTRUCTOR' }); } catch (e) {}   // opened late: ask Marshal for its current BRC / land
 addEventListener('beforeunload', () => { try { ch.postMessage({ type: 'inst-bye' }); } catch (e) {} });
 /* ---------- link selector ---------- */
@@ -382,6 +383,28 @@ function anyPaused() { return links().some(x => live(x) && I.src[x].running && I
 $('bPause').onclick = () => { const op = anyPaused() ? 'resume' : 'pause'; let n = 0;
   for (const x of links()) if (live(x) && I.src[x].running) { try { ch.postMessage({ type: 'inst-cmd', to: x, op, id: ++cmdId }); n++; } catch (e) {} }
   log('i', n ? `INSTRUCTOR: ${op} all linked simulations` : 'No running simulation to ' + op + '.'); };
+/* ---------- v92 Start / Restart (works while the scope tabs are in the background) ----------
+   Marshal first (it rolls the new BRC + land), then, once its new ship state has arrived and been relayed, Approach and Final. */
+function simTargets() { return [...new Set(links())].filter(x => live(x)); }
+function anyRunning() { return simTargets().some(x => I.src[x] && I.src[x].running); }
+let restarting = false;
+async function restartSims() {
+  const tg = simTargets(); if (!tg.length) { log('s', 'No linked simulation is open. Open Marshal / Approach / Final in another tab first.'); return; }
+  const running = anyRunning(), op = running ? 'restart' : 'start';
+  if (running && !confirm('Restart the linked simulations as a new sim? The current run is discarded (same level and settings).')) return;
+  restarting = true; $('bRestartSims').disabled = true;
+  const post = to => { try { ch.postMessage({ type: 'inst-cmd', to, op, id: ++cmdId }); } catch (e) {} };
+  log('i', `INSTRUCTOR: ${op} ${tg.map(x => x[0] + x.slice(1).toLowerCase()).join(' + ')}`);
+  if (tg.includes('MARSHAL')) {
+    const prev = I.ship.MARSHAL ? I.ship.MARSHAL.landSeed + '|' + I.ship.MARSHAL.tbrc : '';
+    post('MARSHAL');
+    for (let i = 0; i < 40; i++) { await new Promise(r => setTimeout(r, 100)); const m = I.ship.MARSHAL; if (m && m.landSeed + '|' + m.tbrc !== prev) break; }
+    relayShip(); await new Promise(r => setTimeout(r, 250));
+  }
+  for (const x of tg) if (x !== 'MARSHAL') post(x);
+  setTimeout(() => { restarting = false; }, 1500);
+}
+$('bRestartSims').onclick = () => { restartSims(); };
 /* ---------- next aircraft check-in: Auto (each sim's own timer) or Manual (the sims hold their timed check-ins until the Instructor sends one) ---------- */
 const CI_SRC = ['MARSHAL', 'APPROACH'];
 const ciRun = s => links().includes(s) && live(s) && I.src[s].running;
@@ -406,7 +429,8 @@ function badges() {
   const b = (el, on, name, isLive, st) => { el.className = 'badge ' + (!on ? 'off' : isLive ? 'live' : 'wait'); el.textContent = name + (!on ? ' · NOT LINKED' : isLive ? (st && st.running ? ' · LIVE' : ' · OPEN') : ' · WAITING'); };
   b($('stM'), m, 'RED · MARSHAL', live('MARSHAL'), I.src.MARSHAL); b($('stA'), a, 'SLVR · APPROACH', live('APPROACH'), I.src.APPROACH);
   const f = live('FINAL'); $('stF').className = 'badge ' + (f ? 'live' : 'wait'); $('stF').textContent = 'FINAL: AUTO-LINKED · ' + (f ? 'LIVE' : 'READY / AUTO');
-  { const p = anyPaused(), any = links().some(x => live(x) && I.src[x].running); $('bPause').textContent = p ? '▶ Resume (PAUSED)' : '⏸ Pause'; $('bPause').classList.toggle('on', p); $('bPause').disabled = !any; }
+  { const p = anyPaused(), any = links().some(x => live(x) && I.src[x].running); $('bPause').textContent = p ? '▶ Resume (PAUSED)' : '⏸ Pause'; $('bPause').classList.toggle('on', p); $('bPause').disabled = !any;
+    const open = simTargets().length, run = anyRunning(); $('bRestartSims').textContent = run ? '⟲ Restart sims' : '▶ Start sims'; $('bRestartSims').disabled = !open || restarting; }
   const t = curT(); $('clock').textContent = 'T+' + (t != null ? mmss(t) : '--:--');
 }
 let lastUi = 0;

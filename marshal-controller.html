@@ -4,6 +4,7 @@
 <script src="gate.js"></script>
 <script src="phrase-match.js"></script>
 <script src="warm-mic.js"></script>
+<script src="bg-clock.js"></script>
 <script src="shorthand.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -2362,6 +2363,17 @@ const paintLink = () => { $('bLinkOn').classList.toggle('on', linkChoice); $('bL
 $('bLinkOn').onclick = () => { linkChoice = true; paintLink(); try { shipInfoUI(); shipStatePush(); } catch (e) {} }; $('bLinkOff').onclick = () => { linkChoice = false; paintLink(); try { shipInfoUI(); shipStatePush(); } catch (e) {} }; paintLink();
 $('bReroll').onclick = () => { if (G && !G.over) return; prepBRC(); };
 $('bStart').onclick = () => { LINK.setOn(linkChoice); startGame(chosenDiff); };
+// v92 Instructor Start / Restart: a fresh sim at the same level and settings; a new random BRC + land, pushed to the linked scopes
+function instRestart(op) {
+  if (op === 'start' && G && !G.over) return { ok: false, msg: 'Marshal is already running' };
+  const restart = !!(G && !G.over), eatRef = G && G.eatRef != null ? G.eatRef : null;
+  if (restart) G.over = true;   // discard the current run (no score screen)
+  endOv.classList.add('hidden');
+  prepBRC();
+  LINK.setOn(linkChoice);
+  startGame(restart ? lastDiff : chosenDiff, eatRef != null ? { eatRef } : { skipEatPrompt: true });   // never wait on the EAT prompt in a background tab
+  return { ok: true, msg: `${restart ? 'restarted' : 'started'} · BRC ${h3z(BRC)} · ${landDesc()}${eatRef != null ? ' · start / recovery minute kept' : ''}` };
+}
 $('bTut').onclick = () => openTutorial(0);
 $('bAgain').onclick = () => startGame(lastDiff);
 $('bMenu').onclick = () => { endOv.classList.add('hidden'); prepBRC(); startOv.classList.remove('hidden'); };
@@ -4018,9 +4030,15 @@ function drawApp(now) {
 
 /* ===================== main loop ===================== */
 let last = performance.now();
+// v92: the sim clock runs on wall time, advanced from rAF when visible AND from a background worker clock (bg-clock.js),
+// so a linked scope keeps simulating while its tab is hidden (Instructor or another tab in front). Big gaps are substepped.
+function simAdvance() {
+  const now = performance.now(), rdt = Math.min(300, Math.max(0, (now - last) / 1000)); last = now;
+  if (G && !G.over && !G.paused && !uiPaused) { let sdt = rdt * G.scale, n = 0; while (sdt > 1e-6 && !G.over && n++ < 30000) { const h = Math.min(0.1, sdt); step(h); sdt -= h; } }
+}
+if (window.BgClock) BgClock.every(100, () => { if (document.hidden || performance.now() - last > 150) simAdvance(); });
 function frame(now) {
-  const rdt = Math.min(0.1, Math.max(0, (now - last) / 1000)); last = now;
-  if (G && !G.over && !G.paused && !uiPaused) { let sdt = rdt * G.scale; while (sdt > 1e-6 && !G.over) { const h = Math.min(0.1, sdt); step(h); sdt -= h; } }
+  simAdvance();
   const r = canvas.getBoundingClientRect();
   if (Math.abs(r.width - W) > 0.5 || Math.abs(r.height - H) > 0.5) resize();
   if (now - (frame.lastDraw || 0) >= 32) { frame.lastDraw = now; draw(now); }
@@ -4211,6 +4229,11 @@ function shipInfoUI() { const el = document.getElementById('shipInfo'); if (!el)
   function ack(m, ok, text) { try { ch.postMessage({ type: 'inst-ack', src: PAGE, id: m.id, cs: m.cs, ok, text }); } catch (e) {} }
   function sysLog(s) { try { log('sys', '[Instructor] ' + s); } catch (e) {} }
   function cmd(m) {
+    if (m.op === 'restart' || m.op === 'start') {   // v92: Instructor Start / Restart (works with this tab in the background)
+      if (typeof instRestart !== 'function') return ack(m, false, 'restart not supported on ' + PAGE);
+      let r; try { r = instRestart(m.op); } catch (e) { r = { ok: false, msg: 'error: ' + e.message }; }
+      send(); return ack(m, !!r.ok, r.msg);
+    }
     const G = g(); if (!G || G.over) return ack(m, false, PAGE + ' not running');
     if (m.op === 'pause' || m.op === 'resume') { try { setPaused(m.op === 'pause'); } catch (e) { G.paused = m.op === 'pause'; } sysLog(m.op === 'pause' ? 'paused by instructor' : 'resumed by instructor'); send(); return ack(m, true, m.op === 'pause' ? 'PAUSED' : 'RESUMED'); }
     if (m.op === 'altBump') {
@@ -4301,9 +4324,10 @@ function shipInfoUI() { const el = document.getElementById('shipInfo'); if (!el)
     else if (m.type === 'inst-cmd' && (m.to === PAGE || m.to === 'ANY')) { peerT = Date.now(); cmd(m); }
     else if (m.type === 'inst-bye') { peerT = 0; ciManual = false; }
   };
-  setInterval(() => { const G = g(); if (G) G.instManual = ciManual && Date.now() - peerT < 8000;   // Instructor 'Manual' check-ins hold the timed arrivals
+  const bgEvery = (fn, ms) => window.BgClock ? BgClock.every(ms, fn) : setInterval(fn, ms);   // keeps reporting to the Instructor while hidden
+  bgEvery(() => { const G = g(); if (G) G.instManual = ciManual && Date.now() - peerT < 8000;   // Instructor 'Manual' check-ins hold the timed arrivals
     if (wanted && Date.now() - peerT < 8000 && Date.now() - lastSend > 200) send(); }, 220);
-  setInterval(() => { if (typeof shipStateMsg === 'function') { try { ch.postMessage(shipStateMsg()); } catch (e) {} } try { if (typeof shipSyncTick === 'function') shipSyncTick(); } catch (e) {} }, 1000);   // linked ship (BRC / MV / land) for late joiners
+  bgEvery(() => { if (typeof shipStateMsg === 'function') { try { ch.postMessage(shipStateMsg()); } catch (e) {} } try { if (typeof shipSyncTick === 'function') shipSyncTick(); } catch (e) {} }, 1000);   // linked ship (BRC / MV / land) for late joiners
   try { ch.postMessage({ type: 'inst-state', src: PAGE, ts: Date.now(), running: false, hello: true }); } catch (e) {}
   { const unscroll = () => { if (document.body.scrollTop) document.body.scrollTop = 0; if (document.documentElement.scrollTop) document.documentElement.scrollTop = 0; }; document.body.addEventListener('scroll', unscroll); addEventListener('scroll', unscroll); setInterval(unscroll, 1000); }   // a focused prompt must never scroll the page (it hid the top bar + Scope slider)
   window.__INST = { send, cmd, PAGE }; window.__instStart = (d, o) => startGame(d, o); window.__instScale = s => { try { setScale(s); } catch (e) {} };
