@@ -1,5 +1,5 @@
 // Stinger trainers service worker: network-first (a normal reload always gets new files), cache fallback when offline.
-const CACHE = 'stinger-v92';
+const CACHE = 'stinger-v93';
 const PRECACHE = ['./', './index.html', './gate.js', './phrase-match.js', './warm-mic.js', './bg-clock.js', './shorthand.js', './approach-controller.html', './marshal-controller.html', './final-controller-par-restyled.html', './instructor-controller.html', './intro.html', './playbook.html',
   './approach.webmanifest', './marshal.webmanifest', './final.webmanifest', './approach-192.png', './approach-512.png', './final-192.png', './final-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => Promise.all(PRECACHE.map(u => c.add(u).catch(() => {}))))); });

@@ -1942,9 +1942,16 @@ function gspExec(q) {   // typed 'GSP' (scope keyboard command, never a radio ca
   refreshPanel(true);
 }
 /* one primary-only arrival per simulation: no transponder, no data block; "squawk normal" / "squawk 4521" (sqn / sq4521) brings secondary back */
-const PRI_ONLY_POOL = 3;   // the primary-only aircraft is one of the first 3 arrivals, picked at random each sim
-function priOnlyInit(opts) { G.priN = 0; G.priAt = opts && opts.priAt != null ? opts.priAt : Math.floor(Math.random() * PRI_ONLY_POOL); }   // Math.random: leaves seeded sims unchanged
-function priOnlyMark(a) { if (G.priAt == null) return; if (G.priN++ === G.priAt) { a.sq = false; a.priStart = true; } }
+const PRI_ONLY_NTH = 5;   // v93: the primary-only aircraft is always the 5th aircraft to CHECK IN (check-in order, so Instructor manual / auto check-in and edited start times count); fewer than 5 in the sim: the last to check in
+function priOnlyInit(opts) { G.priN = 0; G.priDone = false; G.priAt = opts && opts.priAt != null ? opts.priAt : PRI_ONLY_NTH - 1; }
+function priNoMore(a) {   // nobody else will check in after a: no pending schedule entries and no launched-but-not-checked-in aircraft
+  try { if (typeof MC_MORE_ARRIVALS !== 'undefined' && MC_MORE_ARRIVALS && MC) return false; return schedPending().length === 0 && !G.ac.some(x => x !== a && !x.checked && !x.lead && !x.priCounted && x.phase === 'app'); } catch (e) { return false; }
+}
+function priOnlyMark(a) {   // called at an aircraft's first check-in (wingmen never squawk and don't count)
+  if (G.priAt == null || a.priCounted || a.lead) return; a.priCounted = true;
+  const n = G.priN++;
+  if (!G.priDone && (n === G.priAt || (n < G.priAt && priNoMore(a)))) { a.sq = false; a.priStart = true; G.priDone = true; }
+}
 /* shorthand typing (shorthand.js): live preview + '⌨ Shorthand' cheat sheet under the typed command box; typed codes are expanded before this page's submit handler */
 try { if (window.Shorthand) Shorthand.attach({ scope: 'approach', accent: '#c8ccd4', accent2: '#e6e9ee', ctx: () => ({ airlines: AIRLINES, selected: G && G.selected && alive(G.selected) ? telephony(G.selected.cs).text : null, callsigns: G ? G.ac.filter(alive).map(a => ({ cs: a.cs, tel: telephony(a.cs).text, ltr: a.ltr || null })) : [] }), onScope: gspExec }); } catch (e) { console.warn('shorthand', e); }
 window.__shTest = { AIRLINES, parse: (t, k) => parseSpeech(t, k), prep: t => { t = PM(t); return typeof fixSpeech === 'function' ? fixSpeech(t) : t; }, get G() { return G; }, select: a => selectAc(a), tel: cs => telephony(cs).text, alive: a => alive(a), ship: t => typeof shipCallParse === 'function' ? shipCallParse(t) : null, wx: t => typeof wxCallParse === 'function' ? wxCallParse(t) : null, mar: t => typeof MAR !== 'undefined' ? MAR.parse(t) : null };
@@ -2551,7 +2558,6 @@ function appLaunch(quiet, spec) {
   a.alt = 0; a.tgtAlt = isHelo(a) ? 1000 : 1200;   // angels 1 helos / 1.2 jets
   a.ias = a.tgtSpd = a.T.feed + APP_SPD_BONUS; a.trail = []; a.trailT = 0; a.checked = false; a.lastTx = G.t;
   { const f = appFuelSpec(a); a.fuel0 = f[0] * rand(0.92, 1); a.launchT = G.t; a.souls = Math.round(rand(f[2], f[3])); }
-  priOnlyMark(a);   // one primary-only launch per sim
   G.ac.push(a);
   if (!quiet) log('sys', `${a.cs} (${a.type}) launched from ${SHIP_NAME}, departure heading ${hdg3(Math.round(a.hdg))}, climbing to ${fmtAlt(a.tgtAlt)}.`);
   return a;
@@ -2655,6 +2661,7 @@ window.__HOFF = HOFF;
 setTimeout(() => LINK.setOn(LINK.on), 0);
 setInterval(() => { if (LINK.on) LINK.post({ type: 'hello' }); LINK.status(); }, 3000);
 function appCheckIn(a, again) {
+  if (!again) priOnlyMark(a);   // v93: primary-only = the 5th to check in
   a.tasks = {}; a.firstTx = true; a.cycle = (a.cycle || 0) + 1;   // grading resets every (re-)check-in
   a.checked = true; a.st = 'ctl'; a.needAlt = true; a.rcDone = false; a.identified = false; a.idLate = false; a.checkInT = G.t;
   a.dirty = false; a.landChk = false;
@@ -2788,7 +2795,7 @@ function sectorGuide(a) {   // fly to the sector's centre radial at the held ran
 }
 window.__sector = { inSector, SECTOR_CTR };
 function appStep(dt) {
-  G.t += dt;
+  G.t += dt; coneArmTick();
   if (!(G.shipSync && !G.shipSync.turns)) shipTurnStep();   // linked to a Marshal with ship turns off: BRC stays the same as Marshal
   const want = APP_COUNT[G.d.key || ''] || (G.d.name === 'Training' ? 4 : G.d.name === 'Normal' ? 6 : 8);
   instHold();
@@ -3070,8 +3077,14 @@ function appPanel() {
   if (stripsEl.innerHTML !== html) stripsEl.innerHTML = html;
 }
 /* AATCC-style PPI (SPN-43 air search look): black scope, green phosphor, 4 s sweep, TPX-42 style beacon blocks. Visual only. */
-const CONE_NM = 1.0;   // cone of confusion: hide primary + secondary (data block) within this NM of the ship (display only)
-const inCone = a => Math.hypot(a.e, a.n) < CONE_NM || !!(a.paint && Math.hypot(a.paint.e, a.paint.n) < CONE_NM);
+/* v93 cone of confusion: only an aircraft OVERFLYING the ship (directly on top, airborne transit) loses its paints.
+   Never a launch / departure / climb-out from the deck (it must first get outside CONE_ARM_NM, so anything that starts at the ship
+   is never hidden until it has left and come back over), never final / landing traffic, never below CONE_MIN_ALT. Display only. */
+const CONE_NM = 0.3, CONE_ARM_NM = 1.5, CONE_MIN_ALT = 500;
+const CONE_NO_PH = ['climbout', 'missed', 'final', 'visual', 'landed', 'withFinal', 'gone', 'crashed'], CONE_NO_ST = ['dep', 'final', 'mfinal', 'lowout', 'purple'];
+function coneArmTick() { if (G && G.ac) for (const a of G.ac) if (!a.coneArm && Math.hypot(a.e || 0, a.n || 0) > CONE_ARM_NM) a.coneArm = true; }
+function coneOk(a) { return !!a.coneArm && (a.alt || 0) >= CONE_MIN_ALT && !CONE_NO_PH.includes(a.phase) && !CONE_NO_ST.includes(a.st) && !a.withFinal; }
+const inCone = a => coneOk(a) && (Math.hypot(a.e, a.n) < CONE_NM || !!(a.paint && Math.hypot(a.paint.e, a.paint.n) < CONE_NM));
 const PPI = { G: '120,255,140', sweepT: 4000, lastAng: null, scan: null };
 function ppiCol(a) { return `rgba(${PPI.G},${a})`; }
 function appView(w, h) {   // rectangular scope geometry (CSS px): half-extents and px per NM
@@ -3200,8 +3213,9 @@ initVoiceStatus();
 requestAnimationFrame(frame);
 
 /* ===================== test hooks ===================== */
+window.__v93 = { G: () => G, schedPending: () => schedPending(), checkInNow: () => instCheckInNow(), appLaunch: q => appLaunch(q), makeAc: s => makeAc(s), inCone: a => inCone(a), coneOk: a => coneOk(a) };   // test hooks (cone / primary-only)
 window.PAR = {
-  priOnly(k = 0) { if (!G) return null; G.priAt = (G.priN || 0) + k; return G.priAt; },   // test: the k-th next arrival is the primary-only one
+  priOnly(k = 0) { if (!G) return null; G.priAt = (G.priN || 0) + k; G.priDone = false; return G.priAt; },   // test: the k-th next arrival is the primary-only one
   priState() { return G ? { priAt: G.priAt, priN: G.priN, pri: G.ac.filter(a => a.priStart).map(a => ({ cs: a.cs, sq: a.sq !== false })) } : null; },
   letters() { syncLetters(); return G ? G.ac.filter(a => a.ltr).map(a => ({ cs: a.cs, ltr: a.ltr, db: dbName(a), gsp: !!G.gsp })) : []; },
   launchTimes() { return G ? (G.launchLog || []).slice() : []; },
@@ -3339,7 +3353,7 @@ function shipReq() { try { const c = new BroadcastChannel('stinger-link'); c.pos
       hdg: Math.round(a.hdg || 0), tgtHdg: a.tgtHdg != null ? Math.round(a.tgtHdg) : null, ias: Math.round(a.ias || 0), tgtSpd: a.tgtSpd != null ? Math.round(a.tgtSpd) : null,
       gs: Math.round(a.gs || a.ias || 0), sq: a.sq !== false, priCut: !!a.priCut, buster: !!a.buster || (a.tgtSpd >= 450),
       freq: a.button || a.hoffFreq || (FIN ? 'purple' : PAGE === 'MARSHAL' ? 'red' : 'silver'), lead: a.lead || null, flight: a.flight || null, wingCs: a.wingCs || null,
-      mar: a.mar ? (a.mar.radial != null ? a.mar.radial + '/' + (a.mar.dme || '') : 'yes') : null, onScope: true };
+      mar: a.mar ? (a.mar.radial != null ? a.mar.radial + '/' + (a.mar.dme || '') : 'yes') : null, onScope: true, coneOk: typeof coneOk === 'function' && !FIN ? coneOk(a) : false };
     if (FIN) {   // course frame -> plan view relative to the ship (final course BRC, aircraft r NM behind touchdown, yft right of course)
       const brc = typeof BRC !== 'undefined' ? BRC : 360, r = a.r || 0, y = (a.yft || 0) / NMFT;
       o.e = r * Math.sin((brc + 180) * D2R) + y * Math.sin((brc + 90) * D2R); o.n = r * Math.cos((brc + 180) * D2R) + y * Math.cos((brc + 90) * D2R);

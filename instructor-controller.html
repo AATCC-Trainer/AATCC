@@ -300,8 +300,15 @@ function drawLand(cx, cy, RX, RY, sc, B) {   // same coastline as the master sco
   ctx.drawImage(landCv, cx - RX, cy - RY, 2 * RX, 2 * RY);
 }
 function brc() { for (const s of ['MARSHAL', 'APPROACH', 'FINAL']) if (live(s) && I.src[s].brc != null) return I.src[s].brc; const m = shipMaster(); if (m && m.fb != null) return +m.fb; return 360; }
-const CONE_NM = 1.0;   // cone of confusion: hide primary + secondary + history trail within this NM of the ship (display only)
-const inCone = a => Math.hypot(a.e, a.n) < CONE_NM || !!(I.disp[a.key] && Math.hypot(I.disp[a.key].e, I.disp[a.key].n) < CONE_NM);
+/* v93 cone of confusion: only aircraft overflying the ship (within 0.3 NM). The scope says which aircraft may be coned (coneOk: not a
+   launch / departure / climb-out, not final / landing, has been outside 1.5 NM, above 500 ft); older scopes: same arm-at-1.5-NM rule here. */
+const CONE_NM = 0.3, CONE_ARM_NM = 1.5, CONE_ARM = {};
+function coneElig(a) {
+  if (a.coneOk != null) return !!a.coneOk;
+  if (a.src === 'FINAL' || a.st === 'dep' || /climbout|missed|final|visual|landed|withFinal/.test(a.phase || '')) return false;
+  if (Math.hypot(a.e, a.n) > CONE_ARM_NM) CONE_ARM[a.key] = true; return !!CONE_ARM[a.key] && (a.alt || 0) >= 500;
+}
+const inCone = a => coneElig(a) && (Math.hypot(a.e, a.n) < CONE_NM || !!(I.disp[a.key] && Math.hypot(I.disp[a.key].e, I.disp[a.key].n) < CONE_NM));
 function draw() {
   const { cx, cy, RX, RY, sc } = geom(), P = (e, n) => [cx + e * sc, cy - n * sc];
   ctx.fillStyle = '#0b0d0b'; ctx.fillRect(0, 0, W, H);
@@ -332,7 +339,7 @@ function draw() {
     a.cone = inCone(a);   // quiet flag: over the ship, paints are suppressed (sim / voice still run)
     if (a.cone) { a.hit = null; delete HIT[a.key]; continue; }   // cone of confusion: hide primary, data block, and trail
     const Q = P(D.e, D.n);
-    ctx.fillStyle = ppi(0.3); for (const p of tr) { if (Math.hypot(p.e, p.n) < CONE_NM) continue; const q = P(p.e, p.n); ctx.fillRect(q[0] - 1, q[1] - 1, 2, 2); }
+    ctx.fillStyle = ppi(0.3); const ce = coneElig(a); for (const p of tr) { if (ce && Math.hypot(p.e, p.n) < CONE_NM) continue; const q = P(p.e, p.n); ctx.fillRect(q[0] - 1, q[1] - 1, 2, 2); }
     const sel = a.key === I.sel, f = freqOf(a), col = sel ? 'rgba(220,255,225,1)' : ppi(0.9);
     ctx.globalAlpha = a.priCut ? 0.35 : 1; ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); ctx.arc(Q[0], Q[1], 4.5, 0, 2 * Math.PI); ctx.stroke(); ctx.lineWidth = 1; ctx.globalAlpha = 1;
     if (sel) { ctx.strokeStyle = 'rgba(46,230,230,0.9)'; ctx.strokeRect(Q[0] - 9, Q[1] - 9, 18, 18); }
