@@ -458,7 +458,8 @@ const PAR_RMIN = -0.4, PAR_RMAX = 10.3, PAR_ZMAX = 3600, PAR_YMAX = 2200, PAR_SC
 const PC = { gd: 'rgba(120,255,140,', bg: '#0b0d0b', tgt: 'rgba(220,255,225,1)', hl: 'rgba(255,191,60,' };
 const parFont = sz => `${sz}px Consolas, Menlo, "DejaVu Sans Mono", monospace`;
 function parPaint(a) {   // the PAR paints each target once per scan (1 s), like Final
-  if (!a.pp || W.t - a.pp.t >= PAR_SCAN || a.pp.t > W.t) a.pp = { t: W.t, r: -a.y, yft: a.x * NM_FT, z: a.alt };
+  const k = Math.floor(W.t / PAR_SCAN + 1e-9);   // v94: one shared scan for every target (both panes already use the same sample)
+  if (!a.pp || a.pp.k !== k || a.pp.t > W.t) a.pp = { k, t: W.t, r: -a.y, yft: a.x * NM_FT, z: a.alt };
   return a.pp;
 }
 function drawPar(now) {
@@ -1214,7 +1215,7 @@ window.__intro = {
   get i() { return cur; }, get id() { return STEPS[cur].id; }, get type() { return STEPS[cur].type; }, get done() { return R.done; }, name: n => setName(STEPS[cur], n), speechOf: h => chunks(h).map(c => c.t), voice: () => ({ aero: aeroV && aeroV.name, pilot: pilotV && pilotV.name }), score: n => voiceScore({ name: n, lang: 'en-US' }),
   acs: () => W.acs.map(a => ({ cs: a.cs, x: +a.x.toFixed(2), y: +a.y.toFixed(2), hdg: Math.round(a.hdg) % 360, tgtHdg: a.tgtHdg, turn: a.turn, alt: Math.round(a.alt), tgtAlt: a.tgtAlt, spd: Math.round(a.spd), tgtSpd: a.tgtSpd, freq: a.freq, gpOn: a.gpOn, trackCL: a.trackCL, cleared: a.cleared, landed: a.landed, hit: a.hit ? { x: Math.round(a.hit.x), y: Math.round(a.hit.y) } : null })),
   go: i => show(i, true), steps: STEPS.map(s => ({ id: s.id, type: s.type, ch: s.ch, answer: s.answer, ok: s.opts ? s.opts.findIndex(o => o.ok) : null, target: s.target || null, hint: s.hint || null })),
-  res: () => res, fast: k => { window.__fastK = k; }, get frozen() { return !!W.frozen; }, get par() { return !!W.par; }, parHit: () => W.acs.map(a => a.parHit || null), get speed() { return SPEED; }, setSpeed: v => setSpeed(v), get cue() { return $('cue').textContent; }, get narr() { return R.narr; }, idle: () => speechIdle(), norm: t => normalizeSpeech(PM(t)).trim(),
+  res: () => res, fast: k => { window.__fastK = k; }, get frozen() { return !!W.frozen; }, get par() { return !!W.par; }, parHit: () => W.acs.map(a => a.parHit || null), parPaints: () => W.acs.map(a => a.pp ? { cs: a.cs, k: a.pp.k, t: a.pp.t } : null), get speed() { return SPEED; }, setSpeed: v => setSpeed(v), get cue() { return $('cue').textContent; }, get narr() { return R.narr; }, idle: () => speechIdle(), norm: t => normalizeSpeech(PM(t)).trim(),
 };
 </script>
 </body></html>

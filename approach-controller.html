@@ -209,6 +209,8 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div class="row" style="margin:4px 0 2px;gap:8px"><label for="sPhr2" style="color:var(--dim)">Phraseology</label><select id="sPhr2"><option value="ship">Ship: amphibious assault ship (LHA/LHD)</option><option value="tower">Tower: shore runway PAR</option></select></div>
     <div class="row" style="margin:6px 0 2px;gap:8px;align-items:center"><span style="color:var(--dim)">Link to Final Control</span>
       <button id="bLinkOff" style="min-height:34px">OFF (solo)</button><button id="bLinkOn" style="min-height:34px">ON (hand off)</button></div>
+    <div class="row" style="margin:4px 0 2px;gap:8px;align-items:center" title="Marshal hands aircraft to Approach on Silver (go silver / contact approach); both pages share Marshal's BRC"><span style="color:var(--dim)">Link Marshal ↔ Approach</span>
+      <button id="bMAOff" style="min-height:34px">OFF</button><button id="bMAOn" style="min-height:34px">ON (Silver handoffs)</button><span id="maStat" style="font-size:11.5px;color:#8fd8ff"></span></div>
     <div class="banner" id="startBanner"></div>
     <div class="row" style="margin-top:8px">
       <button id="bStart" class="wide on" style="font-size:16px;min-height:46px">▶ START</button>
@@ -270,7 +272,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 const DEG = Math.PI / 180;
 const FREQ_TAG = { purple: 'PRPL', copper: 'COPR', red: 'RED', silver: 'SLVR', blue: 'SLVR' };
 const freqTag = f => FREQ_TAG[String(f || '').toLowerCase()] || String(f || 'PRPL').toUpperCase().slice(0, 4);
-const FREQ_HELP = '<p><b>Permanent frequencies:</b> Marshal = <b>Red</b> · Approach = <b>Silver</b> · Final Control = <b>Purple</b> / <b>Copper</b>.</p>';
+const FREQ_HELP = '<p><b>Permanent frequencies:</b> Marshal = <b>Red</b> · Approach = <b>Silver</b> · Final Control = <b>Purple</b> / <b>Copper</b>.</p><p><b>Linking:</b> open the other positions in tabs of the same browser. <b>Link Marshal ↔ Approach</b> ON (on both start screens): aircraft Marshal sends to Silver appear here and check in with position, angels and state, alongside your own launches; this page uses Marshal\'s BRC and land. <b>Link to Final Control</b> ON: "go purple / copper" hands them to the Final page.</p>';
 
 const norm = h => ((h % 360) + 360) % 360;
 const angDiff = (a, b) => { let d = norm(a - b); return d > 180 ? d - 360 : d; };
@@ -861,7 +863,8 @@ function makeAc(spec) {
   if (!cs) {
     for (let i = 0; i < 40; i++) {
       const al = pick(AIRLINES); cs = al.icao + (rng() < 0.5 ? randi(11, 69) : randi(100, 499)); type = pick(al.types);
-      if (!G.ac.some(a => a.cs === cs) && !G.rejoin.some(j => j.cs === cs)) break;
+      let peer = false; try { peer = MA.taken(cs); } catch (e) {}   // v94: not a callsign in use on a linked Marshal page
+      if (!peer && !G.ac.some(a => a.cs === cs) && !G.rejoin.some(j => j.cs === cs)) break;
     }
   }
   if (!type) { const al = AIRLINES.find(a => cs.startsWith(a.icao)); type = al ? al.types[0] : 'MH60S'; }
@@ -2595,12 +2598,13 @@ const LINK = { on: localStorage.getItem('stingerLink') === '1', ch: null, lastAc
     for (const c of (a.climbout || [])) { if (c.k === 'hdg') coH = norm(c.v); else if (c.k === 'alt') coA = c.v; }
     const m = { type: 'handoff', callsign: a.tel || a.cs, acType: isHelo(a) ? 'helo' : 'jet', freq, bearingFromShip: Math.round(appBrg(a)) % 360, rangeNm: Math.round(appRng(a) * 10) / 10,
       altitudeFt: Math.round(a.alt), speedKt: Math.round(a.ias), headingDeg: Math.round(norm(a.hdg)), approachNum: Math.min(APP_MAX_PARS, (a.appCount || 0) + 1),
-      climbout: { heading: Math.round(coH), altitudeFt: coA }, simTime: Math.round(G.t), mv: MV, brc: TBRC, fb: FB(), dwh: DWH() };
+      climbout: { heading: Math.round(coH), altitudeFt: coA }, simTime: Math.round(G.t), mv: MV, brc: TBRC, fb: FB(), dwh: DWH(), src: 'APPROACH' };
     this.post(m); a.phase = 'withFinal'; a.accepted = false; a.linkCs = m.callsign; a.hoffFreq = freq || a.hoffFreq || 'purple'; a.button = a.button || a.hoffFreq; a.st = a.st === 'ctl' ? 'purple' : a.st;
     log('sys', `${a.cs} handed off to Final Control (${freq} / ${freqTag(freq)}, approach ${m.approachNum}/${APP_MAX_PARS}).`); refreshPanel(true);
   },
   complete(m) {
-    if (!G) return; const a = G.ac.find(x => x.phase === 'withFinal' && (x.linkCs === m.callsign || x.cs === m.callsign || x.tel === m.callsign)); if (!a) return;
+    if (!G || (m.to && m.to !== 'APPROACH')) return; /* v94: Final reports back to the page that handed the aircraft off */ const K = v => String(v || '').toUpperCase().replace(/\s+/g, ''), mc = K(m.callsign);   // Final sends its own form (GUNFIGHTER41)
+    const a = G.ac.find(x => x.phase === 'withFinal' && (K(x.linkCs) === mc || K(x.cs) === mc || K(x.tel) === mc)); if (!a) return;
     a.appCount = (a.appCount || 0) + 1;
     if (m.outcome === 'landed') { a.phase = 'gone'; a.removeAt = G.t; log('good', `${a.cs} landed aboard ${SHIP_NAME} (Final Control).`); return; }
     a.phase = 'app'; a.st = 'lowout'; a.recheckAt = G.t + 20; a.onFinal = false; a.turnDir = null; [a.e, a.n] = fromLoc(0, -0.3); a.hdg = BRC;
@@ -2646,6 +2650,7 @@ const HOFF = { seen: new Set(),
   },
   recv(m) {
     const t = m.type, cs = m.cs || m.callsign; if (!cs || !G) return;
+    if (this.isFin(m.by) && m.to && m.to !== 'APPROACH') return;   // v94: Final's accept is for the other linked page
     if ((t === 'handoffAccept' || t === 'handoff_accept') && this.isFin(m.by)) {
       const a = this.find(cs); if (a && a.hoff && a.hoff.dir === 'out' && (!m.id || m.id === a.hoff.id)) this.accepted(a, 'Final Control');
       LINK.lastAck = Date.now(); return; }
@@ -2657,6 +2662,74 @@ const HOFF = { seen: new Set(),
   }
 };
 window.__HOFF = HOFF;
+/* ---------- v94 Link Marshal ↔ Approach (BroadcastChannel 'stinger-link'), separate from the Final link ----------
+   Marshal "go silver" / "contact approach" hands the aircraft (full state) to the Approach page, where it checks in on Silver.
+   Messages: ma-hello {src, on, running, cs[]} every 1.5 s · ma-handoff {id, src:'MARSHAL', to:'APPROACH', ac{...}} · ma-ack {id, ok, cs, msg}.
+   Callsigns used on the peer page are avoided when making new aircraft, so Final never sees two of the same. */
+const MA = { on: localStorage.getItem('stingerMA') !== '0', ch: null, peerT: 0, peerOn: false, peerRun: false, other: new Set(), seen: new Map(),
+  self: 'APPROACH', peer: 'MARSHAL',
+  post(m) { try { this.ch && this.ch.postMessage(m); } catch (e) {} },
+  linked() { return this.on && this.peerOn && Date.now() - this.peerT < 5000; },
+  peerCs() { return this.linked() ? [...this.other] : []; },
+  taken(cs) { return this.linked() && this.other.has(cs); },
+  setOn(v) { this.on = !!v; try { localStorage.setItem('stingerMA', v ? '1' : '0'); } catch (e) {} this.hello(); this.paint(); },
+  init() { if (!('BroadcastChannel' in window)) return; this.ch = new BroadcastChannel('stinger-link'); this.ch.onmessage = e => { try { this.recv(e.data || {}); } catch (err) { try { console.error('MA', err); } catch (e2) {} } };
+    this.hello(); (window.BgClock ? f => BgClock.every(1500, f) : f => setInterval(f, 1500))(() => this.hello()); this.paint(); },
+  hello() { this.post({ type: 'ma-hello', src: this.self, on: this.on, running: !!(G && !G.over), cs: G && G.ac ? G.ac.filter(alive).map(a => a.cs) : [] }); },
+  paint() { const on = $('bMAOn'), off = $('bMAOff'); if (on) on.classList.toggle('on', this.on); if (off) off.classList.toggle('on', !this.on);
+    const st = $('maStat'); if (st) st.textContent = !this.on ? '' : this.linked() ? (this.peer === 'APPROACH' ? 'Approach' : 'Marshal') + ' page: connected' : (this.peer === 'APPROACH' ? 'Approach' : 'Marshal') + ' page: not detected'; },
+  recv(m) {
+    if (m.type === 'ma-hello' && m.src === this.peer) { const was = this.linked(); this.peerOn = !!m.on; this.peerRun = !!m.running; this.peerT = Date.now(); this.other = new Set(m.cs || []); if (was !== this.linked()) this.paint(); return; }
+    if (m.type === 'ma-handoff' && m.to === this.self) return this.take(m);
+    if (m.type === 'ma-ack' && m.to === this.self) return this.acked(m);
+  },
+  /* ---- sender (Marshal) ---- */
+  handoff(a) {
+    if (!this.linked() || !G || G.over) { if (this.on) log('warn', `Approach page not open / not linked (Link Marshal ↔ Approach): ${a.cs} leaves Marshal frequency.`); return false; }
+    const id = 'MA-' + a.cs + '-' + Date.now();
+    const ac = { cs: a.cs, type: a.type, helo: isHelo(a), e: +a.e.toFixed(4), n: +a.n.toFixed(4), alt: Math.round(a.alt), tgtAlt: Math.round(a.tgtAlt != null ? a.tgtAlt : a.alt), hdg: Math.round(norm(a.hdg)) || 360,
+      tgtHdg: Math.round(norm(a.tgtHdg != null ? a.tgtHdg : a.hdg)) || 360, ias: Math.round(a.ias), sq: a.lead ? true : a.sq !== false, priStart: !!a.priStart, priCut: !!a.priCut,
+      state: +appState(a).toFixed(2), souls: a.souls || 1, appCount: APP_MAX_PARS - 1, coneArm: !!a.coneArm, tbrc: TBRC, mv: MV };
+    const m = { type: 'ma-handoff', id, src: this.self, to: this.peer, ac };
+    a.maPend = { id, t0: Date.now() }; this.post(m);
+    const tm = setInterval(() => { if (!a.maPend || a.maPend.id !== id) return clearInterval(tm);
+      if (Date.now() - a.maPend.t0 > 4000) { clearInterval(tm); a.maPend = null; log('warn', `Approach page did not take ${a.cs}: it leaves Marshal frequency (not on the Approach scope).`); return; }
+      this.post(m); }, 700);
+    return true;
+  },
+  acked(m) {
+    if (!G) return; const a = G.ac.find(x => x.maPend && x.maPend.id === m.id); if (!a) return; a.maPend = null;
+    if (m.ok) { a.phase = 'gone'; a.removeAt = G.t; a.maDone = true; if (G.selected === a) G.selected = null; log('good', `${a.cs} handed off to Approach (Silver): now on the Approach scope.`); try { refreshPanel(true); } catch (e) {} }
+    else log('warn', `Approach page could not take ${a.cs} (${m.msg || 'refused'}): it leaves Marshal frequency.`);
+  },
+  /* ---- receiver (Approach) ---- */
+  take(m) {
+    const ack = (ok, msg) => this.post({ type: 'ma-ack', id: m.id, to: m.src, src: this.self, cs: m.ac && m.ac.cs, ok, msg });
+    if (this.seen.has(m.id)) return ack(this.seen.get(m.id), 'duplicate');
+    const s = m.ac || {};
+    if (!this.on) return ack(false, 'Link Marshal ↔ Approach is OFF on Approach');
+    if (!this.takeFn) return ack(false, 'not supported');
+    if (!G || G.over) return ack(false, 'Approach is not running');
+    if (G.ac.some(x => alive(x) && x.cs === s.cs)) { this.seen.set(m.id, false); return ack(false, 'callsign ' + s.cs + ' already on Approach'); }
+    let ok = false, msg = ''; try { ok = !!this.takeFn(s, m); } catch (e) { msg = 'error: ' + e.message; }
+    this.seen.set(m.id, ok); ack(ok, msg);
+  }
+};
+window.__MA = MA;
+MA.takeFn = s => {   // a Marshal aircraft handed to Approach: same position / altitude / heading / speed / squawk / fuel; checks in on Silver
+  const a = makeAc({ cs: s.cs, type: TYPES[s.type] ? s.type : undefined });
+  a.phase = 'app'; a.e = +s.e || 0; a.n = +s.n || 0; a.pars = 0; a.armed = false; a.turnDir = null;
+  a.hdg = norm(+s.hdg || BRC); a.tgtHdg = norm(+s.tgtHdg || a.hdg); a.alt = +s.alt || 3000; a.tgtAlt = +s.tgtAlt || a.alt; a.ias = +s.ias || a.T.feed;
+  a.trail = []; a.trailT = 0; a.checked = false; a.lastTx = G.t; a.fuel0 = +s.state || 3; a.launchT = G.t; a.souls = +s.souls || 1;
+  a.appCount = s.appCount != null ? +s.appCount : APP_MAX_PARS - 1; a.priCounted = true; a.sq = s.sq !== false; a.priStart = !!s.priStart; a.priCut = !!s.priCut;
+  a.coneArm = !!s.coneArm || Math.hypot(a.e, a.n) > CONE_ARM_NM; a.fromMar = true; a.hoffFreq = null; a.button = null;
+  G.ac.push(a); const spd = a.ias; appCheckIn(a, false); a.ias = a.tgtSpd = spd;
+  log('sys', `${a.cs} (${a.type}) handed off from Marshal: checking in on Silver, ${appRng(a).toFixed(1)} NM, ${fmtAlt(a.alt)}${a.sq ? '' : ' (primary only)'}.`);
+  if (s.tbrc != null && Math.round(+s.tbrc) % 360 !== Math.round(TBRC) % 360) log('warn', `Marshal is on BRC ${h3z(+s.tbrc)}, this run uses BRC ${h3z(TBRC)}: start both runs linked so they match.`);
+  try { refreshPanel(true); } catch (e) {} return true;
+};
+setTimeout(() => MA.init(), 0);
+$('bMAOn').onclick = () => { MA.setOn(true); try { shipReq(); } catch (e) {} }; $('bMAOff').onclick = () => { MA.setOn(false); try {  } catch (e) {} };
 
 setTimeout(() => LINK.setOn(LINK.on), 0);
 setInterval(() => { if (LINK.on) LINK.post({ type: 'hello' }); LINK.status(); }, 3000);
@@ -2669,13 +2742,14 @@ function appCheckIn(a, again) {
   const f = (Math.floor(appState(a) * 10) / 10).toFixed(1), [whole, dec] = f.split('.');
   const fSay = (+whole >= 10 ? sayTwo(+whole) : NUMW[+whole]) + ' point ' + NUMW[+dec];
   const n = a.souls, sw = n === 1 ? 'soul' : 'souls';
-  const pre = again ? 'off the low approach, ' : 'airborne, ';
+  const pre = again ? 'off the low approach, ' : a.fromMar ? '' : 'airborne, ', posAlso = again || a.fromMar;   // v94: handed off from Marshal = position + angels, no 'airborne'
   const pB = String(Math.round(appBrg(a)) % 360 || 360).padStart(3, '0'), pR0 = appRng(a), pR = pR0 < 1 ? (Math.round(pR0 * 10) / 10).toFixed(1) : String(Math.round(pR0));
   const pRSay = pR.includes('.') ? pR.split('.').map(d => DIGW[+d]).join(' point ') : (+pR >= 10 ? sayTwo(+pR) : NUMW[+pR]);
   const posit = `${pB} for ${pR} from mother, `, positSay = `${pB.split('').map(d => DIGW[+d]).join(' ')} for ${pRSay} from mother, `;
   a.checkInPosit = { brg: appBrg(a), rng: pR0, text: posit };
-  pilotSay(a, `${SHIP_NAME} Approach, ${a.tel}, ${pre}${again ? posit : ""}state ${f}, ${n} ${sw} on board, request practice PAR approach.`,
-    `${SHIP_NAME} Approach, ${a.telSay}, ${pre}${again ? positSay : ""}state ${fSay}, ${NUMW[n]} ${sw} on board, request practice P A R approach.`);
+  const angT = a.fromMar && !again ? `angels ${appAngels(a.alt)}, ` : '', angS = a.fromMar && !again ? `angels ${appAngelsSay(a.alt)}, ` : '', req = a.fromMar && !again ? 'PAR approach' : 'practice PAR approach', reqS = a.fromMar && !again ? 'P A R approach' : 'practice P A R approach';
+  pilotSay(a, `${SHIP_NAME} Approach, ${a.tel}, ${pre}${posAlso ? posit : ""}${angT}state ${f}, ${n} ${sw} on board, request ${req}.`,
+    `${SHIP_NAME} Approach, ${a.telSay}, ${pre}${posAlso ? positSay : ""}${angS}state ${fSay}, ${NUMW[n]} ${sw} on board, request ${reqS}.`);
   if (!G.selected) selectAc(a);
 }
 /* ---------- ship turns: random 1-15 deg port/starboard, 5 s warning, ~1 deg/s ---------- */
@@ -3321,7 +3395,7 @@ function shipSyncRecv(m) {
 }
 function shipMaster() { const now = Date.now(), i = SHIPSYNC.inst, mr = SHIPSYNC.mar;
   if (i && now - i.rx < 4000 && i.tbrc != null) return i;   // Instructor open and linked to Marshal + Approach
-  if (mr && now - mr.rx < 4000 && mr.tbrc != null && mr.linked && (LINK.on || linkChoice)) return mr;   // Marshal + Approach linked with each other
+  if (mr && now - mr.rx < 4000 && mr.tbrc != null && mr.linked && (LINK.on || linkChoice || MA.on)) return mr;   // Marshal + Approach linked with each other
   return null; }
 function shipSyncTick() {
   const m = shipMaster(); if (!m) return;
@@ -3334,7 +3408,7 @@ function shipSyncTick() {
   try { applyPhrUI(); } catch (e) {}
 }
 function shipStateMsg() { const on = !!(LAND && LAND.polys && LAND.polys.length), ms = G && !G.over ? G.shipSync : shipMaster();
-  return { type: 'ship-state', src: 'APPROACH', master: false, synced: !!ms, linked: !!(LINK.on || linkChoice), running: !!(G && !G.over), tbrc: TBRC, mv: MV, fb: BRC, dwh: DWH(), landSeed: LAND ? LAND.seed : null, landOn: on, land: LAND && LAND.desc ? LAND.desc : on ? 'land' : 'open water', polys: on ? shipPolys() : [] }; }
+  return { type: 'ship-state', src: 'APPROACH', master: false, synced: !!ms, linked: !!(LINK.on || linkChoice || MA.on), running: !!(G && !G.over), tbrc: TBRC, mv: MV, fb: BRC, dwh: DWH(), landSeed: LAND ? LAND.seed : null, landOn: on, land: LAND && LAND.desc ? LAND.desc : on ? 'land' : 'open water', polys: on ? shipPolys() : [] }; }
 function shipReq() { try { const c = new BroadcastChannel('stinger-link'); c.postMessage({ type: 'ship-req', src: 'APPROACH' }); setTimeout(() => c.close(), 500); } catch (e) {} }   // ask a linked Marshal for its BRC / land now (late join / relink)
 /* AATCC Instructor link hook (BroadcastChannel 'stinger-link'). Loaded by Marshal, Approach and Final.
    Always listening (independent of the position's own Link toggle). Messages:
@@ -3353,7 +3427,7 @@ function shipReq() { try { const c = new BroadcastChannel('stinger-link'); c.pos
       hdg: Math.round(a.hdg || 0), tgtHdg: a.tgtHdg != null ? Math.round(a.tgtHdg) : null, ias: Math.round(a.ias || 0), tgtSpd: a.tgtSpd != null ? Math.round(a.tgtSpd) : null,
       gs: Math.round(a.gs || a.ias || 0), sq: a.sq !== false, priCut: !!a.priCut, buster: !!a.buster || (a.tgtSpd >= 450),
       freq: a.button || a.hoffFreq || (FIN ? 'purple' : PAGE === 'MARSHAL' ? 'red' : 'silver'), lead: a.lead || null, flight: a.flight || null, wingCs: a.wingCs || null,
-      mar: a.mar ? (a.mar.radial != null ? a.mar.radial + '/' + (a.mar.dme || '') : 'yes') : null, onScope: true, coneOk: typeof coneOk === 'function' && !FIN ? coneOk(a) : false };
+      mar: a.mar ? (a.mar.radial != null ? a.mar.radial + '/' + (a.mar.dme || '') : 'yes') : null, onScope: true, maPend: !!a.maPend, coneOk: typeof coneOk === 'function' && !FIN ? coneOk(a) : false };
     if (FIN) {   // course frame -> plan view relative to the ship (final course BRC, aircraft r NM behind touchdown, yft right of course)
       const brc = typeof BRC !== 'undefined' ? BRC : 360, r = a.r || 0, y = (a.yft || 0) / NMFT;
       o.e = r * Math.sin((brc + 180) * D2R) + y * Math.sin((brc + 90) * D2R); o.n = r * Math.cos((brc + 180) * D2R) + y * Math.cos((brc + 90) * D2R);

@@ -199,7 +199,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
       <div class="diff" data-d="normal"><b>Normal</b><span>5 arrivals, firmer pilots. No hints.</span></div>
       <div class="diff" data-d="gusty"><b>Rush</b><span>7 arrivals, livelier pilots. No hints.</span></div>
     </div>
-    <label class="row" style="margin:4px 0 2px;gap:8px;cursor:pointer;color:var(--dim)"><input type="checkbox" id="linkChk"> Link to Approach Control (aircraft come from the Approach Controller sim)</label>
+    <label class="row" style="margin:4px 0 2px;gap:8px;cursor:pointer;color:var(--dim)"><input type="checkbox" id="linkChk"> Link to Marshal / Approach (aircraft come from the Marshal and Approach Controller sims, both at once)</label>
     <div class="row" style="margin:4px 0 2px;gap:8px"><label for="sPhr2" style="color:var(--dim)">Phraseology</label><select id="sPhr2"><option value="ship">Ship: amphibious assault ship (LHA/LHD)</option><option value="tower">Tower: shore runway PAR</option></select></div>
     <div class="banner" id="startBanner"></div>
     <div id="iosHint">📱 Voice works best in a Safari tab, not the home-screen app.</div>
@@ -267,7 +267,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
 const DEG = Math.PI / 180;
 const FREQ_TAG = { purple: 'PRPL', copper: 'COPR', red: 'RED', silver: 'SLVR', blue: 'SLVR' };
 const freqTag = f => FREQ_TAG[String(f || '').toLowerCase()] || String(f || 'PRPL').toUpperCase().slice(0, 4);
-const FREQ_HELP = '<p><b>Permanent frequencies:</b> Marshal = <b>Red</b> · Approach = <b>Silver</b> · Final Control = <b>Purple</b> / <b>Copper</b>.</p>';
+const FREQ_HELP = '<p><b>Permanent frequencies:</b> Marshal = <b>Red</b> · Approach = <b>Silver</b> · Final Control = <b>Purple</b> / <b>Copper</b>.</p><p><b>Linking:</b> tick <b>Link to Marshal / Approach</b> and Final takes handoffs (go purple / copper) from the Marshal and Approach pages at the same time, on Marshal\'s final bearing, and reports each landing or wave-off back to the page that sent it.</p>';
 
 const norm = h => ((h % 360) + 360) % 360;
 const angDiff = (a, b) => { let d = norm(a - b); return d > 180 ? d - 360 : d; };
@@ -783,7 +783,8 @@ function linkHandoff(m) {
     else if (setBRC(fc)) log('sys', `Approach Control: final bearing ${BRC3}${src} (wind ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}).`);
   }
   const cs = String(m.callsign || 'UNKN01').toUpperCase().replace(/\s+/g, '');
-  { const ex = G.ac.find(a => a.cs === cs && a.phase !== 'gone'); if (ex) { if (!ex.hoff) hoffStart(ex, 'APP'); return; } }   // already known: (re)flash as an APP handoff
+  { const ex = G.ac.find(a => a.cs === cs && a.phase !== 'gone' && a.removeAt == null);
+    if (ex) { if (m.src && ex.link && ex.link.src && ex.link.src !== m.src) { log('warn', `Callsign clash: ${cs} from ${m.src} while ${cs} from ${ex.link.src} is still on final; ignored.`); return; } if (!ex.hoff) hoffStart(ex, 'APP'); return; } }   // already known: (re)flash as an APP handoff
   const n = +m.approachNum || 3, prac = n < 3;
   const rel = angDiff(+m.bearingFromShip || 0, norm(BRC + 180));   // bearing relative to the reciprocal of the final course
   const rng0 = Math.max(0, +m.rangeNm || 0);
@@ -798,11 +799,11 @@ function linkHandoff(m) {
   a.ias = m.speedKt != null ? Math.max(40, +m.speedKt) : a.T.feed; a.tgtSpd = a.T.vapp;
   a.linkCut = clamp(Math.abs(angDiff(a.hdg, RWY)), 10, 45);   // cut angle the pilot uses to join final while outside PAR coverage
   a.phase = 'linkin'; a.turnDir = null; a.lastTx = a.lastRealTx = G.t;
-  a.link = { freq: m.freq, approachNum: n, climbout: m.climbout || null, simTime: m.simTime };
+  a.link = { freq: m.freq, approachNum: n, climbout: m.climbout || null, simTime: m.simTime, src: m.src === 'MARSHAL' ? 'MARSHAL' : m.src === 'APPROACH' ? 'APPROACH' : null };   // v94: who handed it off (Final reports back to that page)
   if (String(m.approachType || '').toLowerCase() === 'asr') { a.asr = true; a.mda = ASR_MDA; a.asrStarted = true; }
   G.ac.push(a);
   hoffStart(a, 'APP');
-  log('sys', `Approach Control handoff: ${cs} (${a.type})${m.freq ? ' on ' + m.freq : ''}, ${rng0.toFixed(1)} NM, ${fmtAlt(a.z)} ft, heading ${hdg3(a.hdg)}, approach ${n}${prac ? ' (practice)' : ' (full stop)'}.`);
+  log('sys', `${m.src === 'MARSHAL' ? 'Marshal' : 'Approach'} Control handoff: ${cs} (${a.type})${m.freq ? ' on ' + m.freq : ''}, ${rng0.toFixed(1)} NM, ${fmtAlt(a.z)} ft, heading ${hdg3(a.hdg)}, approach ${n}${prac ? ' (practice)' : ' (full stop)'}.`);
   linkCover(a);
 }
 // linked aircraft is shown and checks in as soon as it is inside the PAR display coverage
@@ -815,7 +816,7 @@ function linkComplete(a) {
   if (!G || !G.linked || !a || a.linkSent) return;
   a.linkSent = true;
   const outcome = a.result && a.result.landed ? 'landed' : a.result && a.result.practice ? 'lowapproach' : 'waveoff';
-  linkPost({ type: 'complete', callsign: a.cs, outcome });
+  linkPost({ type: 'complete', callsign: a.cs, outcome, to: a.link && a.link.src || undefined });
 }
 
 /* ---- flashing handoffs. The "data block" is the aircraft's side-panel strip (the scope carries no text).
@@ -832,7 +833,7 @@ function hoffAccept(a, byTx) {   // Final accepts an APP handoff (click; or impl
   if (!a || !a.hoff || a.hoff.from !== 'APP') return false;
   a.hoff = null; a.owner = 'FIN'; a.lastTx = Math.max(a.lastTx, G.t); a.lastRealTx = Math.max(a.lastRealTx, G.t);
   log('sys', `Handoff accepted${byTx ? ' (by transmitting)' : ''}: you have ${a.cs}.`);
-  if (G.linked) linkPost({ type: 'handoff_accept', callsign: a.cs, by: 'FIN' });
+  if (G.linked) linkPost({ type: 'handoff_accept', callsign: a.cs, by: 'FIN', to: a.link && a.link.src || undefined });
   refreshPanel(true); return true;
 }
 function hoffAccepted(cs) {   // Approach accepted our FIN handoff
@@ -1462,19 +1463,16 @@ function doCrash(a) {
 }
 
 /* ===================== radar sweep (display + grading only; physics untouched) ===================== */
-// Each target is re-painted only when the scan passes it; between scans the last painted position is held.
-// Azimuth and elevation scans alternate: the elevation scan is offset by SWEEP_EL_OFFSET of a period.
-const SWEEP_PAR_S = 1.0;        // s: PAR scan period (azimuth and elevation each)
+// v94: one scan per period, shared by both panes and every target: on each scan the elevation (top) and azimuth (bottom)
+// paints are taken from the SAME sample at the same instant, so both panes (and all targets) jump together; held in between.
+const SWEEP_PAR_S = 1.0;        // s: PAR scan period (azimuth and elevation together)
 const SWEEP_ASR_S = 4.5;        // s: ASR (surveillance) update period, also used for aircraft in the hold (plan view)
-const SWEEP_EL_OFFSET = 0.5;    // fraction of a period between the azimuth and the elevation scan
 const sweepPer = a => (a.asr || a.phase === 'queue') ? SWEEP_ASR_S : SWEEP_PAR_S;
-const sweepFracA = yft => (YMAX - clamp(yft, -YMAX, YMAX)) / (2 * YMAX);   // 0 = top of the azimuth panel, 1 = bottom
-const sweepFracE = z => 1 - clamp(z / ZMAX, 0, 1);                          // 0 = top of the elevation panel, 1 = bottom
 function sweepPaint(a) {
-  const per = sweepPer(a);
-  const kA = Math.floor(G.t / per - sweepFracA(a.yft || 0)), kE = Math.floor(G.t / per - SWEEP_EL_OFFSET - sweepFracE(a.z || 0));
-  if (!a.pA || a.kA !== kA || a.pA.phase !== a.phase) { a.kA = kA; a.pA = { r: a.r, yft: a.yft, z: a.z, px: a.px, py: a.py, alt: a.alt, phase: a.phase, t: G.t, gs: a.gs, hdg: a.hdg, tgtHdg: a.tgtHdg }; }
-  if (!a.pE || a.kE !== kE || a.pE.phase !== a.phase) { a.kE = kE; a.pE = { r: a.r, z: a.z, phase: a.phase, t: G.t, vs: a.vs }; }
+  const k = Math.floor(G.t / sweepPer(a) + 1e-9);
+  if (!a.pA || !a.pE || a.kA !== k || a.pA.phase !== a.phase) { a.kA = a.kE = k;
+    a.pA = { r: a.r, yft: a.yft, z: a.z, px: a.px, py: a.py, alt: a.alt, phase: a.phase, t: G.t, gs: a.gs, hdg: a.hdg, tgtHdg: a.tgtHdg };
+    a.pE = { r: a.r, z: a.z, phase: a.phase, t: G.t, vs: a.vs }; }
 }
 const paintA = a => a.pA || a, paintE = a => a.pE || a;   // painted (displayed) azimuth / elevation position
 
@@ -2529,7 +2527,7 @@ function draw(now) {
   ctx.restore();
   // optional faint scan lines (Settings: Radar scan line), in sync with the PAR target updates
   if (G && S.sweep) {
-    const fA = (G.t / SWEEP_PAR_S) % 1, fE = (G.t / SWEEP_PAR_S - SWEEP_EL_OFFSET + 1) % 1;
+    const fA = (G.t / SWEEP_PAR_S) % 1, fE = fA;   // v94: both panes scan together
     glow(false); ctx.strokeStyle = C.gd + '0.10)'; ctx.lineWidth = 1;
     const yA = px5(ay(YMAX - fA * 2 * YMAX)), yE = px5(ez(ZMAX * (1 - fE)));
     line(L.left, yA, L.left + L.plotW, yA); line(L.left, yE, L.left + L.plotW, yE);

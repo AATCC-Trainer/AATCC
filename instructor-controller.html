@@ -150,9 +150,11 @@ $('rgSel').onchange = () => { I.ring = +$('rgSel').value; lsSet('instRing', I.ri
 $('ovClose').onclick = () => $('ov').classList.add('hidden');
 /* ---------- aircraft model ---------- */
 function allAc() {
-  const out = [], finLive = live('FINAL');
+  const out = [], finLive = live('FINAL'), appLive = links().includes('APPROACH') && live('APPROACH');
   for (const s of links()) { if (!live(s) || !I.src[s].ac) continue;
-    for (const a of I.src[s].ac) { if (s !== 'FINAL' && finLive && a.phase === 'withFinal') continue; out.push(Object.assign({ src: s, key: s + ':' + a.uid }, a)); } }
+    for (const a of I.src[s].ac) { if (s !== 'FINAL' && finLive && a.phase === 'withFinal') continue;
+      if (s === 'MARSHAL' && a.maPend && appLive) continue; /* v94: mid-handoff to the Approach page: drawn once (Approach's copy) */
+      out.push(Object.assign({ src: s, key: s + ':' + a.uid }, a)); } }
   return out;
 }
 function selAc() { return I.sel ? allAc().find(a => a.key === I.sel) : null; }
