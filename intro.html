@@ -403,38 +403,40 @@ function draw(now) {
   const P = (x, y) => [cx + x * sc, cy - y * sc];
   const small = Math.min(CW, CH) < 420, fs = small ? 10 : 12;
   ctx.font = `${fs}px Consolas,Menlo,"DejaVu Sans Mono",monospace`;
-  ctx.fillStyle = '#071209'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
-  ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+  // v95: square scope (like the Marshal / Approach scopes); R is the half-width, so the range reads to each side and the corners reach a bit further
+  const edge = (nx, ny) => R / Math.max(Math.abs(nx), Math.abs(ny), 1e-6);   // distance from centre to the square's edge along a bearing
+  ctx.fillStyle = '#071209'; ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+  ctx.save(); ctx.beginPath(); ctx.rect(cx - R, cy - R, 2 * R, 2 * R); ctx.clip();
   const sw = W.sweep * Math.PI / 180;
-  for (let k = 0; k < 24; k++) { const a1 = sw - k * 0.03, a0 = a1 - 0.03; ctx.fillStyle = `rgba(110,255,140,${0.16 * (1 - k / 24)})`; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, a0 - Math.PI / 2, a1 - Math.PI / 2); ctx.closePath(); ctx.fill(); }
+  for (let k = 0; k < 24; k++) { const a1 = sw - k * 0.03, a0 = a1 - 0.03; ctx.fillStyle = `rgba(110,255,140,${0.16 * (1 - k / 24)})`; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R * 1.5, a0 - Math.PI / 2, a1 - Math.PI / 2); ctx.closePath(); ctx.fill(); }
   const step = W.range <= 10 ? 2 : 5;
-  for (let r = step; r <= W.range + 0.01; r += step) {
+  for (let r = step; r <= W.range * 1.42 + 0.01; r += step) {
     const hl = W.hl.ring === r;
     ctx.strokeStyle = hl ? 'rgba(255,191,60,0.9)' : 'rgba(120,255,140,0.22)'; ctx.lineWidth = hl ? 2 : 1;
     ctx.beginPath(); ctx.arc(cx, cy, r * sc, 0, Math.PI * 2); ctx.stroke();
-    if (W.hl.rings || hl || W.range <= 10) { ctx.fillStyle = hl || W.hl.rings ? 'rgba(255,191,60,0.9)' : 'rgba(168,240,178,0.5)'; ctx.fillText(r + (W.hl.rings ? ' NM' : ''), cx + r * sc * 0.7071 + 3, cy + r * sc * 0.7071 - 3); }
+    if (r <= W.range + 0.01 && (W.hl.rings || hl || W.range <= 10)) { ctx.fillStyle = hl || W.hl.rings ? 'rgba(255,191,60,0.9)' : 'rgba(168,240,178,0.5)'; ctx.fillText(r + (W.hl.rings ? ' NM' : ''), cx + r * sc * 0.7071 + 3, cy + r * sc * 0.7071 - 3); }
   }
   ctx.lineWidth = 1;
   if (W.course) { ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(180,140,255,0.6)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + R); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = 'rgba(180,140,255,0.85)'; const ft = 'FINAL 360'; ctx.fillText(ft, cx - ctx.measureText(ft).width - 6, cy + R * 0.72); }
   if (W.hold) { const H = P(W.hold.x, W.hold.y); ctx.strokeStyle = 'rgba(255,90,110,0.5)'; ctx.setLineDash([4, 5]); ctx.beginPath(); ctx.arc(H[0], H[1], W.hold.r * sc, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = 'rgba(255,90,110,0.9)'; ctx.fillText('MARSHAL', H[0] - 26, H[1] - W.hold.r * sc - 5); }
   ctx.restore();
-  ctx.strokeStyle = 'rgba(120,255,140,0.55)'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(120,255,140,0.55)'; ctx.strokeRect(cx - R, cy - R, 2 * R, 2 * R);
   for (let d = 0; d < 360; d += 10) {
-    const r = d * Math.PI / 180, nx = Math.sin(r), ny = -Math.cos(r), hl = W.hl.brg === d || (W.hl.brgs && d % 90 === 0);
+    const r = d * Math.PI / 180, nx = Math.sin(r), ny = -Math.cos(r), hl = W.hl.brg === d || (W.hl.brgs && d % 90 === 0), E = edge(nx, ny);
     ctx.strokeStyle = hl ? '#ffbf3c' : 'rgba(120,255,140,0.5)'; ctx.lineWidth = hl ? 2 : 1;
-    const l = d % 30 === 0 ? 9 : 4; ctx.beginPath(); ctx.moveTo(cx + nx * R, cy + ny * R); ctx.lineTo(cx + nx * (R - l), cy + ny * (R - l)); ctx.stroke();
-    if (d % 30 === 0 && (!small || d % 90 === 0 || W.hl.brgs)) { ctx.fillStyle = hl ? '#ffbf3c' : 'rgba(168,240,178,0.8)'; const t = String(d).padStart(3, '0'), tw = ctx.measureText(t).width; ctx.fillText(t, cx + nx * (R + 12) - tw / 2, cy + ny * (R + 12) + fs / 3); }
-    if (W.hl.brg === d) { ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + nx * R, cy + ny * R); ctx.stroke(); ctx.setLineDash([]); }
+    const l = d % 30 === 0 ? 9 : 4; ctx.beginPath(); ctx.moveTo(cx + nx * E, cy + ny * E); ctx.lineTo(cx + nx * (E - l), cy + ny * (E - l)); ctx.stroke();
+    if (d % 30 === 0 && (!small || d % 90 === 0 || W.hl.brgs)) { ctx.fillStyle = hl ? '#ffbf3c' : 'rgba(168,240,178,0.8)'; const t = String(d).padStart(3, '0'), tw = ctx.measureText(t).width, k = 12 / Math.max(Math.abs(nx), Math.abs(ny)); ctx.fillText(t, cx + nx * (E + Math.min(k, 18)) - tw / 2, cy + ny * (E + Math.min(k, 18)) + fs / 3); }
+    if (W.hl.brg === d) { ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + nx * E, cy + ny * E); ctx.stroke(); ctx.setLineDash([]); }
   }
   ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(160,255,175,0.75)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.sin(sw) * R, cy - Math.cos(sw) * R); ctx.stroke();
+  { const E = edge(Math.sin(sw), Math.cos(sw)); ctx.strokeStyle = 'rgba(160,255,175,0.75)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.sin(sw) * E, cy - Math.cos(sw) * E); ctx.stroke(); }
   ctx.fillStyle = W.hl.ship ? '#ffbf3c' : '#cfe8d2'; ctx.beginPath(); ctx.moveTo(cx, cy - 9); ctx.lineTo(cx + 4, cy - 3); ctx.lineTo(cx + 4, cy + 8); ctx.lineTo(cx - 4, cy + 8); ctx.lineTo(cx - 4, cy - 3); ctx.closePath(); ctx.fill();
   ctx.fillStyle = W.hl.ship ? '#ffbf3c' : 'rgba(207,232,210,0.7)'; ctx.fillText('STINGER', cx + 8, cy + 18);
   for (const a of W.acs) {
     if (a.landed) { a.hit = null; continue; }
     const Qp = P(a.paint.x, a.paint.y); a.hit = { x: Qp[0], y: Qp[1] };
-    if (Math.hypot(Qp[0] - cx, Qp[1] - cy) > R + 4) { a.hit = null; continue; }
+    if (Math.abs(Qp[0] - cx) > R + 4 || Math.abs(Qp[1] - cy) > R + 4) { a.hit = null; continue; }   // square scope
     const col = a.freq && a.freq !== 'none' ? FCOL[a.freq] : '#a8f0b2', showB = W.vis !== 'primary', showP = W.vis !== 'secondary';
     if (showP) { a.trail.forEach((t, i) => { const T = P(t.x, t.y); ctx.fillStyle = `rgba(150,255,165,${0.12 + 0.1 * i})`; ctx.beginPath(); ctx.arc(T[0], T[1], 1.8, 0, Math.PI * 2); ctx.fill(); });
       ctx.fillStyle = 'rgba(190,255,200,0.95)'; ctx.fillRect(Qp[0] - 3, Qp[1] - 2, 6, 4); }
@@ -521,7 +523,7 @@ const TTS = 'speechSynthesis' in window;
 const LS_VOICE = 'aatccIntroVoice', LS_NAME = 'aatccIntroName';
 let voices = [], aeroV = null, pilotV = null;
 // robotic / novelty voices (macOS Eloquence + effects voices) never get picked automatically
-const NOVELTY = /\b(albert|bad news|bahh|bells|boing|bubbles|cellos|wobble|zarvox|trinoids|whisper|jester|organ|superstar|good news|hysterical|deranged|eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley|ralph|junior|kathy|princess|vicki|victoria)\b/i;
+const NOVELTY = /\b(albert|bad news|bahh|bells|boing|bubbles|cellos|wobble|zarvox|trinoids|whisper|jester|organ|superstar|good news|hysterical|deranged|eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley|ralph|junior|kathy|princess|vicki|victoria|agnes|bruce)\b/i;
 const MALE = /\b(evan|nathan|aaron|alex|tom|fred|daniel|arthur|oliver|guy|andrew|brian|christopher|eric|roger|steffan|ryan|davis|tony|jason|william|liam|thomas|james|david|mark|george|noah|male)\b/i;
 const QUALITY = /enhanced|premium|natural|neural|online/i;
 function voiceScore(v) {
@@ -547,7 +549,7 @@ function loadVoices() {
   aeroV = (want && voices.find(v => v.voiceURI === want || v.name === want)) || ranked[0] || null;
   // pilot: a different male voice if the device has one (prefer a different base name, e.g. not Evan vs Evan (Enhanced))
   const base = v => v.name.replace(/\s*\(.*\)\s*/g, '').trim().toLowerCase();
-  pilotV = ranked.find(v => aeroV && base(v) !== base(aeroV) && voiceScore(v) >= 40) || ranked.find(v => v !== aeroV && voiceScore(v) > 0) || aeroV;
+  pilotV = ranked.find(v => aeroV && base(v) !== base(aeroV) && voiceScore(v) >= 40) || ranked.find(v => v !== aeroV && voiceScore(v) > 12) || aeroV;   // v95: never fall back to robotic Fred / novelty voices for the pilot
   fillVoicePicker(ranked);
 }
 if (TTS) { loadVoices(); try { speechSynthesis.addEventListener('voiceschanged', loadVoices); } catch (e) { try { speechSynthesis.onvoiceschanged = loadVoices; } catch (e2) {} } setTimeout(loadVoices, 800); setTimeout(loadVoices, 2500); }
@@ -603,7 +605,7 @@ function nextChunk() {
   const wd = setTimeout(done, (2500 + c.t.split(' ').length * 650) / Math.min(1, SPEED));   // watchdog in case onend never fires (Safari)
   try {
     const u = new SpeechSynthesisUtterance(c.t); u.lang = 'en-US';
-    if (c.who === 'pilot') { if (pilotV) u.voice = pilotV; u.rate = Math.min(2, 1.13 * SPEED); u.pitch = pilotV === aeroV ? 0.8 : 0.9; u.volume = 0.9; squelch(); }
+    if (c.who === 'pilot') { if (pilotV) u.voice = pilotV; u.rate = Math.min(1.8, 1.08 * SPEED); u.pitch = pilotV === aeroV ? 0.94 : 1;   /* v95: natural pitch (0.8 sounded eerie) */ u.volume = 0.9; squelch(); }
     else { if (aeroV) u.voice = aeroV; u.rate = SPEED; u.pitch = 0.97; u.volume = 1; }
     u.onstart = () => { if (c.who === 'aero' && gen === sqGen) setTalking(true); };
     u.onend = done; u.onerror = done;
@@ -626,8 +628,8 @@ const userName = () => { try { return (localStorage.getItem(LS_NAME) || '').trim
 const CHAPTERS = ['Briefing', 'The scope', 'The flow', 'Phraseology', 'Mission', 'Final'], CH_SHORT = ['Brief', 'Scope', 'Flow', 'Radio', 'Mission', 'Final'];
 const LT21 = o => Object.assign({ cs: 'LTNG21', code: '4213' }, o);
 const LT24 = o => Object.assign({ cs: 'LTNG24', code: '4247' }, o);
-const NH41 = o => Object.assign({ cs: 'NHWK41', code: '4302' }, o);
-const VP12 = o => Object.assign({ cs: 'VIPR12', code: '4155' }, o);
+const NH41 = o => Object.assign({ cs: 'NHWK412', code: '4302' }, o);
+const VP12 = o => Object.assign({ cs: 'VIPR123', code: '4155' }, o);
 const PRACTICE = () => [LT21({ x: 6, y: -6, hdg: 360, alt: 3000, spd: 250, freq: 'silver' })];
 const STEPS = [
   // ---------- Briefing ----------
@@ -641,14 +643,14 @@ const STEPS = [
   { ch: 1, id: 'rings', type: 'click', range: 15, hl: { rings: true },
     acs: [LT21({ x: 3.5, y: 3.6, hdg: 200, alt: 3000, spd: 220 }), NH41({ x: -7.1, y: -7.0, hdg: 45, alt: 1500, spd: 120 }), VP12({ x: 14.2, y: -4.4, hdg: 300, alt: 2000, spd: 130 })],
     say: `<p>The circles are <b>range rings</b>, one every <b>5 nautical miles</b> from the ship: 5, 10, 15. They let you judge distance at a glance.</p>`,
-    task: `🎯 Tap the aircraft that is <b>10 miles</b> from the ship.`, answer: 'NHWK41',
-    why: { LTNG21: 'That one is inside the first ring, about <b>5 miles</b> out.', VIPR12: 'That one is out on the third ring, about <b>15 miles</b>.' }, hint: 'Look for the target sitting on the <b>second</b> ring.',
+    task: `🎯 Tap the aircraft that is <b>10 miles</b> from the ship.`, answer: 'NHWK412',
+    why: { LTNG21: 'That one is inside the first ring, about <b>5 miles</b> out.', VIPR123: 'That one is out on the third ring, about <b>15 miles</b>.' }, hint: 'Look for the target sitting on the <b>second</b> ring.',
     good: `Exactly. It's on the <b>second ring</b>, so it's 10 miles from mother (that's what we call the ship).` },
   { ch: 1, id: 'brg', type: 'click', range: 15, hl: { brgs: true },
     acs: [LT21({ x: 0, y: 11, hdg: 180, alt: 3000, spd: 250 }), NH41({ x: 8, y: 0, hdg: 270, alt: 1500, spd: 120 }), VP12({ x: -8.5, y: -8.5, hdg: 45, alt: 2000, spd: 130 })],
     say: `<p>The numbers around the edge are <b>bearings</b>: directions measured clockwise from north, always as three digits. <b>360</b> (or 000) is north, <b>090</b> east, <b>180</b> south, <b>270</b> west.</p><p>"Bearing 090 from mother" means the aircraft is due <b>east</b> of the ship.</p>`,
-    task: `🎯 Tap the aircraft on <b>bearing 090</b> (due east of the ship).`, answer: 'NHWK41',
-    why: { LTNG21: 'That one is due <b>north</b>, bearing 360.', VIPR12: 'That one is <b>southwest</b>, about bearing 225.' }, hint: '090 is to the <b>right</b> of the ship.',
+    task: `🎯 Tap the aircraft on <b>bearing 090</b> (due east of the ship).`, answer: 'NHWK412',
+    why: { LTNG21: 'That one is due <b>north</b>, bearing 360.', VIPR123: 'That one is <b>southwest</b>, about bearing 225.' }, hint: '090 is to the <b>right</b> of the ship.',
     good: `Right, due east: bearing <b>zero niner zero</b>.` },
   { ch: 1, id: 'block', type: 'info', range: 15, hl: { block: 'LTNG21', ac: 'LTNG21' }, acs: [LT21({ x: -5, y: 6, hdg: 120, alt: 3000, spd: 250 })],
     say: `<p>The little mark is the <b>target</b>: where the aircraft is. The text beside it is the <b>data block</b>, sent automatically by the aircraft's equipment:</p><p><span class="ex">LTNG21 ← callsign, "Lightning 21"<br>030 ← altitude in hundreds of feet (3,000 ft)<br>25 ← speed in tens of knots (250 knots)<br>4213 ← its beacon code</span></p><p>Navy controllers say altitude in <b>angels</b>: one angel = <b>1,000 feet</b>. So 3,000 feet is <b>angels 3</b>.</p>` },
@@ -687,7 +689,7 @@ const STEPS = [
   { ch: 3, id: 'struct', type: 'info', range: 15, acs: PRACTICE(),
     say: `<p>Radio time. Every call has the same shape:</p><p><span class="ex"><b>WHO</b> you're talking to, then <b>WHAT</b> to do.<br>"Lightning 21, turn left heading two seven zero."</span></p><p>Callsign <b>first</b>, so the right pilot knows the call is for them. Short and standard: no "please", no chit-chat.</p>` },
   { ch: 3, id: 'numbers', type: 'info', range: 15, acs: PRACTICE(),
-    say: `<p>Numbers are spoken <b>digit by digit</b> so they can't be misheard:</p><p><span class="ex">Heading 270 → "heading <b>two seven zero</b>"<br>Heading 090 → "heading <b>zero niner zero</b>" (9 is "niner")<br>3,000 ft → "<b>angels three</b>"<br>1,200 ft → "<b>angels one point two</b>"</span></p><p>The everyday instructions: <b>fly heading</b>, <b>turn left/right heading</b>, <b>climb and maintain angels</b>, <b>descend and maintain angels</b>, <b>maintain ___ knots</b>, <b>signal buster</b> (max speed), and <b>go silver / purple / copper</b> to switch frequency.</p>` },
+    say: `<p>Numbers are spoken <b>digit by digit</b> so they can't be misheard:</p><p><span class="ex">Heading 270 → "heading <b>two seven zero</b>"<br>Heading 090 → "heading <b>zero niner zero</b>" (9 is "niner")<br>3,000 ft → "<b>angels three</b>"<br>1,200 ft → "<b>angels one point two</b>"</span></p><p>The everyday instructions: <b>fly heading</b>, <b>turn left/right heading</b>, <b>take angels</b> (climb or descend to that altitude), <b>take speed</b>, <b>signal buster</b> (max speed), and <b>go silver / purple / copper</b> to switch frequency.</p>` },
   { ch: 3, id: 'qCall', type: 'choice', range: 15, acs: PRACTICE(),
     say: `<p>You want Lightning 21 to turn left to heading 270.</p>`, q: `Which transmission is correct?`,
     opts: [{ t: '"Turn left heading two seventy, Lightning 21."', why: 'Callsign goes <b>first</b>, and the heading is said digit by digit: two seven zero.' }, { t: '"Lightning 21, turn left heading two seven zero."', ok: 1 }, { t: '"Lightning 21, go left two hundred seventy degrees, please."', why: 'Use the standard words: "turn left heading", digits, and no "please".' }, { t: '"Hey Lightning, head west a bit."', why: 'No full callsign and no exact heading. The pilot can\'t fly "a bit".' }],
@@ -698,8 +700,8 @@ const STEPS = [
     good: `Yes, "<b>zero niner zero</b>".` },
   { ch: 3, id: 'chips1', type: 'chips', range: 15, acs: PRACTICE(),
     say: `<p>Now you build one. Tap the words in order.</p>`, task: `🎯 Tell Lightning 21 to climb to 4,000 feet.`,
-    target: ['Lightning 21', 'climb and maintain', 'angels', 'four'], extra: ['descend and maintain', 'four thousand', 'please', 'heading'],
-    good: `"<b>Lightning 21, climb and maintain angels four.</b>" A textbook call.` },
+    target: ['Lightning 21', 'take', 'angels', 'four'], extra: ['climb', 'four thousand', 'please', 'heading'],
+    good: `"<b>Lightning 21, take angels four.</b>" A textbook call: "take angels" works for a climb or a descent.` },
   { ch: 3, id: 'chips2', type: 'chips', range: 15, acs: PRACTICE(),
     say: `<p>One more, with a heading this time.</p>`, task: `🎯 Tell Lightning 21 to turn right to heading 090.`,
     target: ['Lightning 21', 'turn right', 'heading', 'zero', 'niner', 'zero'], extra: ['turn left', 'ninety', 'nine'],
@@ -708,14 +710,14 @@ const STEPS = [
     say: `<p>After you give an instruction, the pilot answers with just their <b>callsign</b>. That means "heard you, doing it".</p><p><span class="ex">You: "Lightning 21, turn left heading two seven zero."<br>Pilot: "Lightning 21."</span></p><p>Then <b>watch the scope</b> to confirm it does what you said. If <b>you</b> misspoke, say "<b>correction</b>" and give the right instruction. "Correction" is the only correction word: everything you said before it is thrown out.</p>` },
   { ch: 3, id: 'spot1', type: 'choice', range: 15, acs: PRACTICE(),
     say: `<p>Listen to this exchange. You meant to send Lightning 21 down to <b>angels two</b>.</p>`,
-    dlg: [['you', 'Lightning 21, turn right heading one eight zero, descend and maintain angels three.'], ['plt', 'Lightning 21.']],
+    dlg: [['you', 'Lightning 21, turn right heading one eight zero, take angels three.'], ['plt', 'Lightning 21.']],
     q: `You said angels three by mistake. What do you say next?`,
-    opts: [{ t: '"Lightning 21, correction, descend and maintain angels two."', ok: 1 }, { t: '"Lightning 21, negative, descend and maintain angels two."', why: 'Use "<b>correction</b>". It is the only correction word the pilots know.' }, { t: 'Nothing, the pilot answered.', why: 'The callsign reply only means the pilot heard you. They will fly angels <b>three</b>, exactly what you said.' }, { t: '"Roger."', why: '"Roger" fixes nothing: the pilot still descends to angels three.' }],
+    opts: [{ t: '"Lightning 21, correction, take angels two."', ok: 1 }, { t: '"Lightning 21, negative, take angels two."', why: 'Use "<b>correction</b>". It is the only correction word the pilots know.' }, { t: 'Nothing, the pilot answered.', why: 'The callsign reply only means the pilot heard you. They will fly angels <b>three</b>, exactly what you said.' }, { t: '"Roger."', why: '"Roger" fixes nothing: the pilot still descends to angels three.' }],
     good: `Good catch. "Correction" throws out the wrong call, and the pilot flies the new one.` },
   { ch: 3, id: 'spot2', type: 'choice', range: 15, acs: PRACTICE(),
-    say: `<p>You called: "<b>Lightning 24, turn left heading three three zero, maintain two zero zero knots.</b>"</p>`,
+    say: `<p>You called: "<b>Lightning 24, turn left heading three three zero, take speed two zero zero.</b>"</p>`,
     q: `What does the pilot answer?`,
-    opts: [{ t: '"Lightning 24."', ok: 1 }, { t: '"Lightning 24, left heading three three zero, maintain two zero zero knots."', why: 'In this trainer pilots don\'t repeat the instruction. They answer with just their <b>callsign</b>.' }, { t: '"Wilco."', why: 'Pilots answer with their <b>callsign</b>, so you know which aircraft heard you.' }],
+    opts: [{ t: '"Lightning 24."', ok: 1 }, { t: '"Lightning 24, left heading three three zero, take speed two zero zero."', why: 'In this trainer pilots don\'t repeat the instruction. They answer with just their <b>callsign</b>.' }, { t: '"Wilco."', why: 'Pilots answer with their <b>callsign</b>, so you know which aircraft heard you.' }],
     good: `Yes: just "<b>Lightning 24</b>". Then watch the data block turn left to 330 and slow to 200 knots.` },
   { ch: 3, id: 'voiceIntro', type: 'info', range: 15, acs: PRACTICE(), voiceHelp: true,
     say: `<p>Time to talk for real. From here on you'll <b>say</b> your calls out loud, and the aircraft will fly <b>exactly</b> what you say, so watch the scope!</p><p><b>Hold</b> the 🎙 button (or the <b>Space bar</b>) while you talk and let go when you're done. Or tap it once to start and again to stop. The first time, your browser will ask for microphone permission.</p><p>No mic, or a browser without speech recognition? Just <b>type</b> the call in the box instead.</p>` },
@@ -725,20 +727,20 @@ const STEPS = [
     hint: 'Lightning 21, turn left heading two seven zero', good: 'Watch it roll left toward the west in a standard-rate turn.' },
   { ch: 3, id: 'v2', type: 'voice', range: 15, keep: true, acs: [LT21({ x: 4.6, y: -3.5, hdg: 270, alt: 3000, spd: 250, freq: 'silver' })],
     say: `<p>Now bring it lower.</p>`, task: `🎯 Have Lightning 21 descend to <b>angels 2</b> (2,000 feet).`, expect: { cs: 'LTNG21', need: [{ k: 'alt', v: 2000 }] },
-    hint: 'Lightning 21, descend and maintain angels two', good: 'Watch the altitude in the data block count down: 030… 025… 020.' },
+    hint: 'Lightning 21, take angels two', good: 'Watch the altitude in the data block count down: 030… 025… 020.' },
   { ch: 3, id: 'v3', type: 'voice', range: 15, keep: true, acs: [LT21({ x: 1, y: -3.5, hdg: 270, alt: 2000, spd: 250, freq: 'silver' })],
     say: `<p>Last one before the mission: slow it down.</p>`, task: `🎯 Slow Lightning 21 to <b>200 knots</b>.`, expect: { cs: 'LTNG21', need: [{ k: 'spd', v: 200 }] },
-    hint: 'Lightning 21, maintain two zero zero knots', good: 'The speed in the block drops from 25 to 20 as it slows.' },
+    hint: 'Lightning 21, take speed two zero zero', good: 'The speed in the block drops from 25 to 20 as it slows.' },
   // ---------- Final mission ----------
   { ch: 4, id: 'm0', type: 'info', range: 15, course: true, acs: [LT24({ x: 7, y: -11, hdg: 270, alt: 4000, spd: 250, freq: 'silver' })],
     pilot: 'Stinger Approach, Lightning 24, one three miles southeast of mother, angels four, request PAR approach, full stop.',
     say: `<p>This is it. <b>Lightning 24</b>, an F-35, just checked in with you on <b class="f-silver">Approach</b>. Your job: get it lined up, hand it to Final, then talk it all the way down to the deck.</p><p>The dashed purple line is the <b>final approach course</b>. Ships land into the wind, so tonight final comes from the south, heading <b>360</b>.</p>` },
   { ch: 4, id: 'm1', type: 'voice', range: 15, course: true, keep: true, acs: [LT24({ x: 7, y: -11, hdg: 270, alt: 4000, spd: 250, freq: 'silver' })],
     say: `<p>Final approach starts at <b>1,200 feet</b>, which is angels one point two.</p>`, task: `🎯 Descend Lightning 24 to <b>angels 1.2</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'alt', v: 1200 }] },
-    hint: 'Lightning 24, descend and maintain angels one point two', good: 'Down it goes.' },
+    hint: 'Lightning 24, take angels one point two', good: 'Down it goes.' },
   { ch: 4, id: 'm2', type: 'voice', range: 15, course: true, keep: true, acs: [LT24({ x: 5.5, y: -11, hdg: 270, alt: 2400, tgtAlt: 1200, spd: 250, freq: 'silver' })],
     say: `<p>It needs to be slower before final.</p>`, task: `🎯 Slow Lightning 24 to <b>150 knots</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'spd', v: 150 }] },
-    hint: 'Lightning 24, maintain one five zero knots', good: 'Speed coming back.' },
+    hint: 'Lightning 24, take speed one five zero', good: 'Speed coming back.' },
   { ch: 4, id: 'm3', type: 'voice', range: 15, course: true, acs: [LT24({ x: 0.85, y: -9.5, hdg: 270, alt: 1200, spd: 150, freq: 'silver' })],
     say: `<p>A minute later, it's nearly at the final course. Turn it now so it rolls out right on the dashed line.</p>`, task: `🎯 Turn Lightning 24 <b>right</b> to heading <b>360</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'hdg', v: 360, dir: 'R' }] },
     hint: 'Lightning 24, turn right heading three six zero', good: 'Rolling out on final. Nicely timed.' },
@@ -1049,8 +1051,8 @@ function execute(a, cmds) {
 function describeNeed(n) {
   switch (n.k) {
     case 'hdg': return `turn ${n.dir === 'L' ? 'left' : 'right'} heading ${sayDigits(h3(n.v))}`;
-    case 'alt': return `descend and maintain angels ${angSay(n.v)}`;
-    case 'spd': return `maintain ${sayDigits(n.v)} knots`;
+    case 'alt': return `take angels ${angSay(n.v)}`;
+    case 'spd': return `take speed ${sayDigits(n.v)}`;
     case 'freq': return `go ${n.v}`;
     case 'course': return 'slightly left of course';
     case 'beginDescent': return 'begin descent';

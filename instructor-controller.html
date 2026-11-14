@@ -50,9 +50,21 @@ td{padding:3px 4px;border-top:1px solid #241d44;vertical-align:top}tr.act{cursor
 .tEd{cursor:pointer;border-bottom:1px dashed var(--amber)}.tEd:hover{color:var(--cyan)}.rDel{font-size:10px;padding:0 5px;margin-left:4px;color:var(--red);border-color:#6a2a3a}
 #tIn{width:84px;font-size:12px;padding:1px 3px}
 #addBox{border:1px solid #2a2350;border-radius:4px;padding:6px;margin-top:6px;font-size:12px}#addBox .row{display:flex;flex-wrap:wrap;gap:5px;align-items:center}#addBox select,#addBox input{font-size:12px;padding:2px 3px}#adNum{width:54px}#adAt{width:84px}#addMsg{color:var(--dim);font-size:11px;margin-top:4px}
+#shipBox{border:1px solid var(--gdd);border-radius:4px;padding:7px;background:var(--panel2)}#shipBox .seg{display:inline-flex}#shipBox .seg button{border-radius:0}#shipBox .seg button:first-child{border-radius:3px 0 0 3px}#shipBox .seg button:last-child{border-radius:0 3px 3px 0}#shipNow{color:var(--dim);font-size:12px;margin:2px 0 6px}#shipNow b{color:var(--g)}#shipNow .cd{color:var(--amber);font-weight:bold}
 #ciNext{color:var(--dim);font-size:12px;margin:6px 0}#ciNext b{color:var(--g)}#ciNext .cd{color:var(--amber);font-weight:bold}
 .ciGo{color:var(--amber);border-color:var(--amber);background:#2a2008;font-weight:bold}.ciGo:disabled{opacity:.45;cursor:default}
 .st-held{color:var(--amber)}
+@media (max-width:950px){   /* v95 phones / narrow: scope on top, controls below, the whole page scrolls */
+  html,body{overflow:auto;height:auto}
+  #wrap{height:auto;min-height:100%}
+  #main{flex-direction:column;flex:none}
+  #scopeBox{flex:none;height:min(100vw,60vh)}
+  #scopeBox canvas{touch-action:none}
+  #panel{width:100%;border-left:none;border-top:1px solid #2a2350;overflow:visible}
+  #ov{position:fixed;align-items:flex-start;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px}
+  #ovIn{max-width:100%}
+  input[type=range]{width:90px}
+}
 </style></head><body>
 <div id="wrap">
  <div id="top">
@@ -90,6 +102,13 @@ td{padding:3px 4px;border-top:1px solid #241d44;vertical-align:top}tr.act{cursor
     <div id="ciNext">—</div>
     <div class="row" id="ciBtns"><button id="ciGo" class="ciGo" title="Check the next scheduled aircraft in now (N)">▶ Check in next aircraft (N)</button><button id="ciGoM" class="ciGo" style="display:none" title="Next Marshal arrival now">→ Marshal</button><button id="ciGoA" class="ciGo" style="display:none" title="Next Approach launch now">→ Approach</button></div>
    </div>
+   <div id="shipBox"><h3>SHIP TURNS · BRC (all linked scopes)</h3>
+    <div id="shipNow">—</div>
+    <div class="row" style="align-items:center"><span class="seg"><button id="shAuto" class="on" title="The ship turns on its own at the interval">Auto turns</button><button id="shOff" title="No automatic turns; only when you turn it">Off</button></span>
+     <span class="lbl">every</span><select id="shEvery" title="Time between automatic ship turns (sim time)"><option value="120">2 min</option><option value="180">3 min</option><option value="240">4 min</option><option value="300">5 min</option><option value="360">6 min</option><option value="480">8 min</option><option value="600">10 min</option></select></div>
+    <div class="row" style="align-items:center;margin-top:5px"><select id="shDir" title="Direction"><option value="port">Port (left)</option><option value="starboard">Starboard (right)</option></select>
+     <select id="shDeg" title="How much"></select><button id="shGo" class="ciGo" title="Turn the ship now (5 s warning on the scopes; silent)">↻ Turn ship now</button></div>
+   </div>
    <h3>SIMULATION AIRCRAFT · WHEN THEY APPEAR ON THE SCOPE</h3>
    <div id="roster"><table><thead><tr><th>Callsign / type</th><th>Pos</th><th>Appears</th><th>Status</th></tr></thead><tbody id="rBody"></tbody></table></div>
    <div id="addBox"><div class="row"><b style="color:var(--cyan)">+ ADD AIRCRAFT</b>
@@ -112,6 +131,7 @@ const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const I = { link: ls('instLink', 'MARSHAL'), scope: +ls('instScope', 30), ring: +ls('instRing', 2), ci: 'auto',
   src: {}, ship: {}, disp: {}, sel: null, trails: {}, db: {}, txOpen: false, solo: null, pend: {} };
 const ch = new BroadcastChannel('stinger-link');
+const SHIPI = { auto: ls('instShipAuto', '1') !== '0', every: +ls('instShipEvery', '240') || 240 };   // v95 ship-turn settings sent to every linked scope
 const links = () => (I.link === 'BOTH' ? ['MARSHAL', 'APPROACH'] : [I.link]).concat('FINAL');
 const live = s => I.src[s] && Date.now() - I.src[s].rx < 3000;
 const mmss = t => { t = Math.max(0, Math.round(t)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
@@ -119,7 +139,7 @@ const h3 = h => String(Math.round(((h % 360) + 360) % 360) || 360).padStart(3, '
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function log(cls, s) { const d = document.createElement('div'); d.className = cls; const t = curT(); d.textContent = `[${t != null ? mmss(t) : '--'}] ${s}`; $('log').appendChild(d); $('log').scrollTop = 1e9; }
 function curT() { for (const s of links()) if (live(s) && I.src[s].t != null && s !== 'FINAL') return I.src[s].t; return live('FINAL') ? I.src.FINAL.t : null; }
-function hello() { try { ch.postMessage({ type: 'inst-hello', links: links(), ciMode: I.ci }); } catch (e) {} }
+function hello() { try { ch.postMessage({ type: 'inst-hello', links: links(), ciMode: I.ci, ship: { auto: SHIPI.auto, every: SHIPI.every } }); } catch (e) {} }
 ch.onmessage = e => {
   const m = e.data || {};
   if (m.type === 'inst-state' && m.src) { if (!links().includes(m.src)) return; m.rx = Date.now(); I.src[m.src] = m; if (m.hello) hello(); }
@@ -132,7 +152,7 @@ setInterval(hello, 1500); hello();
 const shipLive = s => I.ship[s] && Date.now() - I.ship[s].rx < 4000;
 function shipMaster() { if (links().includes('MARSHAL') && shipLive('MARSHAL')) return I.ship.MARSHAL; if (links().includes('APPROACH') && shipLive('APPROACH')) return I.ship.APPROACH; return null; }
 function relayShip() { const m = shipMaster(); if (!m || m.src !== 'MARSHAL' || !links().includes('APPROACH')) return;
-  try { ch.postMessage({ type: 'ship-set', src: 'INSTRUCTOR', to: 'APPROACH', from: 'MARSHAL', linked: true, turns: !!m.turns, tbrc: m.tbrc, mv: m.mv, fb: m.fb, dwh: m.dwh, landSeed: m.landSeed, landOn: !!m.landOn, land: m.land, polys: m.polys || [] }); } catch (e) {} }
+  try { ch.postMessage({ type: 'ship-set', src: 'INSTRUCTOR', to: 'APPROACH', from: 'MARSHAL', linked: true, running: m.running, turning: !!m.turning, turns: !!m.turns, tbrc: m.tbrc, mv: m.mv, fb: m.fb, dwh: m.dwh, landSeed: m.landSeed, landOn: !!m.landOn, land: m.land, polys: m.polys || [] }); } catch (e) {} }
 setInterval(relayShip, 1000);
 try { ch.postMessage({ type: 'ship-req', src: 'INSTRUCTOR' }); } catch (e) {}   // opened late: ask Marshal for its current BRC / land
 addEventListener('beforeunload', () => { try { ch.postMessage({ type: 'inst-bye' }); } catch (e) {} });
@@ -432,6 +452,32 @@ function renderCi() { const run = CI_SRC.filter(ciRun), n = ciNext(), nm = s => 
   if (!run.length) { $('ciNext').textContent = 'Start Marshal / Approach in its tab to schedule check-ins.'; return; }
   const what = n && n.label ? `<b>${esc(nm(n.src))}</b> · ${esc(n.label)}` : `<b>${esc(nm(n.src))}</b>`;
   $('ciNext').innerHTML = I.ci === 'manual' ? `MANUAL · next: ${what} · waiting for you (N)` : n && n.at != null ? `AUTO · next: ${what} in <span class="cd">${mmss(n.left)}</span>` : `AUTO · next: ${what}`; }
+/* ---------- v95 ship turns: auto on/off + interval (sent with every inst-hello), and "turn ship now" (direction + degrees) ----------
+   The master scope (Marshal, else Approach, else Final) executes it; the linked scopes follow its BRC. Silent: no radio call. */
+(function () {
+  const d = $('shDeg'); d.innerHTML = [5, 10, 15, 20, 25, 30, 35, 40, 45, 60, 90].map(v => `<option value="${v}"${v === 10 ? ' selected' : ''}>${v}°</option>`).join('');
+  $('shEvery').value = String(SHIPI.every); if (!$('shEvery').value) $('shEvery').value = '240';
+  const paint = () => { $('shAuto').classList.toggle('on', SHIPI.auto); $('shOff').classList.toggle('on', !SHIPI.auto); $('shEvery').disabled = !SHIPI.auto; };
+  const setAuto = on => { SHIPI.auto = on; lsSet('instShipAuto', on ? '1' : '0'); paint(); hello(); log('i', on ? `INSTRUCTOR: ship turns automatic every ${SHIPI.every / 60} min` : 'INSTRUCTOR: automatic ship turns OFF (turn it yourself)'); };
+  $('shAuto').onclick = () => setAuto(true); $('shOff').onclick = () => setAuto(false);
+  $('shEvery').onchange = () => { SHIPI.every = +$('shEvery').value || 240; lsSet('instShipEvery', SHIPI.every); hello(); log('i', `INSTRUCTOR: ship turns every ${SHIPI.every / 60} min`); };
+  $('shGo').onclick = () => { const run = links().filter(x => live(x) && I.src[x].running); if (!run.length) { log('s', 'No running simulation: start Marshal / Approach / Final first.'); return; }
+    const dir = $('shDir').value, deg = +$('shDeg').value;
+    try { ch.postMessage({ type: 'ship-cmd', src: 'INSTRUCTOR', id: ++cmdId, dir, deg }); } catch (e) {}
+    log('i', `INSTRUCTOR: turn the ship ${dir} ${deg}° now`); };
+  paint();
+})();
+function shipView() {   // the scope that owns the ship (not following another)
+  for (const x of ['MARSHAL', 'APPROACH', 'FINAL']) { const st = live(x) && links().includes(x) && I.src[x].running ? I.src[x] : null; if (st && st.ship && !st.ship.follow) return Object.assign({ src: x }, st.ship); }
+  return null;
+}
+function renderShip() {
+  const v = shipView(), el = $('shipNow'); if (!v) { el.textContent = 'Start a linked simulation to see the ship.'; $('shGo').disabled = true; return; }
+  $('shGo').disabled = v.st === 'warn' || v.st === 'turning';
+  const nm = v.src[0] + v.src.slice(1).toLowerCase(), b = h3(v.tbrc);
+  const st = v.st === 'warn' ? `turning <b>${v.dir}</b> ${v.deg}° in <span class="cd">${v.left}s</span>` : v.st === 'turning' ? `<span class="cd">turning ${v.dir} ${v.deg}°</span>` : v.st === 'steady' ? 'steady (new BRC)' : SHIPI.auto && v.next != null ? `next auto turn in <span class="cd">${mmss(v.next)}</span>` : 'auto turns off';
+  el.innerHTML = `BRC <b>${b}</b> · ${st} <span style="opacity:.7">(${nm} owns the ship)</span>`;
+}
 /* ---------- status badges + loop ---------- */
 function badges() {
   const m = links().includes('MARSHAL'), a = links().includes('APPROACH');
@@ -444,7 +490,7 @@ function badges() {
 }
 let lastUi = 0;
 function frame(now) { const r = cv.getBoundingClientRect(); if (Math.abs(r.width - W) > .5 || Math.abs(r.height - H) > .5) resize(); draw();
-  if (now - lastUi > 400) { lastUi = now; badges(); renderRoster(); renderSel(); renderCi(); } requestAnimationFrame(frame); }
+  if (now - lastUi > 400) { lastUi = now; badges(); renderRoster(); renderSel(); renderCi(); try { renderShip(); } catch (e) {} } requestAnimationFrame(frame); }
 setScope(I.scope); $('rgSel').value = String(I.ring); setLink(I.link); setCi('auto', true);
 log('s', 'Instructor screen ready. Final Control is auto-linked; choose Marshal, Approach or both.');
 requestAnimationFrame(frame);

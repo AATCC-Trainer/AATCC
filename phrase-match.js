@@ -18,7 +18,7 @@ const VOCAB = ('arc arcing inbound turning abeam above acknowledge adjust alert 
   'read radio verify fuel frequency normally prifly boss ship say fly see red blue final approach clock oclock tally north south east west ' +
   'northbound southbound eastbound westbound northeast northwest southeast southwest direction miles feet leg base rate further ' +
   'appear time push again same then they them that there their when what where were here have from into onto just also only ' +
-  'level descending climbing passing time steady affirm negative wilco unable fighter hawk').split(/\s+/).filter(Boolean);
+  'level descending climbing passing time steady affirm negative wilco unable fighter hawk off mothers seconds leveled levelled').split(/\s+/).filter(Boolean);
 const VSET = new Set(VOCAB);
 const NUMW = new Set(('zero oh o one won two to too three tree four for fore fower five fife six seven eight ate nine niner ten eleven twelve ' +
   'thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty thirty forty fourty fifty sixty seventy eighty ninety hundred thousand ' +

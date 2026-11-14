@@ -5,6 +5,7 @@
 <script src="phrase-match.js"></script>
 <script src="warm-mic.js"></script>
 <script src="bg-clock.js"></script>
+<script src="pilot-voice.js"></script>
 <script src="shorthand.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -145,6 +146,11 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
   #vStatus{bottom:8px}
 }
 @media (max-width:950px){ body.lay-expand #scopeWrap{flex:1;height:auto} }
+@media (max-width:950px) and (orientation:portrait){   /* v95 phone portrait (normal layout): the whole page scrolls; the scope keeps its own touch gestures */
+  html:has(body:not(.lay-expand):not(.lay-trans)),body:not(.lay-expand):not(.lay-trans){overflow:auto;height:auto}
+  body:not(.lay-expand):not(.lay-trans) #app{height:auto;min-height:100vh}
+  body:not(.lay-expand):not(.lay-trans) #panel{flex:none;overflow:visible}
+}
 </style>
 </head>
 <body>
@@ -746,7 +752,7 @@ function linkRecv(m) {
   if (m && m.cs && !m.callsign) m.callsign = m.cs; if (m && m.type === 'handoffAccept') m.type = 'handoff_accept';   // accept Approach's cs/handoffAccept variant
   if (m.type === 'hello') { LINK.peer = true; linkPost({ type: 'hello-ack', from: 'final' }); }
   else if (m.type === 'hello-ack') LINK.peer = true;
-  else if (m.type === 'brc') { LINK.peer = true; shipLinkBrc(m); }
+  else if (m.type === 'brc') { LINK.peer = true; SHIP_PEER_RX = Date.now(); shipLinkBrc(m); }
   else if (m.type === 'handoff') { LINK.peer = true; if (String(m.from || 'APP').toUpperCase() !== 'APP') { /* not addressed to Final */ } else if (G && !G.over) linkHandoff(m); else LINK.pending.push(m); }
   else if (m.type === 'handoff_accept') { LINK.peer = true; if (G && String(m.by || '').toUpperCase() === 'APP') hoffAccepted(String(m.callsign || '').toUpperCase().replace(/\s+/g, '')); }
   linkStatus();
@@ -859,11 +865,14 @@ function hoffTyped(text) {   // "<callsign> hndoff" / "handoff" / "hand off": a 
 /* ===================== ship turns (ship mode only) ===================== */
 // BRC is TRUE; the final course (BRC variable) = FB = BRC - MV. Solo has no magvar, so FB = BRC.
 let SHIP_MV = 0, SHIP_BRCT = null;   // last magvar / true BRC from Approach (null = same as course)
-const SHIP_RATE = 1, SHIP_WARN = 5, SHIP_STEADY = 8, SHIP_GRACE = 10, SHIP_FIRST = [240, 480], SHIP_EVERY = [240, 480];
+const SHIP_RATE = 1, SHIP_WARN = 5, SHIP_STEADY = 8, SHIP_GRACE = 10, SHIP_DEGS = [5, 10, 15, 20];
+const SHIPCFG = { auto: true, every: 240 };   // v95: a ship turn every 4 min of sim time by default (Instructor: auto on/off, interval, turn now)
+let SHIP_PEER_RX = 0;   // last time a running, linked Marshal / Approach told us about the ship
+const finFollowing = () => !!(G && G.linked && Date.now() - SHIP_PEER_RX < 5000);   // linked behind a running Marshal / Approach: replay their turns ('brc' messages)
 const shipBrcT = () => SHIP_BRCT != null ? SHIP_BRCT : (Math.round(norm(BRC + SHIP_MV)) || 360);
 function shipNewState(opts) {
   const r = opts.seed != null ? mulberry32((opts.seed ^ 0x5A17E) >>> 0) : Math.random;   // own stream: the sim rng is untouched
-  return { rng: r, on: opts.shipTurns !== false, next: SHIP_FIRST[0] + r() * (SHIP_FIRST[1] - SHIP_FIRST[0]), phase: null, dir: null, amt: 0,
+  return { rng: r, on: opts.shipTurns !== false, next: SHIPCFG.every, phase: null, dir: null, amt: 0,
     cur: BRC, target: BRC, until: 0, endT: null, n: 0, pts: 0, turnOk: 0, steadyOk: 0, gotTurn: false, gotSteady: false, linkT: false, dirKnown: true };
 }
 // Move the final course with the ship. Aircraft keep their range/offset on the scope and their (absolute) heading,
@@ -893,8 +902,9 @@ function shipStep(dt) {
     S2.phase = 'turn'; S2.cur = BRC; S2.target = norm(BRC + (S2.dir === 'L' ? -S2.amt : S2.amt)) || 360;
     log('warn', `Mother in ${S2.dir === 'L' ? 'port' : 'starboard'} turn (${S2.amt}°). Call "ninety-nine, mother is in ${S2.dir === 'L' ? 'port' : 'starboard'} turn, standby for new BRC".`);
   } else if (S2.phase === 'steady' && G.t >= S2.until) S2.phase = null;
-  if (S2.on && !G.linked && isShip() && !S2.phase && G.t >= S2.next) {
-    S2.phase = 'warn'; S2.until = G.t + SHIP_WARN; S2.dir = S2.rng() < 0.5 ? 'L' : 'R'; S2.amt = 1 + Math.floor(S2.rng() * 15);
+  if (S2.on && SHIPCFG.auto && !finFollowing() && isShip() && !S2.phase && G.t >= S2.next) {
+    S2.next = Math.max(S2.next, G.t) + SHIPCFG.every;
+    S2.phase = 'warn'; S2.until = G.t + SHIP_WARN; S2.dir = S2.rng() < 0.5 ? 'L' : 'R'; S2.amt = SHIP_DEGS[Math.floor(S2.rng() * SHIP_DEGS.length)];
     S2.n++; S2.gotTurn = S2.gotSteady = false; S2.dirKnown = true; S2.endT = null;
     log('warn', `SHIP TURN IN 5 · ${S2.dir === 'L' ? 'PORT' : 'STARBOARD'}.`);
   }
@@ -902,7 +912,7 @@ function shipStep(dt) {
 }
 function shipSteady() {
   const S2 = G.ship; S2.phase = 'steady'; S2.until = G.t + SHIP_STEADY; S2.endT = G.t; S2.linkT = false;
-  S2.next = G.t + SHIP_EVERY[0] + S2.rng() * (SHIP_EVERY[1] - SHIP_EVERY[0]);
+  if (!finFollowing() && S2.next < G.t + 30) S2.next = G.t + 30;   // v95: the fixed interval runs from turn start (set when the turn was scheduled)
   log('good', `Mother steady, new BRC ${hdg3(shipBrcT())}. Call "ninety-nine, mother is steady, new BRC is ${sayDigits(hdg3(shipBrcT()))}".`);
   shipBannerSet();
 }
@@ -910,6 +920,7 @@ function shipSteady() {
 let SHIP_MAR_RX = 0, SHIP_LAST = null;
 function shipSyncRecv(m) {
   if (m.type !== 'ship-state' || !m.linked || m.tbrc == null) return;
+  if (m.running && (m.src === 'MARSHAL' || m.src === 'APPROACH')) SHIP_PEER_RX = Date.now();
   if (m.src === 'MARSHAL') SHIP_MAR_RX = Date.now(); else if (Date.now() - SHIP_MAR_RX < 4000) return;   // Marshal wins while it is open
   SHIP_LAST = Object.assign({ rx: Date.now() }, m);
   const ck = document.getElementById('linkChk'); if (!(LINK.on || (ck && ck.checked))) return;
@@ -944,6 +955,29 @@ function shipLinkBrc(m) {
     S2.cur = S2.target = fc; shipCourse(fc); shipSteady();
   }
   shipBannerSet();
+}
+/* v95 Instructor ship controls (Final runs its own turns only when it is not following a linked Marshal / Approach) */
+function shipInstCmd(m) {
+  if (!G || G.over) return { ok: false, text: 'not running' };
+  if (finFollowing()) return null;   // the linked master scope turns the ship; Final follows
+  const S2 = G.ship; if (!S2 || !isShip()) return { ok: false, text: 'no ship (tower mode)' };
+  if (S2.phase === 'warn' || S2.phase === 'turn') return { ok: false, text: 'ship is already turning' };
+  const dir = /^(p|l)/i.test(String(m.dir || '')) ? 'L' : /^(s|r)/i.test(String(m.dir || '')) ? 'R' : (S2.rng() < 0.5 ? 'L' : 'R');
+  const amt = Math.max(1, Math.min(90, Math.round(+m.deg || 0))) || SHIP_DEGS[Math.floor(S2.rng() * SHIP_DEGS.length)];
+  S2.phase = 'warn'; S2.until = G.t + SHIP_WARN; S2.dir = dir; S2.amt = amt; S2.n++; S2.gotTurn = S2.gotSteady = false; S2.dirKnown = true; S2.endT = null; S2.next = G.t + SHIP_WARN + SHIPCFG.every;
+  log('warn', `SHIP TURN IN 5 · ${dir === 'L' ? 'PORT' : 'STARBOARD'} (${amt}°).`); shipBannerSet();
+  return { ok: true, text: `ship turn ${dir === 'L' ? 'port' : 'starboard'} ${amt}° in ${SHIP_WARN} s (BRC ${hdg3(shipBrcT())} → ${hdg3(norm(shipBrcT() + (dir === 'L' ? -amt : amt)))})` };
+}
+function shipInstCfg(m) {
+  const auto = m.auto !== false, every = Math.max(60, Math.min(1800, Math.round(+m.every || 240)));
+  if (auto === SHIPCFG.auto && every === SHIPCFG.every) return;
+  SHIPCFG.auto = auto; SHIPCFG.every = every; if (G && !G.over && G.ship) G.ship.next = G.t + every;
+}
+window.__shipInfo = () => Object.assign(shipInstInfo(), { brc: Math.round(BRC) });   // test hook
+function shipInstInfo() {
+  const S2 = G && G.ship; const st = S2 ? (S2.phase === 'turn' ? 'turning' : S2.phase) : null;
+  return { tbrc: shipBrcT(), st, dir: S2 && S2.dir ? (S2.dir === 'L' ? 'port' : 'starboard') : null, deg: S2 ? S2.amt : null, left: S2 && S2.phase === 'warn' ? Math.max(0, Math.ceil(S2.until - G.t)) : null,
+    next: S2 && SHIPCFG.auto && !finFollowing() ? Math.max(0, Math.round(S2.next - G.t)) : null, auto: SHIPCFG.auto, every: SHIPCFG.every, follow: finFollowing() };
 }
 // "ninety-nine, mother is in port turn, standby for new BRC" / "ninety-nine, mother is steady, new BRC is one seven three"
 function shipCall(raw) {
@@ -1011,11 +1045,20 @@ function newGame(diffKey, opts = {}) {
   refreshPanel(true);
 }
 
+/* v95 callsign numbers: jets / fixed wing 2 digits (Lightning 21), helos 3 digits (Ridge 311); spoken digit by digit */
+const alHelo = al => !!(al && al.types && al.types.some(t => TYPES[t] && TYPES[t].helo));
+function csNum(al, used, R) {   // R: random int (a, b) -> the sim rng by default
+  R = R || randi; const helo = alHelo(al); let n = '';
+  for (let k = 0; k < 60; k++) { n = String(helo ? R(1, 6) * 100 + R(1, 6) * 10 + R(1, 8) : R(11, 68)); if (!used || !used.has(n)) break; }
+  return n;
+}
+const csNumOk = (al, num) => alHelo(al) ? /^\d{3}$/.test(num) : /^\d{2}$/.test(num);
+window.__csTest = n => Array.from({ length: n || 40 }, () => { const al = pick(AIRLINES); return [al.icao + csNum(al), alHelo(al)]; });   // test hook
 function makeAc(spec) {
   let cs = spec.cs, type = spec.type;
   if (!cs) {
     for (let i = 0; i < 40; i++) {
-      const al = pick(AIRLINES); cs = al.icao + (rng() < 0.5 ? randi(11, 69) : randi(100, 499)); type = pick(al.types);
+      const al = pick(AIRLINES); cs = al.icao + csNum(al); type = pick(al.types);
       if (!G.ac.some(a => a.cs === cs) && !G.rejoin.some(j => j.cs === cs)) break;
     }
   }
@@ -1952,6 +1995,9 @@ function ttsNext() {
   if (pttDown || !ttsQ.length) return;
   const hw = ttsHoldUntil - performance.now();
   if (hw > 0) { clearTimeout(ttsHoldT); ttsHoldT = setTimeout(() => { if (!ttsCur) ttsNext(); }, hw + 5); return; }
+  { const now = performance.now(); let n = 0;   // v95: never read out stale replies (a backlog made late-sim voices pile up and sound garbled)
+    for (let i = ttsQ.length - 1; i >= 0; i--) { const x = ttsQ[i]; if (x.prio) continue; if (now - (x.t0 || now) > 12000 || ++n > 4) ttsQ.splice(i, 1); }
+    if (!ttsQ.length) return; }
   const it = ttsQ.shift(); ttsCur = it;
   try { speechSynthesis.resume(); speechSynthesis.speak(it.u); } catch (e) { ttsCur = null; return; }
   // watchdog: if Chrome finished speaking but never fired onend, move on; hard cap in case it hangs
@@ -1969,16 +2015,16 @@ function pilotSay(a, text, say, force, routine, prio) {
   if (!S.voiceOut || !TTS || (pttDown && !prio)) return;   // priority calls are queued even while the mic is keyed
   try {
     const u = new SpeechSynthesisUtterance(say || text);
-    const item = { u, routine: !!routine, prio: !!prio };
+    const item = { u, routine: !!routine, prio: !!prio, t0: performance.now() };
     u.onend = () => { if (ttsCur === item) ttsNext(); };
     u.onerror = ev => { const c = ev && ev.error; if (c && c !== 'interrupted' && c !== 'canceled') vStatus('Speech output error: ' + c, true); if (ttsCur === item) ttsNext(); };
     if (routine) for (let i = ttsQ.length - 1; i >= 0; i--) if (ttsQ[i].routine) ttsQ.splice(i, 1);   // a newer ack replaces a stale waiting ack
     let v = null;
     if (S.voice !== 'auto') v = voices.find(x => x.name === S.voice) || null;
-    else if (voices.length) v = voices[a.uid % voices.length];
+    else if (voices.length) v = window.PilotVoice ? PilotVoice.pick(a && (a.cs || a.uid), voices) : voices[0];   // v95: natural voices only, one stable voice per callsign
     if (v) u.voice = v;
-    u.pitch = 0.75 + ((a.voiceSeed % 50) / 100);       // 0.75 .. 1.24
-    u.rate = S.rate * (0.95 + ((a.voiceSeed % 17) / 100));
+    u.pitch = 1;   // v95: no per-aircraft pitch / rate bend (0.75-1.24 made later pilots sound eerie); variety comes from the voice
+    u.rate = Math.max(0.8, Math.min(1.3, +S.rate || 1));
     u.volume = S.vol; u.lang = 'en-US';
     if (prio) { let i = 0; while (i < ttsQ.length && ttsQ[i].prio) i++; ttsQ.splice(i, 0, item); }   // ahead of non-priority replies
     else ttsQ.push(item);
@@ -2354,7 +2400,7 @@ const TUT = [
   ['4. Sample script', `<div class="say">"Lightning two one, this is your final controller, how do you hear me?"<br>"Turn left heading ${sayDigits(hdg3(BRC - 2))}, slightly right of course, eight miles from touchdown."<br>"Heading ${sayDigits(hdg3(BRC - 2))}, on course."<br>"Approaching glidepath."<br>"Begin descent."<br>"Do not acknowledge further transmissions."<br>"Seven miles from touchdown."<br>"On course, slightly above glidepath."<br>"Turn right heading ${BRC_SAY}, on course, on glidepath, five miles from touchdown, check gear down."<br>"Runway ${RWY_SAY}, cleared to land, wind ${sayDigits(hdg3(BRC + 10))} at four. Four miles from touchdown."<br>"On course, on glidepath, two miles from touchdown."<br>"At decision height." … "Over landing threshold." … "Contact tower."</div>
    <p>Pilots react to glidepath calls: "slightly above" makes them descend a bit faster, "slightly below" a bit slower, and "on glidepath" brings them back to normal. Heading calls are the only way to move them sideways.</p>
    <p><b>ASR (surveillance) approach</b>: no glidepath; the pilot holds altitude until told to descend to the <b>MDA (470 ft)</b> at the final approach fix and reaches it by the missed approach point (¾ mile). Announce it <b>no later than 4 miles (rotary, incl. MV-22B) / 5 miles (fixed wing)</b>; pilot: "(callsign)". Each scripted call is graded within ±0.3 mile.</p>
-   <div class="say"><b>Rotary wing</b><br>(≥4 mi) "Nighthawk two five, this will be a surveillance approach."<br>(4 mi) "Nighthawk two five, four miles. Prepare to descend in one mile."<br>(3 mi) "Nighthawk two five, three miles. Descend to your minimum descent altitude. Minimum descent altitude four seven zero." <i>("Nighthawk two five")</i><br>(2 mi) "Nighthawk two five, two miles, on course."<br>(1 mi) "Nighthawk two five, one mile, on course."<br>(¾ mi) "Nighthawk two five, surveillance minimums, on course, if runway not in sight, execute missed approach." <i>(stable: "Runway in sight" and lands; otherwise executes the missed approach)</i></div>
+   <div class="say"><b>Rotary wing</b><br>(≥4 mi) "Nighthawk three two five, this will be a surveillance approach."<br>(4 mi) "Nighthawk three two five, four miles. Prepare to descend in one mile."<br>(3 mi) "Nighthawk three two five, three miles. Descend to your minimum descent altitude. Minimum descent altitude four seven zero." <i>("Nighthawk three two five")</i><br>(2 mi) "Nighthawk three two five, two miles, on course."<br>(1 mi) "Nighthawk three two five, one mile, on course."<br>(¾ mi) "Nighthawk three two five, surveillance minimums, on course, if runway not in sight, execute missed approach." <i>(stable: "Runway in sight" and lands; otherwise executes the missed approach)</i></div>
    <div class="say"><b>Fixed wing</b><br>(≥5 mi) "Lightning two one, this will be a surveillance approach."<br>(6 mi) "Lightning two one, six miles. Prepare to descend in one mile."<br>(5 mi) "Lightning two one, five miles, descend to your minimum descent altitude. Minimum descent altitude four seven zero."<br>(4 mi) "Lightning two one, four miles, on course."<br>(3 mi) "Lightning two one, three miles, on course."<br>(2 mi) "Lightning two one, two miles, on course."<br>(¾ mi) "Lightning two one, surveillance minimums, if runway not in sight, execute missed approach."</div>`],
   ['5. Scoring', `<ul><li>Time inside the <b>course and glidepath tolerance</b> (up to 30 pts) plus <b>40 for a landing</b>.</li>
    <li><b>Accurate trend calls</b> score; <b>wrong</b> ones (saying "left" when it's right) lose points.</li>
@@ -2367,7 +2413,7 @@ const TUT = [
    <li>Chrome's speech recognition <b>needs an internet connection</b>, because the audio goes to Google's speech service.</li>
    <li>If the mic is blocked on a <b>file://</b> page, serve the folder locally: open a terminal in the folder with this file and run<br><code>python -m http.server</code><br>then open <code>http://localhost:8000/final-controller-par.html</code></li>
    <li>Allow the microphone when the browser asks. You can test it under ⚙ Voice → Test microphone.</li></ul>`],
-  ['7. Phrases the game understands', `<p>Callsigns are tactical callsigns plus a number, spoken digit by digit: "Lightning two one", "Nighthawk one zero two", "Viper four five", "Ridge three one two". If you leave the callsign out, the call goes to the selected PAR aircraft. Number words can be digit-by-digit ("${sayDigits(hdg3(BRC - 2))}", "niner", "tree", "fife") or grouped ("three thousand", "one hundred eighty knots"). Filler like "uh" is ignored.</p>
+  ['7. Phrases the game understands', `<p>Callsigns are tactical callsigns plus a number, spoken digit by digit: "Lightning two one", "Nighthawk one zero two", "Viper four five two", "Ridge three one two". If you leave the callsign out, the call goes to the selected PAR aircraft. Number words can be digit-by-digit ("${sayDigits(hdg3(BRC - 2))}", "niner", "tree", "fife") or grouped ("three thousand", "one hundred eighty knots"). Filler like "uh" is ignored.</p>
    <ul><li>turn left/right heading ___ · heading ___</li><li>on course · slightly left/right of course · left/right of course · well left/right of course · going left/right of course</li>
    <li>approaching glidepath · begin descent · on glidepath · above/below glidepath · slightly/well above/below glidepath · going above/below glidepath</li>
    <li>adjust / reduce / increase rate of descent</li><li>___ miles from touchdown · do not acknowledge further transmissions</li>
@@ -2391,16 +2437,16 @@ const TUT_SHIP = {
    <li>Every few seconds: "on course, on glidepath", "slightly above glidepath"… and a <b>range every mile</b>: "four miles", "one and a half miles". At <b>2 miles</b> the pilot reports "<b>Lightning two one, see you</b>" (no reply needed; "roger" is fine).</li>
    <li><b>Sinker:</b> on some approaches the aircraft starts sinking below the glidepath and glidepath calls won't stop it. Only "<b>Low altitude alert, Lightning two one, check your altitude immediately, altimeter two niner niner two</b>" does (pilot: "Lightning two one, climbing.", even after "do not acknowledge"); it then climbs back to the glidepath.</li>
    <li>If you didn't say "wheels should be down" on contact: "<b>check wheels down</b>". No separate landing clearance is needed: the deck call exchange below clears the aircraft to land ("deck is clear, cleared to land spot seven" is still accepted).</li>
-   <li><b>Deck call</b> (required before half a mile): helicopters (CH-53E, AH-1Z, UH-1Y, MH-60S) get "<b>one mile, go green</b>" (pilot: "<b>Nighthawk two five, going green</b>"). Jets (F-35B, AV-8B) get "<b>three-quarter mile, call the ball</b>" (pilot: "<b>Lightning two one, ball, state four point nine</b>", the fuel state). That reply is the landing clearance: the aircraft may land. "Roger ball" is optional. Pilots make these replies even after "do not acknowledge".</li>
-   <li><b>Practice approaches</b>: at check-in each pilot states an intention: "…for the PAR to the ship, <b>full stop</b>" (FS) or "…<b>request multiple practice PARs</b>" (PRAC; shown in the side panel). A practice aircraft gets no deck call. At <b>one mile</b> instead: jets "<b>one mile, execute climb outs, go silver</b>" (pilot: "Lightning two one"; climbs to 1,200 ft, left turn to ${hdg3(CLIMB_JET.hdg)}); helicopters "<b>one mile, enter starboard delta, go green</b>" (pilot: "Nighthawk two five"; climbs to 1,000 ft, right turn to ${hdg3(CLIMB_HELO.hdg)}). It then comes back around for another approach; after 1–3 practice approaches it checks in with "<b>this will be a full stop</b>" and lands.</li>
+   <li><b>Deck call</b> (required before half a mile): helicopters (CH-53E, AH-1Z, UH-1Y, MH-60S) get "<b>one mile, go green</b>" (pilot: "<b>Nighthawk three two five, going green</b>"). Jets (F-35B, AV-8B) get "<b>three-quarter mile, call the ball</b>" (pilot: "<b>Lightning two one, ball, state four point nine</b>", the fuel state). That reply is the landing clearance: the aircraft may land. "Roger ball" is optional. Pilots make these replies even after "do not acknowledge".</li>
+   <li><b>Practice approaches</b>: at check-in each pilot states an intention: "…for the PAR to the ship, <b>full stop</b>" (FS) or "…<b>request multiple practice PARs</b>" (PRAC; shown in the side panel). A practice aircraft gets no deck call. At <b>one mile</b> instead: jets "<b>one mile, execute climb outs, go silver</b>" (pilot: "Lightning two one"; climbs to 1,200 ft, left turn to ${hdg3(CLIMB_JET.hdg)}); helicopters "<b>one mile, enter starboard delta, go green</b>" (pilot: "Nighthawk three two five"; climbs to 1,000 ft, right turn to ${hdg3(CLIMB_HELO.hdg)}). It then comes back around for another approach; after 1–3 practice approaches it checks in with "<b>this will be a full stop</b>" and lands.</li>
    <li>Full stop, inside half a mile: "<b>over the deck</b>", then "<b>contact Tower</b>" (or "Tower has you").</li></ol>
    <p>If you need to wave it off: "<b>wave off, wave off, climb and maintain two thousand, fly base recovery course ${BRC_SAY}</b>". No deck call (or spot clearance) by half a mile means a <b>fouled deck</b> and the pilot waves off.</p>`],
   3: ['4. Sample script', `<div class="say">"Lightning two one, ${SHIP_NAME} final, how do you hear me, wheels should be down, report see me." <i>(pilot: "Lightning two one, loud and clear, wheels down, will report see you")</i><br>"Well right of course, come right heading ${sayDigits(hdg3(BRC - 10))}, nine and a half miles." <i>("Lightning two one")</i><br>"Slightly right of course, come right heading ${BRC_SAY}." <i>("Lightning two one")</i><br>"Approaching glidepath." <i>("Lightning two one")</i><br>"Begin descent." <i>("Lightning two one")</i><br>"Do not acknowledge further transmissions." <i>("Lightning two one", then silent)</i><br>"On course, on glidepath, seven miles."<br>"On course, slightly above glidepath."<br>"On course, on glidepath, five miles."<br>"On course, on glidepath, four miles."<br><i>(pilot, at 2 miles: "Lightning two one, see you")</i><br>"On course, on glidepath, one and a half miles."<br>"Three-quarter mile, call the ball." <i>(pilot: "Lightning two one, ball, state four point nine": cleared to land)</i><br>"Over the deck." … "Contact Tower."</div>
-   <p>For a helicopter, the deck call at one mile is "<b>One mile, go green.</b>" <i>(pilot: "Nighthawk two five, going green": cleared to land)</i>.</p>
-   <p><b>Practice approach</b> (pilot checked in with "request multiple practice PARs"): the same talk-down, but at one mile: jet "<b>One mile, execute climb outs, go silver.</b>" <i>("Lightning two one": climbs to 1,200, left to ${hdg3(CLIMB_JET.hdg)})</i>; helicopter "<b>One mile, enter starboard delta, go green.</b>" <i>("Nighthawk two five": climbs to 1,000, right to ${hdg3(CLIMB_HELO.hdg)})</i>. It comes back for another PAR; the last one starts "…this will be a full stop".</p>
+   <p>For a helicopter, the deck call at one mile is "<b>One mile, go green.</b>" <i>(pilot: "Nighthawk three two five, going green": cleared to land)</i>.</p>
+   <p><b>Practice approach</b> (pilot checked in with "request multiple practice PARs"): the same talk-down, but at one mile: jet "<b>One mile, execute climb outs, go silver.</b>" <i>("Lightning two one": climbs to 1,200, left to ${hdg3(CLIMB_JET.hdg)})</i>; helicopter "<b>One mile, enter starboard delta, go green.</b>" <i>("Nighthawk three two five": climbs to 1,000, right to ${hdg3(CLIMB_HELO.hdg)})</i>. It comes back for another PAR; the last one starts "…this will be a full stop".</p>
    <p>Pilots react to glidepath calls: "slightly above" makes them descend a bit faster, "slightly below" a bit slower, and "on glidepath" brings them back to normal. Heading calls are the only way to move them sideways.</p>
    <p><b>ASR (surveillance) approach</b>: no glidepath; the pilot holds altitude until told to descend to the <b>MDA (470 ft)</b> at the final approach fix and reaches it by the missed approach point (¾ mile). Announce it <b>no later than 4 miles (rotary, incl. MV-22B) / 5 miles (fixed wing)</b>; pilot: "(callsign)". Each scripted call is graded within ±0.3 mile.</p>
-   <div class="say"><b>Rotary wing</b><br>(≥4 mi) "Nighthawk two five, this will be a surveillance approach."<br>(4 mi) "Nighthawk two five, four miles. Prepare to descend in one mile."<br>(3 mi) "Nighthawk two five, three miles. Descend to your minimum descent altitude. Minimum descent altitude four seven zero." <i>("Nighthawk two five")</i><br>(2 mi) "Nighthawk two five, two miles, on course."<br>(1 mi) "Nighthawk two five, one mile, on course."<br>(¾ mi) "Nighthawk two five, surveillance minimums, on course, if mother not in sight, execute missed approach." <i>(stable: "Mother in sight" and lands; otherwise executes the missed approach)</i></div>
+   <div class="say"><b>Rotary wing</b><br>(≥4 mi) "Nighthawk three two five, this will be a surveillance approach."<br>(4 mi) "Nighthawk three two five, four miles. Prepare to descend in one mile."<br>(3 mi) "Nighthawk three two five, three miles. Descend to your minimum descent altitude. Minimum descent altitude four seven zero." <i>("Nighthawk three two five")</i><br>(2 mi) "Nighthawk three two five, two miles, on course."<br>(1 mi) "Nighthawk three two five, one mile, on course."<br>(¾ mi) "Nighthawk three two five, surveillance minimums, on course, if mother not in sight, execute missed approach." <i>(stable: "Mother in sight" and lands; otherwise executes the missed approach)</i></div>
    <div class="say"><b>Fixed wing</b><br>(≥5 mi) "Lightning two one, this will be a surveillance approach."<br>(6 mi) "Lightning two one, six miles. Prepare to descend in one mile."<br>(5 mi) "Lightning two one, five miles, descend to your minimum descent altitude. Minimum descent altitude four seven zero."<br>(4 mi) "Lightning two one, four miles, on course."<br>(3 mi) "Lightning two one, three miles, on course."<br>(2 mi) "Lightning two one, two miles, on course."<br>(1 mi, at MDA and on course) "Lightning two one, one mile, call the ball." <i>("Lightning two one, Lightning ball")</i>; if not stable or no ball: (¾ mi) "Lightning two one, surveillance minimums, if mother not in sight, execute missed approach."</div>`],
   4: ['5. Scoring', `<ul><li>Time inside the <b>course and glidepath tolerance</b> (up to 30 pts) plus <b>40 for getting it on deck</b>.</li>
    <li><b>Accurate trend calls</b> score; <b>wrong</b> ones (saying "left" when it's right) lose points.</li>
@@ -2412,8 +2458,8 @@ const TUT_SHIP = {
    <li><b>Stable at half a mile</b> (both within "slightly") +10. Unstable or not cleared (no deck call: fouled deck) at half a mile means the pilot waves off.</li>
    <li><b>Wave-offs cost no points</b> (called by you or by the pilot: fouled deck, unstable, too high, safety limit, lost comms): the approach simply ends, keeping what it earned so far but without the +40 for getting on deck.</li>
    <li><b>Penalties</b>: a gap of more than 5 s without a call on final once you have made your first call (−5 each time), too steep or too shallow, inaccurate calls. Far too low (below the lower limit) it crashes and the session fails, so call the wave-off early if it gets that low.</li>
-   <li><b>Ship turns</b>: +10 for "ninety-nine, mother is in port/starboard turn, standby for new BRC" during the turn (or up to 10 s after) with the right direction, and +10 for "ninety-nine, mother is steady, new BRC is ___" with the right BRC. Wrong direction/BRC scores nothing; no penalties. 99 calls with no turn are not scored.</li></ul>`],
-  6: ['7. Phrases the game understands', `<p>Callsigns are tactical callsigns plus a number, spoken digit by digit: "Lightning two one", "Nighthawk one zero two", "Viper four five", "Ridge three one two" (Lightning, Nighthawk, Viper, Venom, Knight, Ridge, Gunfighter, Charger). If you leave the callsign out, the call goes to the selected PAR aircraft. Both ship and tower phrasing are always understood.</p>
+   <li><b>Ship turns</b> (about every <b>4 minutes</b> of sim time, 5–20°; linked scopes share one ship and the Instructor can change the interval or turn it): +10 for "ninety-nine, mother is in port/starboard turn, standby for new BRC" during the turn (or up to 10 s after) with the right direction, and +10 for "ninety-nine, mother is steady, new BRC is ___" with the right BRC. Wrong direction/BRC scores nothing; no penalties. 99 calls with no turn are not scored.</li></ul>`],
+  6: ['7. Phrases the game understands', `<p>Callsigns are tactical callsigns plus a number, spoken digit by digit: "Lightning two one", "Nighthawk one zero two", "Viper four five two", "Ridge three one two" (Lightning, Nighthawk, Viper, Venom, Knight, Ridge, Gunfighter, Charger). If you leave the callsign out, the call goes to the selected PAR aircraft. Both ship and tower phrasing are always understood.</p>
    <ul><li>come/turn left/right heading ___ · fly base recovery course ___ · heading ___</li><li>on course · slightly left/right of course · left/right of course · well left/right of course · going left/right of course</li>
    <li>approaching glidepath · begin descent · on glidepath · above/below glidepath · slightly/well above/below glidepath · going above/below glidepath</li>
    <li>adjust / reduce / increase rate of descent</li><li>___ miles · one and a half miles · three-quarter mile · do not acknowledge further transmission(s) (pilots ack every call with their callsign until then)</li>
@@ -2823,7 +2869,7 @@ window.PAR = {
     const m = { type: 'inst-state', src: PAGE, ts: Date.now(), running: !!(G && !G.over), paused: !!(G && G.paused) };
     if (G) {
       track(G);
-      Object.assign(m, { t: Math.round(G.t * 10) / 10, scale: G.scale || 1, brc: typeof BRC !== 'undefined' ? BRC : null, tbrc: typeof TBRC !== 'undefined' ? TBRC : null, dwh: typeof DWH === 'function' ? DWH() : null, wind: G.wind ? { dir: G.wind.dir, spd: G.wind.spd } : null, diff: G.d && G.d.name,
+      Object.assign(m, { t: Math.round(G.t * 10) / 10, scale: G.scale || 1, brc: typeof BRC !== 'undefined' ? BRC : null, tbrc: typeof TBRC !== 'undefined' ? TBRC : null, dwh: typeof DWH === 'function' ? DWH() : null, wind: G.wind ? { dir: G.wind.dir, spd: G.wind.spd } : null, diff: G.d && G.d.name, ship: typeof shipInstInfo === 'function' ? shipInstInfo() : null,
         ac: G.ac.filter(alv).map(acOut), roster: roster(G), sched: !FIN, airlines: typeof AIRLINES !== 'undefined' ? AIRLINES.map(x => ({ icao: x.icao, tel: x.tel, types: x.types })) : [] });
     }
     try { ch.postMessage(m); } catch (e) {}
@@ -2877,7 +2923,8 @@ window.PAR = {
         if (!al && type) { const c = AIRLINES.filter(x => x.types.includes(type)); if (c.length) { al = c[Math.floor(Math.random() * c.length)]; cs = al.icao; } }   // type only: a callsign that flies it
         const taken = new Set(G.ac.map(x => x.cs).concat(L.filter(x => !x.done && x.cs).map(x => x.cs)));
         const num = c => (String(c).match(/(\d+)$/) || [])[1], usedN = new Set([...taken].map(num).filter(Boolean));
-        if (al && !/\d/.test(cs)) { let k = 0, v; do { v = 11 + Math.floor(Math.random() * 58); } while (usedN.has(String(v)) && ++k < 60); cs = al.icao + v; }
+        if (al && !/\d/.test(cs)) cs = al.icao + csNum(al, usedN, (a, b) => a + Math.floor(Math.random() * (b - a + 1)));   // v95: jets 2 digits, helos 3
+        else if (al && !csNumOk(al, cs.slice(al.icao.length))) return ack(m, false, `${al.tel} ${alHelo(al) ? 'is a helo: use a 3-digit number (e.g. 311)' : 'is a jet: use a 2-digit number (e.g. 21)'}`);
         if (cs && taken.has(cs)) return ack(m, false, cs + ' is already in this simulation');
         if (al) { if (!type || !al.types.includes(type)) type = al.types[Math.floor(Math.random() * al.types.length)]; } else type = null;   // no callsign: one is generated at check-in
         const MAR = PAGE === 'MARSHAL', id = (MAR ? 'X' : 'A') + (G.schedN = (G.schedN || L.length) + 1);
@@ -2916,8 +2963,10 @@ window.PAR = {
   }
   ch.onmessage = e => {
     const m = e.data || {};
-    if (m.type === 'inst-hello') { peerT = Date.now(); wanted = !m.links || m.links.includes(PAGE) || FIN; if (wanted) send(); }
+    if (m.type === 'inst-hello') { peerT = Date.now(); wanted = !m.links || m.links.includes(PAGE) || FIN; if (wanted && m.ship && typeof shipInstCfg === 'function') { try { shipInstCfg(m.ship); } catch (e) {} } if (wanted) send(); }
     else if (m.type === 'ship-state') { if (typeof shipSyncRecv === 'function') { try { shipSyncRecv(m); } catch (e) {} } }
+    else if (m.type === 'ship-cmd') { if (wanted && typeof shipInstCmd === 'function') { let r = null; try { r = shipInstCmd(m); } catch (e) { r = { ok: false, text: 'error: ' + e.message }; } if (r) ack(m, r.ok, r.text); send(); } }   // v95 Instructor: turn the ship now
+    else if (m.type === 'ship-turn') { if (m.src !== PAGE && typeof shipTurnFollow === 'function') { try { shipTurnFollow(m); } catch (e) {} } }   // v95 linked ship turn from the master scope
     else if (m.type === 'inst-cmd' && (m.to === PAGE || m.to === 'ANY')) { peerT = Date.now(); cmd(m); }
     else if (m.type === 'inst-bye') peerT = 0;
   };
@@ -2925,7 +2974,7 @@ window.PAR = {
   bgEvery(() => { if (wanted && Date.now() - peerT < 8000 && Date.now() - lastSend > 200) send(); }, 220);
   try { ch.postMessage({ type: 'inst-state', src: PAGE, ts: Date.now(), running: false, hello: true }); } catch (e) {}
   try { ch.postMessage({ type: 'ship-req', src: PAGE }); } catch (e) {}   // late joiner: a linked Marshal answers with its current BRC / land
-  { const unscroll = () => { if (document.body.scrollTop) document.body.scrollTop = 0; if (document.documentElement.scrollTop) document.documentElement.scrollTop = 0; }; document.body.addEventListener('scroll', unscroll); addEventListener('scroll', unscroll); setInterval(unscroll, 1000); }   // a focused prompt must never scroll the page (it hid the top bar + Scope slider)
+  { const unscroll = () => { if (innerWidth <= 950) return; if (document.body.scrollTop) document.body.scrollTop = 0; if (document.documentElement.scrollTop) document.documentElement.scrollTop = 0; }; document.body.addEventListener('scroll', unscroll); addEventListener('scroll', unscroll); setInterval(unscroll, 1000); }   // a focused prompt must never scroll the page (it hid the top bar + Scope slider); v95: not on phone/narrow layouts, where the page itself scrolls
   window.__INST = { send, cmd, PAGE }; window.__instStart = (d, o) => startGame(d, o); window.__instScale = s => { try { setScale(s); } catch (e) {} };
 })();
 })();

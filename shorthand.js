@@ -3,7 +3,7 @@
    Plus a few Raphael asked to keep: marshal clearance pieces (030/2, ob, eat, clh), rcm, and no-gyro ng/srt/hsr.
    Other advisories, expectations and climbout instructions have no code (type the full phrase).
    Shorthand.expand(text, ctx) turns compact codes into the full phraseology the scope parsers already understand:
-     "lt21 l270 d1.2 du"  ->  "Lightning 21, turn left heading 270, descend and maintain angels 1.2, dirty up"
+     "lt21 l270 d1.2 du"  ->  "Lightning 21, turn left heading 270, take angels 1.2, dirty up"   (v95: Marshal / Approach say "take angels")
    Only input that LOOKS like shorthand is expanded (at least one code and no more plain words than codes);
    full sentences pass through untouched. Voice input never goes through here.
    Shorthand.attach({scope, accent, ctx}) adds the live preview line + the "⌨ Shorthand" cheat sheet under #cmdInput,
@@ -17,6 +17,7 @@ const CS_ALIAS = { lt: 'Lightning', li: 'Lightning', nh: 'Nighthawk', vp: 'Viper
   rd: 'Ridge', ri: 'Ridge', gf: 'Gunfighter', gu: 'Gunfighter', ch: 'Charger', cg: 'Charger', kn: 'Knight', kt: 'Knight' };
 const h3 = v => String(+v).padStart(3, '0');
 const NUM = '(\\d+(?:\\.\\d+)?)';
+const takeOr = (verb, n, sc) => { const v = parseFloat(n); return sc !== 'final' && v < 100 ? `take angels ${n}` : `${verb} and maintain ${angOrFt(n, sc)}`; };   // v95: Marshal / Approach use "take angels"
 const angOrFt = (n, sc) => { n = parseFloat(n); if (sc === 'final') return (n < 100 ? Math.round(n * 1000) : n) + ' feet'; return n < 100 ? 'angels ' + n : n + ' feet'; };
 
 /* code table: [regex (whole token), scopes, (match, state) => phrase, code label, meaning] */
@@ -28,9 +29,11 @@ const CODES = [
   [/^brc(\d{2,3})$/, SC, (m, s) => s.clr ? `BRC ${h3(m[1])}` : `fly base recovery course ${h3(m[1])}`, 'brc360', 'fly base recovery course 360 (BRC 360 inside a marshal clearance)'],
   [/^rh$/, A, () => 'fly runway heading', 'rh', 'fly runway heading'],
   [new RegExp('^a' + NUM + '$'), SC, (m, s) => s.sc === 'final' ? `maintain ${angOrFt(m[1], 'final')}` : s.clr ? `angels ${m[1]}` : `maintain angels ${m[1]}`, 'a5', 'maintain angels 5 (angels 5 inside a marshal clearance, Final: feet)'],
-  [new RegExp('^c' + NUM + '$'), SC, (m, s) => `climb and maintain ${angOrFt(m[1], s.sc)}`, 'c3', 'climb and maintain angels 3 (c1500 = feet)'],
-  [new RegExp('^d' + NUM + '$'), SC, (m, s) => `descend and maintain ${angOrFt(m[1], s.sc)}`, 'd1.2', 'descend and maintain angels 1.2'],
-  [/^s(\d{2,3})$/, SC, m => `maintain ${m[1]} knots`, 's250', 'maintain 250 knots'],
+  [new RegExp('^ta' + NUM + '$'), MA, m => `take angels ${m[1]}`, 'ta5', 'take angels 5'],
+  [new RegExp('^c' + NUM + '$'), SC, (m, s) => takeOr('climb', m[1], s.sc), 'c3', 'take angels 3 (Final: climb and maintain feet; c1500 = feet)'],
+  [new RegExp('^d' + NUM + '$'), SC, (m, s) => takeOr('descend', m[1], s.sc), 'd1.2', 'take angels 1.2 (Final: descend and maintain feet)'],
+  [/^s(\d{2,3})$/, SC, (m, s) => s.sc === 'final' ? `maintain ${m[1]} knots` : `take speed ${m[1]}`, 's250', 'take speed 250 (Final: maintain 250 knots)'],
+  [/^as(\d{2,3})?$/, MA, m => 'take approach speed' + (m[1] ? ' ' + m[1] : ''), 'as140', 'take approach speed 140 (jets dirty up, helos landing checks)'],
   [/^bu$|^sb$|^buster$/, SC, () => 'signal buster', 'bu / sb', 'signal buster'],
   // ---- frequencies (permanent colors) ----
   [/^gr$/, SC, () => 'go red', 'gr', 'go red (Marshal)'],
@@ -210,7 +213,7 @@ function attach(opt) {
   const rows = tableFor(sc).map(c => `<tr><td>${esc(c[3])}</td><td>${esc(c[4])}</td></tr>`).join('');
   const ex = { marshal: 'ea16 030/2 a2 brc360 ob210 eat15', approach: 'lt21 l180 d1.2 du', final: 'lt21 r090 bd' }[sc];
   help.innerHTML = `<span class="x" title="Close">✕</span><h3>⌨ Shorthand: ${esc(sc[0].toUpperCase() + sc.slice(1))}</h3>
-<p>Start with a callsign (<b>lt21</b> = Lightning 21, <b>ea16</b>, <b>vn12</b>, <b>nh34</b>, or just the digits <b>21</b>, or an accepted aircraft's letter: <b>A h270</b>); leave it off to talk to the selected aircraft. Chain codes with spaces, e.g. <b>${esc(ex)}</b>. The full phrase is shown under the box and goes into the log. Full sentences still work as before. Type <b>?</b> + Enter to open this.</p>${sc === 'final' ? '' : '<p><b>GSP</b>: type <b>gsp</b> once to show ground speed on ALL data blocks (later arrivals too); type it again to hide it. Scope only, not a radio call; resets to off on every new sim.</p>'}
+<p>Start with a callsign (<b>lt21</b> = Lightning 21, <b>ea16</b>, <b>vn312</b> (helos have 3 digits), <b>nh341</b>, or just the digits <b>21</b>, or an accepted aircraft's letter: <b>A h270</b>); leave it off to talk to the selected aircraft. Chain codes with spaces, e.g. <b>${esc(ex)}</b>. The full phrase is shown under the box and goes into the log. Full sentences still work as before. Type <b>?</b> + Enter to open this.</p>${sc === 'final' ? '' : '<p><b>GSP</b>: type <b>gsp</b> once to show ground speed on ALL data blocks (later arrivals too); type it again to hide it. Scope only, not a radio call; resets to off on every new sim.</p>'}
 <table>${rows}</table>`;
   document.body.appendChild(help);
   const btn = bar.querySelector('#shBtn'), prev = bar.querySelector('#shPrev');

@@ -5,6 +5,7 @@
 <script src="phrase-match.js"></script>
 <script src="warm-mic.js"></script>
 <script src="bg-clock.js"></script>
+<script src="pilot-voice.js"></script>
 <script src="shorthand.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -485,6 +486,16 @@ const Q = w => (w === 'well' || w === 'way' || w === 'too' || w === 'very') ? 'w
 const SIDE = w => (w === 'left' ? 'L' : w === 'right' ? 'R' : (w === 'above' || w === 'high') ? 'above' : 'below');
 const SECTOR_NUM = { 1: 1, one: 1, won: 1, 2: 2, two: 2, to: 2, too: 2, 3: 3, three: 3, tree: 3, 4: 4, four: 4, for: 4, fore: 4 };
 const PATTERNS = [
+  // ---- v95 (Marshal + Approach): off mothers radar contact, say type, report level, take speed / approach speed (now, in N miles, in N seconds) ----
+  [/\boff\s+(?:(?:off|of)\s+)?(?:mothers?|mother\s+s|the\s+ship|ship)\s*,?\s+(\d{1,3})\s+(?:at|for)\s+(\d+(?:\.\d+)?)(?:\s+(?:miles?|nm|dme))?(?:\s*,?\s*radar\s+(?:contacts?|contract|contacted|context|contact\s+s))?/g,
+    m => ({ k: 'radarContact', brg: +m[1] % 360, rng: parseFloat(m[2]), dirTxt: String(+m[1]).padStart(3, '0') + '° off mother', offMom: true })],
+  [/\bsay\s+(?:your\s+|again\s+)?(?:aircraft\s+)?type(?:\s+(?:of\s+)?aircraft)?\b/g, () => ({ k: 'sayType' })],
+  [/\breport\s+(?:when\s+|reaching\s+)?(?:level|leveled|levelled|leveling|levelling)(?:\s+(?:at\s+)?(?:angels|angles|angel)\s+(\d+(?:\.\d+)?))?/g,
+    m => { const n = m[1] != null ? parseFloat(m[1]) : null; return { k: 'reportLevel', v: n == null ? null : Math.round(n < 100 ? n * 1000 : n) }; }],
+  [/\bin\s+(\d+(?:\.\d+)?)\s+(miles?|nm|seconds?|secs?|minutes?|mins?)\s*,?\s*(?:take|reduce\s+to|slow\s+to|slow\s+to\s+your)\s+(?:your\s+)?approach\s+speed(?:\s+(\d{2,3}))?(?:\s+knots)?/g,
+    m => { const n = parseFloat(m[1]), u = m[2]; const mi = /^(?:mile|nm)/.test(u); return { k: 'apSpdLater', mi: mi ? n : null, sec: mi ? null : (/^min/.test(u) ? n * 60 : n), v: m[3] ? +m[3] : null }; }],
+  [/\b(?:take|reduce\s+to|slow\s+to)\s+(?:your\s+)?approach\s+speed(?:\s+(\d{2,3}))?(?:\s+knots)?/g, m => ({ k: 'apSpd', v: m[1] ? +m[1] : null })],
+  [/\btake\s+speed\s+(\d{2,3})(?:\s+knots)?\b/g, m => ({ k: 'spd', v: +m[1] })],
   [/\b(?:say|state|sae)\s+(?:your\s+)?(?:fuel\s+)?state\b|\bsay\s+(?:your\s+)?fuel(?:\s+state)?\b/g, () => ({ k: 'sayState' })],
   [/\bsay\s+(?:your\s+)?(?:angels|angles|angel|altitude|alt)\b/g, () => ({ k: 'sayAngels' })],
   [/\b(?:(?:proceed|proceeding|precede|proceed\s+direct)\s+(?:to\s+|2\s+)?)?(?:sector|sectors|sektor|secter)\s+([1-4]|one|won|two|too|to|three|tree|four|for|fore)\b(?:\s*,?\s*(?:and\s+)?report(?:ing)?\s+(?:established|establish|estab?lished))?/g, m => ({ k: 'sector', v: SECTOR_NUM[m[1]] })],
@@ -649,6 +660,10 @@ function cmdStr(c) {
     case 'rogerBall': return 'roger ball';
     case 'reportSee': return 'report see me';
     case 'roger': return 'roger';
+    case 'sayType': return 'say type';
+    case 'reportLevel': return 'report level' + (c.v != null ? ' angels ' + (c.v / 1000) : '');
+    case 'apSpd': return 'take approach speed' + (c.v ? ' ' + c.v : '');
+    case 'apSpdLater': return `in ${c.mi != null ? c.mi + ' NM' : c.sec + ' s'} take approach speed${c.v ? ' ' + c.v : ''}`;
     case 'radarContact': return c.rng != null ? `radar contact ${c.rng} NM ${c.dirTxt}` : 'radar contact';
     case 'rid': return 'vectors for radar ID';
     case 'buster': return 'signal buster (500 kt)';
@@ -858,11 +873,19 @@ function newGame(diffKey, opts = {}) {
   refreshPanel(true);
 }
 
+/* v95 callsign numbers: jets / fixed wing 2 digits (Lightning 21), helos 3 digits (Ridge 311); spoken digit by digit */
+const alHelo = al => !!(al && al.types && al.types.some(t => TYPES[t] && TYPES[t].helo));
+function csNum(al, used, R) {   // R: random int (a, b) -> the sim rng by default
+  R = R || randi; const helo = alHelo(al); let n = '';
+  for (let k = 0; k < 60; k++) { n = String(helo ? R(1, 6) * 100 + R(1, 6) * 10 + R(1, 8) : R(11, 68)); if (!used || !used.has(n)) break; }
+  return n;
+}
+const csNumOk = (al, num) => alHelo(al) ? /^\d{3}$/.test(num) : /^\d{2}$/.test(num);
 function makeAc(spec) {
   let cs = spec.cs, type = spec.type;
   if (!cs) {
     for (let i = 0; i < 40; i++) {
-      const al = pick(AIRLINES); cs = al.icao + (rng() < 0.5 ? randi(11, 69) : randi(100, 499)); type = pick(al.types);
+      const al = pick(AIRLINES); cs = al.icao + csNum(al); type = pick(al.types);
       let peer = false; try { peer = MA.taken(cs); } catch (e) {}   // v94: not a callsign in use on a linked Marshal page
       if (!peer && !G.ac.some(a => a.cs === cs) && !G.rejoin.some(j => j.cs === cs)) break;
     }
@@ -1644,6 +1667,9 @@ function ttsNext() {
   if (recLive) { if (!ttsWaitT0) ttsWaitT0 = performance.now(); if (performance.now() - ttsWaitT0 < 2500) { ttsWatch = setTimeout(ttsNext, 150); return; } try { rec && rec.abort(); } catch (e) {} recLive = false; }
   ttsWaitT0 = 0;
   if (MOBILE && performance.now() - recEndAt < 350) { ttsWatch = setTimeout(ttsNext, 350 - (performance.now() - recEndAt)); return; }   // iOS audio session switch after the mic
+  { const now = performance.now(); let n = 0;   // v95: never read out stale replies (a backlog made late-sim voices pile up and sound garbled)
+    for (let i = ttsQ.length - 1; i >= 0; i--) { const x = ttsQ[i]; if (x.prio) continue; if (now - (x.t0 || now) > 12000 || ++n > 4) ttsQ.splice(i, 1); }
+    if (!ttsQ.length) { ttsAudio(true); return; } }
   const it = ttsQ.shift(); ttsCur = it;
   ttsAudio(false);
   try { if (speechSynthesis.paused) { ttsL('resume'); speechSynthesis.resume(); } ttsL('speak', it.u.text); speechSynthesis.speak(it.u); } catch (e) { ttsCur = null; ttsAudio(true); return; }
@@ -1663,13 +1689,13 @@ function pilotSay(a, text, say, force, routine, prio) {
   if (!S.voiceOut || !TTS || (pttDown && !prio)) return;   // priority calls are queued even while the mic is keyed
   try {
     const u = new SpeechSynthesisUtterance(String(say || text).replace(/\s*\n+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim());
-    const item = { u, routine: !!routine, prio: !!prio };
+    const item = { u, routine: !!routine, prio: !!prio, t0: performance.now() };
     u.onend = () => { if (ttsCur === item) ttsNext(); };
     u.onerror = ev => { if (ev && ev.error && !/interrupted|canceled/.test(ev.error) && (MOBILE || ev.error !== 'not-allowed')) mStatus('Pilot voice error: ' + esc(ev.error) + (IOS ? ' (check the ringer/silent switch and volume)' : '')); if (ttsCur === item) ttsNext(); };
     if (routine) for (let i = ttsQ.length - 1; i >= 0; i--) if (ttsQ[i].routine) ttsQ.splice(i, 1);   // a newer ack replaces a stale waiting ack
     let v = null;
     if (S.voice !== 'auto') v = voices.find(x => x.name === S.voice) || null;
-    else if (voices.length) { const loc = voices.filter(x => x.localService); const pool = loc.length ? loc : voices; v = pool[a.uid % pool.length]; }
+    else if (voices.length) v = window.PilotVoice ? PilotVoice.pick(a && (a.cs || a.uid), voices) : voices[0];   // v95: natural voices only, one stable voice per callsign
     if (v) u.voice = v; else u.lang = 'en-US';   // no matching voice yet: let the browser use its default
     u.pitch = 1;   // pitch/rate other than 1 crackles on Windows SAPI voices; variety comes from the voice only
     u.rate = 1;
@@ -2115,7 +2141,7 @@ function applyPhrUI() {
   $('introP').innerHTML = sh
     ? `You're <b>${SHIP_NAME} Approach</b> (Silver) aboard an amphibious assault ship. Aircraft <b>launch from the ship</b> one at a time and come back for practice PARs on the <b>base recovery course (BRC) ${h3z(TBRC)}</b> (final bearing ${BRC3} magnetic). Using your <b>voice</b> (or typed commands): take <b>radar contact</b>, vector with headings / angels / speed, send them to a <b>sector</b>, pass <b>traffic</b>, give <b>climbout instructions</b> ("at one mile take angels …, turn left/right heading …"), and hand them to <b>Final</b> with "go purple" or "go copper". Turn Link ON to hand off to the Final page, or leave it OFF to practice solo.`
     : applyPhrUI.towerIntro;
-  $('cmdInput').placeholder = sh ? 'Type instead (Enter): lightning 21 turn left heading 180, descend and maintain angels 1.2' : 'Type instead (Enter): lightning 21 turn left heading 180';
+  $('cmdInput').placeholder = sh ? 'Type instead (Enter): lightning 21 turn left heading 180, take angels 1.2' : 'Type instead (Enter): lightning 21 turn left heading 180';
   if (!helpOv.classList.contains('hidden')) renderTut();
 }
 $('sPhr').addEventListener('change', () => setPhr($('sPhr').value));
@@ -2184,14 +2210,14 @@ const TUT = [
    <li><b>Accept</b> the departure (click its target). First transmission with "<b>${SHIP_NAME} Approach</b>" scores the Stinger Approach task.</li>
    <li><b>Radar contact</b> within <b>2 NM</b> of the ship ("Lightning two one, radar contact"). Past 2 NM costs points. You can also give a full ID: "radar contact, 5 miles northeast of mother".</li>
    <li><b>First altitude</b> after check-in must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets.</li>
-   <li><b>Vector</b>: "turn left heading 180, descend and maintain angels 1.2, vectors for CCA approach, expect final button purple".</li>
+   <li><b>Vector</b>: "turn left heading 180, take angels 1.2, vectors for CCA approach, expect final button purple".</li>
    <li><b>Slow down</b> when needed: jets "<b>dirty up</b>", helos "<b>perform landing checks</b>".</li>
    <li><b>Climbout instructions</b> (stored until after the low approach): "your climbout instructions are at one mile take angels 2, turn left heading 270". If you re-vector before 1 NM past the ship, the deferred turn is cancelled.</li>
    <li><b>Handoff to Final</b>: when lined up inbound and down to ~3,000 ft or below inside ~3 NM, "<b>go purple</b>" or "<b>go copper</b>". With Link ON the Final page takes them; solo, they self-recover on the final bearing.</li>
    </ol>
    <p>Also useful: <b>sectors</b> ("proceed to sector 2, report established"), <b>traffic</b> advisories (pilot answers "tally-ho"), "<b>say angels</b>", "<b>say state</b>", "<b>mark your father</b>" (posit from the ship), and <b>99</b> ship-turn calls when Mother turns.</p>`],
   ['4. Sample script', `<div class="say">"Lightning two one, ${SHIP_NAME} Approach, radar contact."<br>
-"Lightning two one, turn left heading 180, descend and maintain angels 1.2, vectors for CCA approach, expect final button purple."<br>
+"Lightning two one, turn left heading 180, take angels 1.2, vectors for CCA approach, expect final button purple."<br>
 "Lightning two one, dirty up."<br>
 "Lightning two one, your climbout instructions are at one mile take angels 2, turn left heading 270."<br>
 "Lightning two one, traffic, two o'clock, 5 miles, northbound, F-35, angels 3."<br>
@@ -2200,7 +2226,7 @@ const TUT = [
   ['5. Scoring', `<ul>
    <li>Each graded task is <b>+10</b>: Stinger Approach · radar contact · first angels · vectors for CCA · expect final button · pattern position · climbout instructions · dirty up / landing checks.</li>
    <li><b>−5</b> for late radar contact (past 2 NM), wrong first angels, wrong pattern position / range, or a bad radar-ID call.</li>
-   <li><b>Ship turns</b>: correct "99 … Mother is in a port/starboard turn" and "99 … Mother steady, BRC …" calls score a bonus.</li>
+   <li><b>Ship turns</b>: correct "99 … Mother is in a port/starboard turn" and "99 … Mother steady, BRC …" calls score a bonus. The ship turns about every <b>4 minutes</b> (sim time), 5–20°; the Instructor screen can change the interval or turn it on demand.</li>
    <li><b>Separation losses</b> between aircraft cost heavily — slow the follower or vector them apart.</li>
    <li>Handing to Final inside the window (lined up, low enough) scores; aircraft then fly up to 3 practice PARs and recover full stop on the last.</li>
    </ul>`],
@@ -2209,10 +2235,12 @@ const TUT = [
    <li>Chrome's speech recognition <b>needs an internet connection</b>, because the audio goes to Google's speech service.</li>
    <li>If the mic is blocked on a <b>file://</b> page, serve the folder locally: open a terminal in the folder with this file and run<br><code>python -m http.server</code><br>then open <code>http://localhost:8000/approach-controller.html</code></li>
    <li>Allow the microphone when the browser asks. You can test it under ⚙ Voice → Test microphone.</li></ul>`],
-  ['7. Phrases the game understands', `<p>Callsigns are tactical callsigns plus a number, spoken digit by digit: "Lightning two one", "Nighthawk one zero two". If you leave the callsign out, the call goes to the selected aircraft. Number words can be digit-by-digit or grouped ("angels one point two", "one hundred eighty knots"). A shared sound-alike matcher cleans up common mishearings first.</p>
+  ['7. Phrases the game understands', `<p>Callsigns are tactical callsigns plus a number, spoken digit by digit: jets and fixed wing have 2 digits ("Lightning two one"), helos 3 ("Nighthawk one zero two"). Say "niner" for 9 ("heading zero niner zero"); "nine" works too. If you leave the callsign out, the call goes to the selected aircraft. Number words can be digit-by-digit or grouped ("angels one point two", "one hundred eighty knots"). A shared sound-alike matcher cleans up common mishearings first.</p>
    <ul>
    <li>${SHIP_NAME} Approach · radar contact (… miles … of mother) · vectors for radar identification</li>
-   <li>turn/come left/right heading ___ · fly heading ___ · climb/descend and maintain angels ___ / ___ feet · maintain ___ knots</li>
+   <li>turn/come left/right heading ___ · fly heading ___ (shorter way) · <b>take angels ___</b> (climb or descend; "climb/descend and maintain angels ___ / ___ feet" still works) · <b>take speed ___</b> ("maintain ___ knots" still works)</li>
+   <li>off mothers ___ at __, radar contact (pilot: "&lt;callsign&gt;, radar contact") · say type (pilot: "&lt;callsign&gt;, &lt;type&gt;") · report level angels ___ (pilot reports "&lt;callsign&gt;, level angels ___" on reaching it; handy with a primary-only target)</li>
+   <li>take speed ___ · take approach speed ___ · in __ miles take approach speed ___ (after flying that many more miles) · in __ seconds take approach speed ___ (jets 130–170 kt, configures like dirty up; helos 70–130 kt, like landing checks)</li>
    <li>vectors for CCA approach · expect final button purple/copper · proceed to sector 1–4, report established</li>
    <li>your climbout instructions are at one mile take angels ___, turn left/right heading ___</li>
    <li>traffic, … · say angels · say state · mark your father · dirty up · perform landing checks</li>
@@ -2752,49 +2780,101 @@ function appCheckIn(a, again) {
     `${SHIP_NAME} Approach, ${a.telSay}, ${pre}${posAlso ? positSay : ""}${angS}state ${fSay}, ${NUMW[n]} ${sw} on board, request ${reqS}.`);
   if (!G.selected) selectAc(a);
 }
-/* ---------- ship turns: random 1-15 deg port/starboard, 5 s warning, ~1 deg/s ---------- */
-const SHIP_TURN = { firstAfter: 120, every: [240, 480], warn: 5, rate: 1, minDeg: 1, maxDeg: 15, turnCallGrace: 15, steadyCallWin: 30, bonus: 10, steadyBanner: 8 };
+/* ---------- ship turns (v95): every SHIPCFG.every s of sim time (default 4 min), 5-20 deg (multiples of 5) port/starboard, 5 s warning, ~1 deg/s.
+   One master turns the ship: Marshal (always), else Approach (when no running linked Marshal). Followers (Approach behind Marshal) replay the
+   master's 'ship-turn' messages so every linked scope shows the same BRC; Final follows via the 'brc' link messages. The Instructor can switch
+   auto turns off, change the interval, or turn the ship now (direction + degrees): 'ship-cfg' / 'ship-cmd' over stinger-link. ---------- */
+const SHIP_TURNS_ON = true;
+const SHIPCFG = { auto: true, every: 240 };   // Instructor 'ship-cfg' overrides (auto on/off, interval s)
+const SHIP_TURN = { warn: 5, rate: 1, degs: [5, 10, 15, 20], turnCallGrace: 15, steadyCallWin: 30, bonus: 10, steadyBanner: 8 };
 function shipBanner(cls, txt) { const b = $('shipBanner'); if (!b) return; b.className = cls || ''; b.textContent = txt || ''; b.style.display = txt ? 'block' : 'none'; }
 function shipLinkPost(turning) { if (!LINK.on) return; const n3 = v => { v = Math.round(((v % 360) + 360) % 360); return v || 360; };
-  const S = G.ship, tgt = turning && S ? S.from + (S.dir === 'port' ? -1 : 1) * S.deg : TBRC;
-  LINK.post({ type: 'brc', brc: n3(tgt), fb: n3(tgt - MV), dwh: n3(tgt + 180), mv: MV, turning, dir: S ? S.dir : undefined }); }
-function shipTurnSchedule(dir, deg, inSec) {
-  G.ship = { st: 'warn', dir: dir || (rand(0, 1) < 0.5 ? 'port' : 'starboard'), deg: deg || Math.round(rand(SHIP_TURN.minDeg, SHIP_TURN.maxDeg)), at: G.t + (inSec != null ? inSec : SHIP_TURN.warn), from: TBRC };
-  log('warn', `Ship turn in ${Math.round(G.ship.at - G.t)} s: mother will turn ${G.ship.dir} about ${G.ship.deg}°.`); try { Sound.chirp(); } catch (e) {}
+  const S = G.ship, tgt = turning && S ? (S.to != null ? S.to : S.from + (S.dir === 'port' ? -1 : 1) * S.deg) : TBRC;
+  LINK.post({ type: 'brc', src: SHIP_PAGE, brc: n3(tgt), fb: n3(tgt - MV), dwh: n3(tgt + 180), mv: MV, turning, dir: S ? S.dir : undefined }); }
+const SHIP_PAGE = (typeof MC !== 'undefined' && MC) ? 'MARSHAL' : 'APPROACH';
+let SHIP_TCH = null;
+function shipTurnPost(phase) {   // master -> followers (Approach behind Marshal, Instructor display)
+  if (shipFollowing()) return; const S = G && G.ship; if (!S) return;
+  try { if (!SHIP_TCH && 'BroadcastChannel' in window) SHIP_TCH = new BroadcastChannel('stinger-link');
+    if (SHIP_TCH) SHIP_TCH.postMessage({ type: 'ship-turn', src: SHIP_PAGE, id: S.id, phase, dir: S.dir, deg: S.deg, from: Math.round(S.from) % 360 || 360, to: S.to != null ? S.to : norm(Math.round(S.from) + (S.dir === 'port' ? -1 : 1) * S.deg) % 360 || 360, warnLeft: S.st === 'warn' ? Math.max(0, S.at - G.t) : 0, tbrc: TBRC, mv: MV }); } catch (e) {}
+}
+function shipFollowing() {   // Approach only: a running, linked Marshal (or the Instructor relaying it) owns the ship
+  if (SHIP_PAGE === 'MARSHAL' || typeof shipMaster !== 'function') return null;
+  const m = shipMaster(); return m && m.running !== false ? m : null;
+}
+function shipFinish() {   // close out the previous turn's 99-call grading before a new one starts
+  const S = G.ship; if (!S) return; const r = S.rec;
+  if (r && S.st === 'steady') { if (!r.turnCall) { r.turnCall = 'missed'; log('bad', `Missed ship-turn call ("ninety-nine, mother is in ${r.dir} turn, standby for new BRC").`); } if (!r.steadyCall) { r.steadyCall = 'missed'; log('bad', `Missed steady call ("ninety-nine, mother is steady, new BRC is ${h3z(r.to)}").`); } }
+  shipBanner(''); G.ship = null;
+}
+function shipTurnSchedule(dir, deg, inSec, id) {
+  if (G.ship) shipFinish();
+  const d = Math.max(1, Math.min(90, Math.round(+deg || 0))) || pick(SHIP_TURN.degs);
+  G.shipSeq = (G.shipSeq || 0) + 1;
+  G.ship = { id: id || (SHIP_PAGE + '-' + Date.now().toString(36) + '-' + G.shipSeq), st: 'warn', dir: dir === 'port' || dir === 'starboard' ? dir : (rand(0, 1) < 0.5 ? 'port' : 'starboard'), deg: +deg ? d : pick(SHIP_TURN.degs), at: G.t + (inSec != null ? inSec : SHIP_TURN.warn), from: TBRC };
+  log('warn', `Ship turn in ${Math.round(G.ship.at - G.t)} s: mother will turn ${G.ship.dir} ${G.ship.deg}°.`); try { Sound.chirp(); } catch (e) {}
+  shipTurnPost('warn'); return G.ship;
 }
 function shipTurnStep() {
-  if (G.shipNext == null) G.shipNext = Math.max(SHIP_TURN.firstAfter, rand(...SHIP_TURN.every));
+  if (!SHIP_TURNS_ON) return;
+  if (G.shipNext == null) G.shipNext = SHIPCFG.every;
   G.shipTurns = G.shipTurns || [];
-  const S = G.ship;
-  if (!S && G.t >= G.shipNext - SHIP_TURN.warn) { shipTurnSchedule(null, null, Math.max(0, G.shipNext - G.t)); return; }
+  const S = G.ship, fol = shipFollowing();
+  if (!S && !fol && SHIPCFG.auto && G.t >= G.shipNext - SHIP_TURN.warn) { const at = G.shipNext; G.shipNext = Math.max(at, G.t) + SHIPCFG.every; shipTurnSchedule(null, null, Math.max(0, at - G.t)); return; }
   if (!S) return;
   if (S.st === 'warn') {
     const left = Math.ceil(S.at - G.t);
     if (left > 0) { shipBanner('warn', `SHIP TURN IN ${left} — ${S.dir.toUpperCase()}`); return; }
-    S.st = 'turning'; S.t0 = G.t; S.from = TBRC; S.to = norm(Math.round(TBRC) + (S.dir === 'port' ? -1 : 1) * S.deg) % 360 || 360;
+    S.st = 'turning'; S.t0 = G.t; S.from = TBRC; S.to = S.forceTo != null ? S.forceTo : norm(Math.round(TBRC) + (S.dir === 'port' ? -1 : 1) * S.deg) % 360 || 360;
     S.rec = { dir: S.dir, deg: S.deg, from: Math.round(S.from) % 360 || 360, to: S.to, start: G.t, turnCall: null, steadyCall: null }; G.shipTurns.push(S.rec);
-    log('warn', `Mother is in a ${S.dir} turn (${S.deg}°). Call: "ninety-nine, mother is in ${S.dir} turn, standby for new BRC."`); shipLinkPost(true);
+    log('warn', `Mother is in a ${S.dir} turn (${S.deg}°). Call: "ninety-nine, mother is in ${S.dir} turn, standby for new BRC."`); shipLinkPost(true); shipTurnPost('turn');
   }
   if (S.st === 'turning') {
-    const done = Math.min(S.deg, (G.t - S.t0) * SHIP_TURN.rate), tb = S.from + (S.dir === 'port' ? -1 : 1) * done;
+    const done = S.forceDone ? S.deg : Math.min(S.deg, (G.t - S.t0) * SHIP_TURN.rate), tb = S.from + (S.dir === 'port' ? -1 : 1) * done;
     TBRC = norm(tb) % 360 || 360; setBRC(norm(TBRC - MV));
     shipBanner('turn', `MOTHER IN ${S.dir.toUpperCase()} TURN`);
     if (done >= S.deg) {
       TBRC = S.to; setBRC(norm(TBRC - MV)); S.st = 'steady'; S.tS = G.t; S.rec.steady = G.t;
-      log('warn', `Mother is steady, new BRC ${h3z(TBRC)}. Call: "ninety-nine, mother is steady, new BRC is ${h3z(TBRC)}."`); try { Sound.chirp(); } catch (e) {} shipLinkPost(false);
+      log('warn', `Mother is steady, new BRC ${h3z(TBRC)}. Call: "ninety-nine, mother is steady, new BRC is ${h3z(TBRC)}."`); try { Sound.chirp(); } catch (e) {} shipLinkPost(false); shipTurnPost('steady');
+      try { shipInfoUI(); } catch (e) {} try { shipStatePush(); } catch (e) {}
     }
     return;
   }
   if (S.st === 'steady') {
     shipBanner(G.t - S.tS < SHIP_TURN.steadyBanner ? 'steady' : '', G.t - S.tS < SHIP_TURN.steadyBanner ? `MOTHER STEADY — NEW BRC ${h3z(TBRC)}` : '');
-    const r = S.rec;
-    if (G.t - S.tS > Math.max(SHIP_TURN.steadyCallWin, SHIP_TURN.turnCallGrace)) {
-      if (!r.turnCall) { r.turnCall = 'missed'; log('bad', `Missed ship-turn call ("ninety-nine, mother is in ${r.dir} turn, standby for new BRC").`); }
-      if (!r.steadyCall) { r.steadyCall = 'missed'; log('bad', `Missed steady call ("ninety-nine, mother is steady, new BRC is ${h3z(r.to)}").`); }
-      shipBanner(''); G.ship = null; G.shipNext = G.t + rand(...SHIP_TURN.every);
-    }
+    if (G.t - S.tS > Math.max(SHIP_TURN.steadyCallWin, SHIP_TURN.turnCallGrace)) shipFinish();
   }
 }
+function shipTurnFollow(m) {   // follower: replay the master's turn (same id, direction, degrees, start and end BRC)
+  if (!G || G.over || !shipFollowing()) return;
+  const S = G.ship, same = S && S.id === m.id;
+  if (m.phase === 'warn' || (m.phase === 'turn' && !same)) {
+    if (same) return;
+    const f = norm(Math.round(+m.from)) % 360 || 360; if (Math.round(TBRC) % 360 !== f % 360) { TBRC = f; setBRC(norm(TBRC - MV)); }
+    const s2 = shipTurnSchedule(m.dir, m.deg, m.phase === 'warn' ? +m.warnLeft || 0 : 0, m.id); s2.forceTo = norm(Math.round(+m.to)) % 360 || 360;
+  } else if (m.phase === 'steady') {
+    if (same && S.st !== 'steady') { if (S.st === 'warn') { S.at = G.t; S.forceDone = true; } else S.forceDone = true; }
+    else if (!same) { const t = norm(Math.round(+m.to)) % 360 || 360; if (Math.round(TBRC) % 360 !== t % 360) { TBRC = t; setBRC(norm(TBRC - MV)); log('warn', `Linked ship: BRC ${h3z(t)}.`); try { shipInfoUI(); } catch (e) {} } }
+  }
+}
+function shipInstCmd(m) {   // Instructor "turn ship now": only the master executes it; returns ack text or null (follower: the master answers)
+  if (!G || G.over) return { ok: false, text: 'not running' };
+  if (shipFollowing()) return null;
+  if (G.ship && G.ship.st !== 'steady') return { ok: false, text: 'ship is already turning' };
+  const dir = /^(p|l)/i.test(String(m.dir || '')) ? 'port' : /^(s|r)/i.test(String(m.dir || '')) ? 'starboard' : null;
+  const S = shipTurnSchedule(dir, +m.deg || null, SHIP_TURN.warn); G.shipNext = G.t + SHIP_TURN.warn + SHIPCFG.every;
+  return { ok: true, text: `ship turn ${S.dir} ${S.deg}° in ${SHIP_TURN.warn} s (BRC ${h3z(TBRC)} → ${h3z(norm(Math.round(TBRC) + (S.dir === 'port' ? -1 : 1) * S.deg))})` };
+}
+function shipInstCfg(m) {   // Instructor auto turns on/off + interval
+  const auto = m.auto !== false, every = Math.max(60, Math.min(1800, Math.round(+m.every || 240)));
+  if (auto === SHIPCFG.auto && every === SHIPCFG.every) return;
+  SHIPCFG.auto = auto; SHIPCFG.every = every;
+  if (G && !G.over) { G.shipNext = G.t + every; log('sys', `[Instructor] ship turns ${auto ? 'every ' + Math.round(every / 60 * 10) / 10 + ' min' : 'OFF (manual only)'}.`); }
+}
+function shipInstInfo() {   // v95: ship state for the Instructor screen
+  const S = G && G.ship; return { tbrc: Math.round(TBRC) % 360 || 360, st: S ? S.st : null, dir: S ? S.dir : null, deg: S ? S.deg : null, to: S && S.to != null ? S.to : null, left: S && S.st === 'warn' ? Math.max(0, Math.ceil(S.at - G.t)) : null,
+    next: G && G.shipNext != null && SHIPCFG.auto ? Math.max(0, Math.round(G.shipNext - G.t)) : null, auto: SHIPCFG.auto, every: SHIPCFG.every, follow: !!shipFollowing() }; }
+window.__shipFollowing = () => !!shipFollowing(); window.__shipInfo = () => Object.assign(shipInstInfo(), { brc: Math.round(BRC), mv: MV, dwh: DWH() });   // test hook
 // "ninety-nine, mother is in port/starboard turn, standby for new BRC" / "ninety-nine, mother is steady, new BRC is 185"
 const SC_DIG = { zero: 0, oh: 0, one: 1, won: 1, two: 2, to: 2, too: 2, three: 3, tree: 3, four: 4, for: 4, fore: 4, five: 5, fife: 5, six: 6, seven: 7, eight: 8, ate: 8, nine: 9, niner: 9 };
 const SC_TENS = { ten: 10, twenty: 20, thirty: 30, forty: 40, fourty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
@@ -2869,8 +2949,8 @@ function sectorGuide(a) {   // fly to the sector's centre radial at the held ran
 }
 window.__sector = { inSector, SECTOR_CTR };
 function appStep(dt) {
-  G.t += dt; coneArmTick();
-  if (!(G.shipSync && !G.shipSync.turns)) shipTurnStep();   // linked to a Marshal with ship turns off: BRC stays the same as Marshal
+  G.t += dt; coneArmTick(); v95Tick(dt);
+  shipTurnStep();   // v95: master turns the ship; behind a linked Marshal it only replays Marshal's turns (shipTurnFollow)
   const want = APP_COUNT[G.d.key || ''] || (G.d.name === 'Training' ? 4 : G.d.name === 'Normal' ? 6 : 8);
   instHold();
   if (!G.confPlan) { const k = CONF_PLAN[G.d.key || ''] || (G.d.name === 'Training' ? 1 : G.d.name === 'Normal' ? 3 : 5), n = k === 1 ? 1 : Math.max(1, k + Math.round(rand(-1, 1)));
@@ -2994,6 +3074,26 @@ function appLegs(a) {
 }
 const appAngels = v => String(+(v / 1000).toFixed(1));
 function appAngelsSay(v) { const [w, f] = appAngels(v).split('.'); return sayTwo(+w) + (f ? ' point ' + sayTwo(+f) : ''); }
+/* ---------- v95 helpers: say type, report level, approach speed (now / in N miles flown / in N seconds) ---------- */
+const TYPE_NAME = { F35B: ['F-35B', 'F thirty-five bravo'], AV8B: ['AV-8B', 'A V eight bravo'], CH53E: ['CH-53E', 'C H fifty-three echo'], AH1Z: ['AH-1Z', 'A H one zulu'], UH1Y: ['UH-1Y', 'U H one yankee'], MH60S: ['MH-60S', 'M H sixty sierra'] };
+function typeName(t) { const n = TYPE_NAME[t]; return n ? { t: n[0], s: n[1] } : { t: String(t || 'unknown'), s: String(t || 'unknown') }; }
+function levelTxt(ft) { const al = Math.max(0, Math.round(ft / 100) * 100); return al >= 1000 ? { t: 'angels ' + appAngels(al), s: 'angels ' + appAngelsSay(al) } : { t: al + ' feet', s: sayAlt(al) }; }
+function apSpdLim(a) { return isHelo(a) ? { lo: 70, hi: 130, def: 100 } : { lo: 130, hi: 170, def: 140 }; }
+function apSpdApply(a, v) {   // approach speed = configured for the approach (jets dirty, helos landing checks) at that speed
+  if (isHelo(a)) a.landChk = true; else a.dirty = true; a.tgtSpd = v; a.buster = false;
+  if (typeof MC === 'undefined' || !MC || a.parArr) award(a, 'slow', 'approach speed');
+}
+function v95Tick(dt) {   // pending "in N miles / N seconds, take approach speed" and "report level" reports
+  for (const a of G.ac) {
+    if (!alive(a)) continue;
+    if (a.apPend) { const P = a.apPend; P.left -= P.mi != null ? Math.max(0, a.gs || a.ias || 0) * dt / 3600 : dt;
+      if (P.left <= 0) { a.apPend = null; apSpdApply(a, P.v); log('sys', `${a.cs} taking approach speed ${P.v} kt.`); } }
+    if (a.rptLevel != null) {
+      if (Math.abs((a.tgtAlt != null ? a.tgtAlt : a.alt) - a.rptLevel) >= 1) a.rptLevel = null;   // given a different altitude since: no report
+      else if (Math.abs(a.alt - a.rptLevel) < 50 && appCtl(a)) { const lv = levelTxt(a.rptLevel); a.rptLevel = null; pilotSay(a, `${a.tel}, level ${lv.t}.`, `${a.telSay}, level ${lv.s}.`); }
+    }
+  }
+}
 function appExecute(p, src) {
   const live = G.ac.filter(appCtl);
   let a = null;
@@ -3076,6 +3176,27 @@ function appExecute(p, src) {
       log('sys', `${a.cs} going ${pf} (${freqTag(pf)}): off frequency, self-recovering to ${SHIP_NAME} on final bearing ${BRC3}.`);
       rb.push('wilco'); rbSay.push('wilco'); continue;
     }
+    if (c.k === 'sayType') {   // v95: query only, e.g. "Lightning two one, F-35"
+      const tn = typeName(a.type); pilotSay(a, `${a.tel}, ${tn.t}.`, `${a.telSay}, ${tn.s}.`); marked = true; continue;
+    }
+    if (c.k === 'reportLevel') {   // v95: "report level angels 3": acknowledge now, report "level angels 3" when it gets there (mainly for primary-only targets)
+      let want = c.v != null ? c.v : a.tgtAlt;
+      if (c.v != null && Math.abs((a.tgtAlt || 0) - c.v) >= 1 && !p.cmds.some(x => x.k === 'alt')) {   // a new altitude in the same breath: take it
+        if (c.v < 1000 || c.v > (isHelo(a) ? 12000 : 30000)) { rb.push(`unable angels ${appAngels(c.v)}`); rbSay.push(`unable angels ${appAngelsSay(c.v)}`); continue; }
+        if (typeof MAR !== 'undefined') MAR.cancel(a, 'altitude'); a.tgtAlt = c.v; a.instAltOff = null;
+      }
+      want = a.tgtAlt;
+      if (Math.abs(a.alt - want) < 60) { a.rptLevel = null; const lv = levelTxt(want); rb.push('level ' + lv.t); rbSay.push('level ' + lv.s); }
+      else { a.rptLevel = want; rb.push('ack'); rbSay.push('ack'); }
+      continue;
+    }
+    if (c.k === 'apSpd' || c.k === 'apSpdLater') {   // v95: approach speed now, or after N more miles flown / N seconds
+      const lim = apSpdLim(a), v = c.v != null ? c.v : lim.def;
+      if (v < lim.lo || v > lim.hi) { rb.push(`unable approach speed ${v}`); rbSay.push(`unable approach speed ${sayDigits(v)}`); continue; }
+      if (c.k === 'apSpd') { a.apPend = null; apSpdApply(a, v); }
+      else { a.apPend = { v, mi: c.mi, sec: c.sec, left: c.mi != null ? c.mi : c.sec }; log('sys', `${a.cs} will take approach speed ${v} kt in ${c.mi != null ? c.mi + ' NM' : c.sec + ' s'}.`); }
+      rb.push('ack'); rbSay.push('ack'); continue;
+    }
     if (c.k === 'markFather') {   // posit from the ship, no scoring
       const mB = String(Math.round(appBrg(a)) % 360 || 360).padStart(3, '0'), mR0 = appRng(a), mR = mR0 < 1 ? (Math.round(mR0 * 10) / 10).toFixed(1) : String(Math.round(mR0));
       const mRSay = mR.includes('.') ? mR.split('.').map(x => DIGW[+x]).join(' point ') : (+mR >= 10 ? sayTwo(+mR) : NUMW[+mR]);
@@ -3089,6 +3210,7 @@ function appExecute(p, src) {
         a.identified = true; a.rcDone = true;
         log('good', `Radar identified ${a.cs}: ${c.rng} NM ${c.dirTxt} (actual ${r.toFixed(1)} NM, ${hdg3(Math.round(b))}).`); award(a, 'rc', 'radar contact (ID)');
       } else { G.score -= RID.wrongPen; log('bad', `−${RID.wrongPen}: incorrect radar ID on ${a.cs}: said ${c.rng} NM ${c.dirTxt}, actual ${r.toFixed(1)} NM bearing ${hdg3(Math.round(b))}.`); Sound.buzz(); }
+      if (c.offMom) { a.rcDone = true; rb.push('radar contact'); rbSay.push('radar contact'); continue; }   // v95: "<cs>, off mothers 090 at 12, radar contact" -> "<cs>, radar contact"
       rb.push('roger'); rbSay.push('roger'); continue;
     }
     if (c.k === 'radarContact') {
@@ -3119,7 +3241,7 @@ function appExecute(p, src) {
     } else if (c.k === 'spd') {
       const lo = a.dirty ? 130 : a.landChk ? 100 : a.T.vmin, hi = isHelo(a) ? Math.max(a.T.vmax + APP_SPD_BONUS, 200) : 350 + APP_SPD_BONUS;   // helos check in at 200
       if (c.v < lo || c.v > hi) { rb.push(`unable speed ${c.v}`); rbSay.push(`unable speed ${sayDigits(c.v)}`); continue; }
-      a.tgtSpd = c.v; rb.push(`speed ${c.v}`); rbSay.push(`speed ${sayDigits(c.v)}`);
+      a.tgtSpd = c.v; a.apPend = null; rb.push(`speed ${c.v}`); rbSay.push(`speed ${sayDigits(c.v)}`);
     } else if (c.k === 'hear') { rb.push('loud and clear'); rbSay.push('loud and clear'); }
     else if (c.k === 'sayCs') { rb.push(a.tel); rbSay.push(a.telSay); }
   }
@@ -3127,7 +3249,7 @@ function appExecute(p, src) {
   if (marked && !rb.length) return;
   if (!rb.length) { pilotSay(a, `${a.tel}, unable.`, `${a.telSay}, unable.`); return; }
   // acknowledge with callsign only; keep "unable ..." and "loud and clear" replies
-  const keep = rb.map((t, i) => /^(unable|loud and clear)/.test(t) ? i : -1).filter(i => i >= 0);
+  const keep = rb.map((t, i) => /^(unable|loud and clear|radar contact|level )/.test(t) ? i : -1).filter(i => i >= 0);
   if (!keep.length) pilotSay(a, `${a.tel}.`, `${a.telSay}.`);
   else pilotSay(a, `${a.tel}, ${keep.map(i => rb[i]).join(', ')}.`, `${a.telSay}, ${keep.map(i => rbSay[i]).join(', ')}.`);   // callsign first
   refreshPanel(true);
@@ -3401,10 +3523,15 @@ function shipSyncTick() {
   const m = shipMaster(); if (!m) return;
   const tb = norm(Math.round(+m.tbrc)) % 360 || 360, mv = Math.round(+m.mv || 0), seed = (+m.landSeed >>> 0) || 0, key = [tb, mv, seed, m.landOn ? 1 : 0].join('|');
   if (Math.round(TBRC) % 360 === tb % 360 && MV === mv && LAND && LAND.syncKey === key) return;
+  const landKey = [mv, seed, m.landOn ? 1 : 0].join('|');
+  if (G && !G.over && LAND && LAND.syncLand === landKey) {   // v95: same ship, new BRC (a ship turn): follow it between turns
+    if (!m.turning && !(G.ship && G.ship.st !== 'steady') && Math.round(TBRC) % 360 !== tb % 360) { TBRC = tb; setBRC(norm(TBRC - MV)); LAND.syncKey = key; log('warn', `Linked ship: BRC ${h3z(tb)}.`); }
+    return;
+  }
   if (G && !G.over) { if (SHIPSYNC.warned !== key) { SHIPSYNC.warned = key; log('warn', `Linked ${m.src === 'INSTRUCTOR' ? 'Instructor / ' : ''}Marshal ship is on BRC ${h3z(tb)}; this run uses BRC ${h3z(TBRC)}. Press End and start a new run to match it.`); } return; }
   nextBRC = TBRC = tb; MV = mv; setBRC(norm(TBRC - MV));
   const polys = m.landOn && Array.isArray(m.polys) ? m.polys : [];
-  LAND = { seed, mv: MV, polys, coasts: polys.length ? 1 : 0, islands: 0, desc: m.land || (polys.length ? 'land' : 'open water'), stats: { frac: 0, minR: 99, brg: 0, bad: false }, key: '', syncKey: key };
+  LAND = { seed, mv: MV, polys, coasts: polys.length ? 1 : 0, islands: 0, desc: m.land || (polys.length ? 'land' : 'open water'), stats: { frac: 0, minR: 99, brg: 0, bad: false }, key: '', syncKey: key, syncLand: landKey };
   try { applyPhrUI(); } catch (e) {}
 }
 function shipStateMsg() { const on = !!(LAND && LAND.polys && LAND.polys.length), ms = G && !G.over ? G.shipSync : shipMaster();
@@ -3472,7 +3599,7 @@ function shipReq() { try { const c = new BroadcastChannel('stinger-link'); c.pos
     const m = { type: 'inst-state', src: PAGE, ts: Date.now(), running: !!(G && !G.over), paused: !!(G && G.paused), manual: !!(G && G.instManual) };
     if (G) {
       track(G);
-      Object.assign(m, { t: Math.round(G.t * 10) / 10, scale: G.scale || 1, brc: typeof BRC !== 'undefined' ? BRC : null, tbrc: typeof TBRC !== 'undefined' ? TBRC : null, dwh: typeof DWH === 'function' ? DWH() : null, wind: G.wind ? { dir: G.wind.dir, spd: G.wind.spd } : null, diff: G.d && G.d.name,
+      Object.assign(m, { t: Math.round(G.t * 10) / 10, scale: G.scale || 1, brc: typeof BRC !== 'undefined' ? BRC : null, tbrc: typeof TBRC !== 'undefined' ? TBRC : null, dwh: typeof DWH === 'function' ? DWH() : null, wind: G.wind ? { dir: G.wind.dir, spd: G.wind.spd } : null, diff: G.d && G.d.name, ship: typeof shipInstInfo === 'function' ? shipInstInfo() : null,
         ac: G.ac.filter(alv).map(acOut), roster: roster(G), sched: !FIN, airlines: typeof AIRLINES !== 'undefined' ? AIRLINES.map(x => ({ icao: x.icao, tel: x.tel, types: x.types })) : [] });
     }
     try { ch.postMessage(m); } catch (e) {}
@@ -3531,7 +3658,8 @@ function shipReq() { try { const c = new BroadcastChannel('stinger-link'); c.pos
         if (!al && type) { const c = AIRLINES.filter(x => x.types.includes(type)); if (c.length) { al = c[Math.floor(Math.random() * c.length)]; cs = al.icao; } }   // type only: a callsign that flies it
         const taken = new Set(G.ac.map(x => x.cs).concat(L.filter(x => !x.done && x.cs).map(x => x.cs)));
         const num = c => (String(c).match(/(\d+)$/) || [])[1], usedN = new Set([...taken].map(num).filter(Boolean));
-        if (al && !/\d/.test(cs)) { let k = 0, v; do { v = 11 + Math.floor(Math.random() * 58); } while (usedN.has(String(v)) && ++k < 60); cs = al.icao + v; }
+        if (al && !/\d/.test(cs)) cs = al.icao + csNum(al, usedN, (a, b) => a + Math.floor(Math.random() * (b - a + 1)));   // v95: jets 2 digits, helos 3
+        else if (al && !csNumOk(al, cs.slice(al.icao.length))) return ack(m, false, `${al.tel} ${alHelo(al) ? 'is a helo: use a 3-digit number (e.g. 311)' : 'is a jet: use a 2-digit number (e.g. 21)'}`);
         if (cs && taken.has(cs)) return ack(m, false, cs + ' is already in this simulation');
         if (al) { if (!type || !al.types.includes(type)) type = al.types[Math.floor(Math.random() * al.types.length)]; } else type = null;   // no callsign: one is generated at check-in
         const MAR = PAGE === 'MARSHAL', id = (MAR ? 'X' : 'A') + (G.schedN = (G.schedN || L.length) + 1);
@@ -3570,8 +3698,10 @@ function shipReq() { try { const c = new BroadcastChannel('stinger-link'); c.pos
   }
   ch.onmessage = e => {
     const m = e.data || {};
-    if (m.type === 'inst-hello') { peerT = Date.now(); wanted = !m.links || m.links.includes(PAGE) || FIN; ciManual = !FIN && wanted && !!m.links && m.links.includes(PAGE) && m.ciMode === 'manual'; if (wanted) send(); }
+    if (m.type === 'inst-hello') { peerT = Date.now(); wanted = !m.links || m.links.includes(PAGE) || FIN; ciManual = !FIN && wanted && !!m.links && m.links.includes(PAGE) && m.ciMode === 'manual'; if (wanted && m.ship && typeof shipInstCfg === 'function') { try { shipInstCfg(m.ship); } catch (e) {} } if (wanted) send(); }
     else if (m.type === 'ship-state' || m.type === 'ship-set') { if (m.src !== PAGE && typeof shipSyncRecv === 'function') { try { shipSyncRecv(m); } catch (e) {} } }
+    else if (m.type === 'ship-cmd') { if (wanted && typeof shipInstCmd === 'function') { let r = null; try { r = shipInstCmd(m); } catch (e) { r = { ok: false, text: 'error: ' + e.message }; } if (r) ack(m, r.ok, r.text); send(); } }   // v95 Instructor: turn the ship now
+    else if (m.type === 'ship-turn') { if (m.src !== PAGE && typeof shipTurnFollow === 'function') { try { shipTurnFollow(m); } catch (e) {} } }   // v95 linked ship turn from the master scope
     else if (m.type === 'inst-cmd' && (m.to === PAGE || m.to === 'ANY')) { peerT = Date.now(); cmd(m); }
     else if (m.type === 'inst-bye') { peerT = 0; ciManual = false; }
   };
@@ -3581,7 +3711,7 @@ function shipReq() { try { const c = new BroadcastChannel('stinger-link'); c.pos
   bgEvery(() => { if (typeof shipStateMsg === 'function') { try { ch.postMessage(shipStateMsg()); } catch (e) {} } try { if (typeof shipSyncTick === 'function') shipSyncTick(); } catch (e) {} }, 1000);   // linked ship (BRC / MV / land) for late joiners
   try { ch.postMessage({ type: 'inst-state', src: PAGE, ts: Date.now(), running: false, hello: true }); } catch (e) {}
   try { ch.postMessage({ type: 'ship-req', src: PAGE }); } catch (e) {}   // late joiner: a linked Marshal answers with its current BRC / land
-  { const unscroll = () => { if (document.body.scrollTop) document.body.scrollTop = 0; if (document.documentElement.scrollTop) document.documentElement.scrollTop = 0; }; document.body.addEventListener('scroll', unscroll); addEventListener('scroll', unscroll); setInterval(unscroll, 1000); }   // a focused prompt must never scroll the page (it hid the top bar + Scope slider)
+  { const unscroll = () => { if (innerWidth <= 950) return; if (document.body.scrollTop) document.body.scrollTop = 0; if (document.documentElement.scrollTop) document.documentElement.scrollTop = 0; }; document.body.addEventListener('scroll', unscroll); addEventListener('scroll', unscroll); setInterval(unscroll, 1000); }   // a focused prompt must never scroll the page (it hid the top bar + Scope slider); v95: not on phone/narrow layouts, where the page itself scrolls
   window.__INST = { send, cmd, PAGE }; window.__instStart = (d, o) => startGame(d, o); window.__instScale = s => { try { setScale(s); } catch (e) {} };
 })();
 })();
