@@ -1129,7 +1129,7 @@ function evaluate(st, p) {
     if (n.k === 'hdg') {
       if (c.v % 360 !== n.v % 360) issues.push(`You said heading <b>${sayDigits(h3(c.v))}</b> (${h3(c.v)}), but the task was <b>${h3(n.v)}</b>. A real pilot would fly exactly what you said.`);
       else if (c.dir && n.dir && c.dir !== n.dir) issues.push(`You said turn <b>${c.dir === 'L' ? 'left' : 'right'}</b>, but the task was a <b>${n.dir === 'L' ? 'left' : 'right'}</b> turn, so a real pilot would go the long way around!`);
-      else if (!c.dir && n.dir) tips.push(`Tip: "fly heading" lets the pilot pick the shorter way. "Turn <b>${n.dir === 'L' ? 'left' : 'right'}</b> heading…" removes any doubt.`);
+      else if (!c.dir && n.dir) tips.push(`Tip: "fly heading" puts the aircraft straight onto the new heading with no turn. "Turn <b>${n.dir === 'L' ? 'left' : 'right'}</b> heading…" removes any doubt.`);
     }
     if (n.k === 'alt' && c.v !== n.v) issues.push(`You said <b>${cmdStr(c)}</b>, but the task was <b>angels ${angTxt(n.v)}</b> (${n.v.toLocaleString('en-US')} ft).`);
     if (n.k === 'spd' && c.v !== n.v) issues.push(`You said <b>${c.v} knots</b>, but the task was <b>${n.v} knots</b>.`);

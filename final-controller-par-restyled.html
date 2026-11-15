@@ -541,7 +541,7 @@ const PATTERNS = [
   [/\b(?:climb|descend)(?:\s+and\s+maintain|\s+to|\s+maintain)?\s+(\d{2,5})(?:\s+feet)?\b|\bmaintain\s+(\d{4,5})(?:\s+feet)?\b/g, m => { let v = +(m[1] || m[2]); if (v < 100) v *= 100; return { k: 'alt', v }; }],
   [/\b(?:fly\s+)?(?:base\s+recovery\s+course|brc|ship\s+s\s+heading)\s+(\d{1,3})\b/g, m => ({ k: 'hdg', dir: null, v: +m[1] })],
   [/\b(?:turn\s+|come\s+)?(left|right)\s+(?:turn\s+)?(?:to\s+)?heading\s+(\d{1,3})\b|\b(?:fly\s+|turn\s+to\s+)?heading\s+(\d{1,3})\b|\b(?:turn|come)\s+(left|right)\s+(?:to\s+)?(\d{3})\b/g,
-    m => { const dir = m[1] || m[4] || null; const v = +(m[2] || m[3] || m[5]); return { k: 'hdg', dir: dir ? SIDE(dir) : null, v }; }],
+    m => { const dir = m[1] || m[4] || null; const v = +(m[2] || m[3] || m[5]); return { k: 'hdg', dir: dir ? SIDE(dir) : null, v, snap: !dir && /^fly\s/.test(m[0]) }; }],   // v105: 'fly heading NNN' = heading snaps to NNN at once (no turn), then straight
   [/\bstop\s+(?:your\s+|the\s+)?turn(?:s|ing)?\b/g, () => ({ k: 'ngStop' })],
   [/\b(?:turn|come)\s+(left|right)(?:\s+now)?\b(?!\s+(?:heading|to\b|\d))/g, m => ({ k: 'ngTurn', dir: SIDE(m[1]) })],
   [/\b(?:going|drifting|moving)\s+(left|right)\s+(?:of\s+)?(?:course|centerline)\b/g, m => ({ k: 'trendCourse', side: SIDE(m[1]) })],
@@ -1704,7 +1704,7 @@ function execute(p, src) {
       case 'hdg':
         if (a.ng) { if (!ngUnable) { ngUnable = true; special = true; pilotSay(a, `${a.tel}, unable heading, no gyro.`, `${a.telSay}, unable heading, no gyro.`, true, false, true); } break; }
         if (a.phase === 'visual' || a.phase === 'landed') break;
-        a.tgtHdg = norm(c.v); a.turnDir = Math.abs(angDiff(a.tgtHdg, a.hdg)) < 0.5 ? null : c.dir; a.gaHdgSet = c.v;
+        a.tgtHdg = norm(c.v); a.turnDir = Math.abs(angDiff(a.tgtHdg, a.hdg)) < 0.5 ? null : c.dir; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; }   // v105: fly heading = instant heading change a.gaHdgSet = c.v;
         rb.push(`${c.dir === 'L' ? 'left heading' : c.dir === 'R' ? 'right heading' : 'heading'} ${hdg3(c.v)}`);
         rbSay.push(`${c.dir === 'L' ? 'left heading' : c.dir === 'R' ? 'right heading' : 'heading'} ${sayDigits(hdg3(c.v))}`);
         break;

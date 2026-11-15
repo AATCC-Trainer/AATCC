@@ -23,7 +23,7 @@ const angOrFt = (n, sc) => { n = parseFloat(n); if (sc === 'final') return (n < 
 /* code table: [regex (whole token), scopes, (match, state) => phrase, code label, meaning] */
 const CODES = [
   // ---- headings / altitude / speed (shared) ----
-  [/^h(\d{2,3})$/, SC, m => `fly heading ${h3(m[1])}`, 'h270', 'fly heading 270'],
+  [/^h(\d{2,3})$/, SC, m => `fly heading ${h3(m[1])}`, 'h270', 'fly heading 270 (instant heading change, no turn)'],
   [/^l(\d{2,3})$/, SC, (m, s) => `${s.sc === 'final' ? 'come' : 'turn'} left heading ${h3(m[1])}`, 'l270', 'turn left heading 270 (Final: come left)'],
   [/^r(\d{2,3})$/, SC, (m, s) => `${s.sc === 'final' ? 'come' : 'turn'} right heading ${h3(m[1])}`, 'r090', 'turn right heading 090 (Final: come right)'],
   [/^brc(\d{2,3})$/, SC, (m, s) => s.clr ? `BRC ${h3(m[1])}` : `fly base recovery course ${h3(m[1])}`, 'brc360', 'fly base recovery course 360 (BRC 360 inside a marshal clearance)'],
@@ -47,7 +47,7 @@ const CODES = [
   [/^wo$/, SC, () => 'wave off, wave off', 'wo', 'wave off, wave off'],
   [/^ma$/, SC, () => 'execute missed approach', 'ma', 'execute missed approach'],
   [/^du$/, MA, () => 'dirty up', 'du', 'dirty up (jets)'],
-  [/^lc$/, MA, () => 'perform landing checks', 'lc', 'perform landing checks (helos)'],
+  [/^lc$/, MA, () => 'perform landing checks', 'lc', 'perform landing checks (slow to approach speed)'],
   // ---- Marshal + Approach: sectors ----
   [/^sec([1-4])$/, MA, m => `proceed to sector ${m[1]}, report established`, 'sec2', 'proceed to sector 2, report established'],
   // ---- Marshal: clearance pieces / commence ----

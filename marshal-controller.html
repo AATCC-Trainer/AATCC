@@ -39,6 +39,8 @@ html,body{margin:0;height:100%;background:#120e24;color:var(--g);font-family:Con
 .liveCtl{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--dim);white-space:nowrap;user-select:none}
 .liveCtl input[type=range]{width:88px;min-height:22px;padding:0;accent-color:var(--cyan)}
 .liveCtl select{min-height:28px;padding:2px 4px;font-size:12px}
+.scopeNum{width:4.4em;min-height:22px;padding:1px 3px;font:inherit;font-size:12px;color:var(--cyan);background:rgba(0,0,0,0.35);border:1px solid rgba(46,230,230,0.45);border-radius:4px;text-align:right;-moz-appearance:textfield}
+.scopeNum::-webkit-inner-spin-button,.scopeNum::-webkit-outer-spin-button{opacity:1}
 .liveCtl b{color:var(--cyan);font-weight:normal;min-width:2.2em;text-align:right}
 button,select,input{font-family:inherit;font-size:13px;background:var(--panel2);color:var(--g);border:1px solid var(--gdd);border-radius:3px;padding:6px 8px;min-height:32px}
 button{cursor:pointer}
@@ -187,7 +189,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
       <button id="bPause" title="Pause (P)">❚❚ Pause</button>
       <button id="bS1" class="on" title="1x (key 1)">1x</button>
       <button id="bS2" title="3x (key 3): whole sim runs 3x faster">3x</button>
-      <label class="liveCtl" title="Scope range (zoom): how far the radar shows">Scope <input type="range" id="liveScope" min="5" max="40" step="1" value="30"><b id="liveScopeVal">30</b>NM</label>
+      <label class="liveCtl" title="Scope range (zoom): how far the radar shows">Scope <input type="range" id="liveScope" min="5" max="40" step="1" value="30"><input type="number" id="liveScopeVal" class="scopeNum" min="5" max="40" step="1" value="30" inputmode="numeric" title="Type a range (5–40 NM) and press Enter">NM</label>
       <label class="liveCtl" title="Range ring spacing">Rings <select id="liveRing"><option value="1">1</option><option value="2">2</option><option value="5">5</option><option value="10">10</option></select>NM</label>
       <button id="bSet" title="Voice settings">⚙ Voice</button>
       <button id="bHelp" title="Help (?)">? Help</button><a href="approach-controller.html" id="xLink" style="align-self:center;color:#8fd8ff;font-size:12px;text-decoration:none;padding:0 6px">← Approach</a>
@@ -269,7 +271,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div class="set" style="display:none"><label for="sPat">Show marshal / LH approach patterns on the scope</label><input type="checkbox" id="sPat" style="width:22px;height:22px"></div>
     <div class="set"><label>Geopoints (double-click the scope to add, double-click one to delete)</label><button id="sGpClr" type="button">Clear geopoints</button></div>
     <div class="set"><label for="sRing">Range ring spacing</label><select id="sRing"><option value="1">1 NM</option><option value="2">2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option></select></div>
-    <div class="set"><label for="sScope">Scope range (zoom)</label><span style="display:flex;align-items:center;gap:8px"><input type="range" id="sScope" min="5" max="40" step="1" value="30" style="flex:1"><b id="sScopeVal" style="color:var(--cyan);min-width:3.5em;text-align:right">30 NM</b></span></div>
+    <div class="set"><label for="sScope">Scope range (zoom)</label><span style="display:flex;align-items:center;gap:8px"><input type="range" id="sScope" min="5" max="40" step="1" value="30" style="flex:1"><span style="white-space:nowrap"><input type="number" id="sScopeVal" class="scopeNum" min="5" max="40" step="1" value="30" inputmode="numeric" title="Type a range (5–40 NM) and press Enter"> NM</span></span></div>
     <div class="row"><button id="sTest">🔊 Test pilot voice</button><button id="sMic">🎙 Test microphone</button><button id="sClose" class="on wide">Done</button></div>
     <div id="setInfo" class="note" style="color:var(--dim)"></div>
   </div>
@@ -549,7 +551,7 @@ const PATTERNS = [
   [/\b(?:say|state|sae)\s+(?:your\s+)?(?:fuel\s+)?state\b|\bsay\s+(?:your\s+)?fuel(?:\s+state)?\b/g, () => ({ k: 'sayState' })],
   [/\bsay\s+(?:your\s+)?(?:angels|angles|angel|altitude|alt)\b/g, () => ({ k: 'sayAngels' })],
   [/\b(?:(?:proceed|proceeding|precede|proceed\s+direct)\s+(?:to\s+|2\s+)?)?(?:sector|sectors|sektor|secter)\s+([1-4]|one|won|two|too|to|three|tree|four|for|fore)\b(?:\s*,?\s*(?:and\s+)?report(?:ing)?\s+(?:established|establish|estab?lished))?/g, m => ({ k: 'sector', v: SECTOR_NUM[m[1]] })],
-  [/\b(?:perform\s+(?:your\s+|the\s+)?)?landing\s+checks?(?:\s+list)?\b|\bperform\s+(?:your\s+)?landing\s+check\b/g, () => ({ k: 'landChk' })],
+  [/\b(?:(?:perform|preform|performed|performing)\s+(?:your\s+|the\s+|a\s+)?)?(?:landing|landings|lending|landin)\s+(?:checks?(?:\s*list)?|chex|checking|jacks)\b/g, () => ({ k: 'landChk' })],   // v105: + checklist / landings / lending / jacks
   [/\b(?:dirty\s+up|get\s+dirty|(?:30|thirty)\s+dirty|go\s+dirty|dirty)\b/g, () => ({ k: 'dirty' })],
   [/\b(?:expect\s+)?(?:final\s+)?(?:button|bottom|botton)\s+(copper|cooper|coper|copper\s+s|purple|purpel|people)\b|\bexpect\s+final\s+(copper|cooper|purple)\b/g, m => ({ k: 'button', v: /^p/.test(m[1] || m[2]) ? 'purple' : 'copper' })],
   [/\bvectors?\s+(?:for\s+)?(?:the\s+|a\s+|an\s+)?(?:c\s*c\s*a|cca|see\s+see\s+(?:a|eh|ay)|sea\s+sea\s+a|ccas?|p\s*a\s*r|par)(?:\s+approach(?:es)?)?\b/g, () => ({ k: 'cca' })],
@@ -579,7 +581,7 @@ const PATTERNS = [
   [/\b(?:climb|descend)(?:\s+and\s+maintain|\s+to|\s+maintain)?\s+(\d{2,5})(?:\s+feet)?\b|\bmaintain\s+(\d{4,5})(?:\s+feet)?\b/g, m => { let v = +(m[1] || m[2]); if (v < 100) v *= 100; return { k: 'alt', v }; }],
   [/\b(?:fly\s+)?(?:base\s+recovery\s+course|brc|ship\s+s\s+heading)\s+(\d{1,3})\b/g, m => ({ k: 'hdg', dir: null, v: +m[1] })],
   [/\b(?:turn\s+|come\s+)?(left|right)\s+(?:turn\s+)?(?:to\s+)?heading\s+(\d{1,3})\b|\b(?:fly\s+|turn\s+to\s+)?heading\s+(\d{1,3})\b|\b(?:turn|come)\s+(left|right)\s+(?:to\s+)?(\d{3})\b/g,
-    m => { const dir = m[1] || m[4] || null; const v = +(m[2] || m[3] || m[5]); return { k: 'hdg', dir: dir ? SIDE(dir) : null, v }; }],
+    m => { const dir = m[1] || m[4] || null; const v = +(m[2] || m[3] || m[5]); return { k: 'hdg', dir: dir ? SIDE(dir) : null, v, snap: !dir && /^fly\s/.test(m[0]) }; }],   // v105: 'fly heading NNN' = heading snaps to NNN at once (no turn), then straight
   [/\b(?:going|drifting|moving)\s+(left|right)\s+(?:of\s+)?(?:course|centerline)\b/g, m => ({ k: 'trendCourse', side: SIDE(m[1]) })],
   [/\b(?:(slightly|well|way|little|a little|very)\s+)?(left|right)\s+of\s+(?:the\s+)?(?:course|centerline)\b/g, m => ({ k: 'course', q: Q(m[1] === 'little' || m[1] === 'a little' ? 'slightly' : m[1]), side: SIDE(m[2]) })],
   [/\bon\s+(?:course|centerline|the centerline)\b/g, () => ({ k: 'onCourse' })],
@@ -825,12 +827,7 @@ function landLayer(cx, cy, RX, RY, sc) {   // offscreen pre-render, rebuilt only
   const c = cv.getContext('2d'), P = (e, n) => [RX + e * sc, RY - n * sc], PT = (e, n) => P(...t2m(e, n));
   c.clearRect(0, 0, SW, SH); c.save(); c.beginPath(); c.rect(0, 0, SW, SH); c.clip();
   c.beginPath(); for (const poly of LAND.polys) poly.forEach(([e, n], i) => { const [x, y] = PT(e, n); i ? c.lineTo(x, y) : c.moveTo(x, y); }), c.closePath();
-  c.fillStyle = 'rgba(90,140,70,0.28)'; c.fill('nonzero');
-  c.globalCompositeOperation = 'source-atop';   // speckle only on land
-  const rs = mulberry32(LAND.seed ^ 0x9e3779b9);
-  for (let i = 0; i < SW * SH / 90; i++) { c.fillStyle = `rgba(150,220,120,${0.05 + rs() * 0.18})`; c.fillRect(rs() * SW, rs() * SH, 1 + rs() * 1.5, 1 + rs() * 1.5); }
-  c.globalCompositeOperation = 'source-over';
-  c.strokeStyle = 'rgba(130,200,110,0.5)'; c.lineWidth = 1.2; c.lineJoin = 'round'; c.stroke();
+  c.strokeStyle = 'rgba(130,200,110,0.7)'; c.lineWidth = 1.3; c.lineJoin = 'round'; c.stroke();   // v105: land config drawn as coastline outlines only (no shaded fill / speckle)
   c.globalCompositeOperation = 'destination-out';   // safety net: ship area + approach corridor always clear
   c.beginPath(); c.arc(RX, RY, LAND_CLEAR_NM * sc, 0, Math.PI * 2); c.fill();
   { const q = [[-2.2, -20], [2.2, -20], [2.2, 20], [-2.2, 20]].map(([le, ln]) => P(...fromLoc(le, ln))); c.beginPath(); q.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fill(); }
@@ -1435,7 +1432,7 @@ function execute(p, src) {
       case 'hear': rb.push('loud and clear'); rbSay.push('loud and clear'); a.contacted = true; speakAnyway = !a.silent; break;
       case 'hdg':
         if (a.phase === 'visual' || a.phase === 'landed') break;
-        a.tgtHdg = norm(c.v); a.turnDir = Math.abs(angDiff(a.tgtHdg, a.hdg)) < 0.5 ? null : c.dir; a.gaHdgSet = c.v;
+        a.tgtHdg = norm(c.v); a.turnDir = Math.abs(angDiff(a.tgtHdg, a.hdg)) < 0.5 ? null : c.dir; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; }   // v105: fly heading = instant heading change a.gaHdgSet = c.v;
         rb.push(`${c.dir === 'L' ? 'left heading' : c.dir === 'R' ? 'right heading' : 'heading'} ${hdg3(c.v)}`);
         rbSay.push(`${c.dir === 'L' ? 'left heading' : c.dir === 'R' ? 'right heading' : 'heading'} ${sayDigits(hdg3(c.v))}`);
         break;
@@ -2370,9 +2367,9 @@ function syncScopeRingUI() {
   const sc = clampScope(S.scope), rg = clampRing(S.ring);
   S.scope = sc; S.ring = rg; APP_RANGE = sc;
   const ls = $('liveScope'), lsv = $('liveScopeVal'), lr = $('liveRing'), ss = $('sScope'), ssv = $('sScopeVal'), sr = $('sRing');
-  if (ls) ls.value = String(sc); if (lsv) lsv.textContent = String(sc);
+  if (ls) ls.value = String(sc); if (lsv) lsv.value = String(sc);
   if (lr) lr.value = String(rg);
-  if (ss) ss.value = String(sc); if (ssv) ssv.textContent = sc + ' NM';
+  if (ss) ss.value = String(sc); if (ssv) ssv.value = String(sc);
   if (sr) sr.value = String(rg);
 }
 function setScopeRange(nm, { blur } = {}) {
@@ -2396,6 +2393,12 @@ function closeSettings() { setOv.classList.add('hidden'); uiPaused = !helpOv.cla
 }));
 $('sRing').addEventListener('change', () => { setRingSpacing($('sRing').value, { blur: true }); });
 $('sScope').addEventListener('input', () => { setScopeRange($('sScope').value); });
+/* v105: type a specific scope range (NM) in the number box next to the slider; Enter / blur applies (clamped), Esc reverts */
+['liveScopeVal', 'sScopeVal'].forEach(id => { const el = $(id); if (!el) return;
+  el.addEventListener('change', () => { setScopeRange(el.value, { blur: true }); });
+  el.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); setScopeRange(el.value); el.blur(); } else if (e.key === 'Escape') { e.preventDefault(); el.value = String(APP_RANGE); el.blur(); } });
+  el.addEventListener('focus', () => { try { el.select(); } catch (_) {} }); });
+
 $('sScope').addEventListener('change', () => { setScopeRange($('sScope').value, { blur: true }); });
 $('liveRing').addEventListener('change', () => { setRingSpacing($('liveRing').value, { blur: true }); });
 $('liveScope').addEventListener('input', () => { setScopeRange($('liveScope').value); });
@@ -2990,7 +2993,7 @@ const LINK = { on: localStorage.getItem('stingerLink') === '1', ch: null, lastAc
     if (m.outcome === 'landed') { a.phase = 'gone'; a.removeAt = G.t; log('good', `${a.cs} landed aboard ${SHIP_NAME} (Final Control).`); return; }
     a.phase = 'app'; a.st = 'lowout'; a.recheckAt = G.t + 20; a.onFinal = false; a.turnDir = null; [a.e, a.n] = fromLoc(0, -0.3); a.hdg = BRC;
     a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = isHelo(a) ? 200 : MC ? 250 : Math.round(rand(250, 300));
-    for (const c of (a.climbout || [])) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = c.v; }
+    for (const c of (a.climbout || [])) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = c.v; }
     coDefer(a); a.climbout = null;
     log('sys', `${a.cs} ${m.outcome === 'waveoff' ? 'waved off' : 'low approach'} (Final Control, PAR ${a.appCount}/${APP_MAX_PARS}), flying climbout: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}.`);
   },
@@ -3214,7 +3217,7 @@ function appCheckIn(a, again) {
   if (!again) priOnlyMark(a);   // v93: primary-only = the 5th to check in
   a.tasks = {}; a.firstTx = true; a.cycle = (a.cycle || 0) + 1;   // grading resets every (re-)check-in
   a.checked = true; a.st = 'ctl'; a.needAlt = true; a.rcDone = false; a.identified = false; a.idLate = false; a.checkInT = G.t;
-  a.dirty = false; a.landChk = false;
+  a.dirty = false; a.landChk = false; a.viaWp = null;
   a.ias = a.tgtSpd = isHelo(a) ? 200 : MC ? 250 : Math.round(rand(250, 300));   // helos 200 kt, jets 250-300 kt at check-in   // first altitude after check-in is graded
   const f = (Math.floor(appState(a) * 10) / 10).toFixed(1), [whole, dec] = f.split('.');
   const fSay = (+whole >= 10 ? sayTwo(+whole) : NUMW[+whole]) + ' point ' + NUMW[+dec];
@@ -3942,7 +3945,7 @@ function appStep(dt) {
           if (a.pars >= APP_MAX_PARS) { a.phase = 'gone'; a.removeAt = G.t; log('good', `${a.cs} full stop, recovered aboard ${SHIP_NAME}.`); continue; }
           a.lowDone = true; a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = a.T.feed + APP_SPD_BONUS; a.turnDir = null; let coSpd = null;
           if (a.climbout && a.climbout.length) {   // controller-issued climbout instructions replace the default
-            for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = coSpd = c.v; }
+            for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = coSpd = c.v; }
             log('sys', `${a.cs} low approach past ${SHIP_NAME}, flying climbout instructions: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}, ${a.tgtSpd} kt.`);
             coDefer(a); a.climbout = null;
           } else log('sys', `${a.cs} low approach past ${SHIP_NAME}, climbing out on ${BRC3} to ${fmtAlt(a.tgtAlt)}.`);
@@ -3955,7 +3958,12 @@ function appStep(dt) {
       const vapp = isHelo(a) ? 115 : 140; a.turnDir = null;
       if (!a.onFinal) {
         const [le, ln] = toLoc(a.e, a.n), ge = 0, gn = 6, d = Math.hypot(ge - le, gn - ln);
-        a.tgtHdg = Math.round(norm(Math.atan2(ge - le, gn - ln) / DEG + BROT())); a.tgtAlt = 1500; a.tgtSpd = Math.max(vapp, Math.min(a.tgtSpd, isHelo(a) ? 160 : 220));
+        // v105: never fly backwards over the ship to the gate: from ahead of / beside the ship, route via a point 4 NM abeam, 4 NM astern first
+        { const vx = ge - le, vy = gn - ln, L2 = vx * vx + vy * vy || 1, t = Math.max(0, Math.min(1, -(le * vx + ln * vy) / L2)), cpa = Math.hypot(le + t * vx, ln + t * vy);
+          if (a.viaWp == null && ln < gn - 1 && cpa < 2.5) a.viaWp = le >= 0 ? 1 : -1;
+          if (a.viaWp != null && (Math.hypot(a.viaWp * 4 - le, 4 - ln) < 1 || ln >= 4)) a.viaWp = 0; }
+        const wpE = a.viaWp ? a.viaWp * 4 : ge, wpN = a.viaWp ? 4 : gn;
+        a.tgtHdg = Math.round(norm(Math.atan2(wpE - le, wpN - ln) / DEG + BROT())); a.tgtAlt = 1500; a.tgtSpd = Math.max(vapp, Math.min(a.tgtSpd, isHelo(a) ? 160 : 220));
         if (d < 1 || (ln > 2 && Math.abs(le) < 0.8 && ln < 7 && Math.abs(angDiff(a.hdg, BRC)) < 60)) a.onFinal = true;
       } else {
         const [le, ln] = toLoc(a.e, a.n);
@@ -3965,11 +3973,11 @@ function appStep(dt) {
           a.appCount = (a.appCount || 0) + 1;
           if (a.appCount >= APP_MAX_PARS) { a.phase = 'gone'; a.removeAt = G.t; log('good', `${a.cs} ${isHelo(a) ? 'landed aboard' : 'recovered aboard'} ${SHIP_NAME} (practice PAR ${a.appCount}/${APP_MAX_PARS}, full stop).`); continue; }
           // practice PAR 1-2: low approach, then the stored climbout (or default: BRC, angels 1 / 1.2, check-in speed)
-          a.st = 'lowout'; a.recheckAt = G.t + 20; a.onFinal = false; a.turnDir = null; a.coSpd = null;
+          a.st = 'lowout'; a.recheckAt = G.t + 20; a.onFinal = false; a.turnDir = null; a.coSpd = null; a.viaWp = null;
           a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = isHelo(a) ? 200 : MC ? 250 : Math.round(rand(250, 300));
           let what = `climbing out on ${BRC3} to ${fmtAlt(a.tgtAlt)}`;
           if (a.climbout && a.climbout.length) {
-            for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = a.coSpd = c.v; }
+            for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = a.coSpd = c.v; }
             what = `flying climbout instructions: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}, ${a.tgtSpd} kt`;
           }
           coDefer(a); a.climbout = null;
@@ -4100,15 +4108,16 @@ function appExecute(p, src) {
   if (a.firstTx) { a.firstTx = false; if (p.stinger && !MC) award(a, 'cs', 'Gator Approach'); }   // never penalized
   const rb = [], rbSay = []; let marked = false, secRb = 0;
   for (const c of p.cmds) {
-    if (MC && !a.parArr && ['sector', 'purple', 'cca', 'button', 'climbOut', 'pos', 'rid', 'landChk', 'dirty'].includes(c.k)) { log('sys', `${cmdStr(c)}: not used on the Marshal scope (Approach only).`); continue; }
+    if (MC && !a.parArr && ['sector', 'purple', 'cca', 'button', 'climbOut', 'pos', 'rid'].includes(c.k)) { log('sys', `${cmdStr(c)}: not used on the Marshal scope (Approach only).`); continue; }
     if (MC && !a.parArr && c.k === 'radarContact' && !c.offMom) { rb.push('roger'); rbSay.push('roger'); continue; }
-    if (c.k === 'landChk') {   // helos slow to 100-130 kt; jets ignore it
-      if (isHelo(a)) award(a, 'slow', 'landing checks');
-      if (isHelo(a)) { a.landChk = true; a.tgtSpd = Math.round(rand(100, 130)); }
+    if (c.k === 'landChk') {   // v105: landing checks = slow to approach speed: helos 100-130 kt (landing checks), jets 130-150 kt (dirty)
+      if (typeof MC === 'undefined' || !MC || a.parArr) award(a, 'slow', 'landing checks');
+      if (isHelo(a)) { a.landChk = true; a.tgtSpd = Math.round(rand(100, 130)); } else { a.dirty = true; a.tgtSpd = Math.round(rand(130, 150)); }
+      a.buster = false; log('sys', `${a.cs} landing checks, slowing to ${a.tgtSpd} kt.`);
       rb.push('ack'); rbSay.push('ack'); continue;
     }
     if (c.k === 'dirty') {   // jets (STOVL) slow to 130-150 kt; helos ignore it
-      if (!isHelo(a)) award(a, 'slow', 'dirty up');
+      if (!isHelo(a) && (!MC || a.parArr)) award(a, 'slow', 'dirty up');
       if (!isHelo(a)) { a.dirty = true; a.tgtSpd = Math.round(rand(130, 150)); }
       rb.push('ack'); rbSay.push('ack'); continue;
     }
@@ -4204,7 +4213,7 @@ function appExecute(p, src) {
     if (c.k === 'hdg') {
       if (a.sector) { a.sector = null; }   // a new heading cancels the sector
       MAR.cancel(a, 'heading');
-      a.tgtHdg = norm(c.v); a.turnDir = Math.abs(angDiff(a.tgtHdg, a.hdg)) < 0.5 ? null : c.dir;
+      a.tgtHdg = norm(c.v); a.turnDir = Math.abs(angDiff(a.tgtHdg, a.hdg)) < 0.5 ? null : c.dir; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; }   // v105: fly heading = instant heading change
       const t = c.dir === 'L' ? 'left heading' : c.dir === 'R' ? 'right heading' : 'heading';
       rb.push(`${t} ${hdg3(c.v)}`); rbSay.push(`${t} ${sayDigits(hdg3(c.v))}`);
     } else if (c.k === 'alt' && c.angels) {
@@ -4310,8 +4319,8 @@ function drawApp(now) {
     const age = (now - a.paint.t) / PPI.sweepT, al = Math.max(0, 1 - age);
     if (al <= 0) continue;
     const Q = P(a.paint.e, a.paint.n);
-    ctx.fillStyle = ppiCol(0.25 * al); ctx.beginPath(); ctx.arc(Q[0], Q[1], 6, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = ppiCol(0.95 * al); ctx.beginPath(); ctx.arc(Q[0], Q[1], 2.6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = ppiCol(0.25 * al); ctx.beginPath(); ctx.arc(Q[0], Q[1], 4, 0, Math.PI * 2); ctx.fill();   // v105: ~65% size
+    ctx.fillStyle = ppiCol(0.95 * al); ctx.beginPath(); ctx.arc(Q[0], Q[1], 1.8, 0, Math.PI * 2); ctx.fill();
   }
   // sweep line
   { const g = ctx.createLinearGradient(cx, cy, cx + Math.sin(ang * DEG) * RD, cy - Math.cos(ang * DEG) * RD); g.addColorStop(0, ppiCol(0.3)); g.addColorStop(1, ppiCol(0.95));
@@ -4324,10 +4333,10 @@ function drawApp(now) {
   ctx.strokeStyle = ppiCol(0.75); ctx.lineWidth = 1.5; ctx.strokeRect(cx - RX, cy - RY, 2 * RX, 2 * RY); ctx.lineWidth = 1;
   ctx.font = FONT(11); ctx.textAlign = 'center';
   for (let d = 0; d < 360; d += 5) {   // bearing ticks where each radial meets the rectangle edge, pointing inward; labels just inside the edge
-    const s1 = Math.sin(d * DEG), c1 = Math.cos(d * DEG), l = d % 10 ? 4 : 8;
+    const s1 = Math.sin(d * DEG), c1 = Math.cos(d * DEG), l = d % 10 ? 5 : 10;
     const kx = Math.abs(s1) > 1e-9 ? RX / Math.abs(s1) : Infinity, ky = Math.abs(c1) > 1e-9 ? RY / Math.abs(c1) : Infinity, k = Math.min(kx, ky);
     const ex = cx + s1 * k, ey = cy - c1 * k, side = kx < ky, nx = side ? Math.sign(s1) : 0, ny = side ? 0 : -Math.sign(c1);
-    ctx.strokeStyle = ppiCol(d % 10 ? 0.4 : 0.7); ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex - nx * l, ey - ny * l); ctx.stroke();
+    ctx.strokeStyle = ppiCol(d % 10 ? 0.4 : 0.7); ctx.beginPath(); ctx.moveTo(ex - s1 * l, ey + c1 * l); ctx.lineTo(ex, ey); ctx.stroke();   // v105: tick slanted along heading d (the direction an aircraft flies on that heading), ending at the bezel
     if (d % 30 === 0) { ctx.fillStyle = ppiCol(0.8); ctx.fillText(String(d).padStart(3, '0'), Math.max(cx - RX + 22, Math.min(cx + RX - 22, ex - nx * 24)), Math.max(cy - RY + 22, Math.min(cy + RY - 14, ey - ny * 20 + 4))); }
   }
   if (!G) { ctx.textAlign = 'left'; return; }
@@ -4343,11 +4352,11 @@ function drawApp(now) {
     const sel = a === G.selected, fin = a.st === 'final' || a.st === 'mfinal' || a.st === 'purple' || a.st === 'lowout', Q = a.paint ? P(a.paint.e, a.paint.n) : P(a.e, a.n);   // sweep-latched position
     if (a.sq === false) {   // no squawk: primary (raw) return only, no data block
       if (a.priCut) { a.hitR = null; continue; }   // instructor cut primary + no squawk: nothing on the scope
-      ctx.fillStyle = sel ? 'rgba(220,255,225,0.95)' : ppiCol(0.75); ctx.fillRect(Q[0] - 2.5, Q[1] - 1.5, 5, 3);
-      if (sel) { ctx.strokeStyle = 'rgba(220,255,225,0.8)'; ctx.strokeRect(Q[0] - 6, Q[1] - 5, 12, 10); }
+      ctx.fillStyle = sel ? 'rgba(220,255,225,0.95)' : ppiCol(0.75); ctx.fillRect(Q[0] - 1.75, Q[1] - 1, 3.5, 2);
+      if (sel) { ctx.strokeStyle = 'rgba(220,255,225,0.8)'; ctx.strokeRect(Q[0] - 4, Q[1] - 3.5, 8, 7); }
       a.hitR = appCtl(a) ? { x: Q[0], y: Q[1] } : null; continue; }
     const col = a.conflict ? ((now / 400 | 0) % 2 ? 'rgba(255,90,70,1)' : 'rgba(255,190,60,1)') : sel ? 'rgba(220,255,225,1)' : fin ? ppiCol(0.4) : ppiCol(0.9);
-    if (a.priCut) ctx.globalAlpha = 0; ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 4.5; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 4.5, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1; ctx.globalAlpha = 1;   // simple target blip (no lines; hidden when the instructor cuts primary radar)
+    if (a.priCut) ctx.globalAlpha = 0; ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 3; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 3, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1; ctx.globalAlpha = 1;   // v105: ~65% size; simple target blip (no lines; hidden when the instructor cuts primary radar)
     const bx = Q[0] + 14 + (a.dbx || 0), by = Q[1] - 22 + (a.dby || 0);
     if (a.dbx || a.dby) { ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(Q[0], Q[1]); ctx.lineTo(bx - 2, by + 4); ctx.stroke(); ctx.globalAlpha = 1; }   // leader line to a moved data block
     const l1 = (a.st === 'purple' || a.phase === 'withFinal' || a.phase === 'withApp') ? dbName(a) + ' ' + freqTag(a.hoffFreq || a.button || (a.phase === 'withApp' ? 'silver' : 'purple')) : dbName(a), l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')}${G.gsp ? ' ' + String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0') : ''} ${a.code}`;   // ground speed only after GSP
@@ -4447,7 +4456,7 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
     });
     el.addEventListener('click', e => e.stopPropagation());
   }
-  const dash = 'N-- --.- W--- --.-\n---/--.-NM';
+  const TBH = 'Trackball Posn.\n', dash = TBH + 'N-- --.- W--- --.-\n---/--.-NM';   // v105: labelled block
   tb.textContent = dash;
   const dm = (v, pos, neg, w) => { const h = v >= 0 ? pos : neg; v = Math.abs(v); let d = Math.floor(v), m = Math.round((v - d) * 600) / 10; if (m >= 60) { d++; m = 0; } return h + String(d).padStart(w, '0') + ' ' + m.toFixed(1).padStart(4, '0'); };
   canvas.addEventListener('pointermove', e => {
@@ -4456,14 +4465,14 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
     const east = x / g.sc, north = -y / g.sc, [eT, nT] = rotB(east, north, MV);   // screen is magnetic-up; lat/long needs true
     const lat = SHIP_LAT + nT / 60, lon = SHIP_LON + eT / (60 * Math.cos(SHIP_LAT * Math.PI / 180));
     let brg = Math.round(Math.atan2(east, north) * 180 / Math.PI); brg = ((brg % 360) + 360) % 360; if (brg === 0) brg = 360;
-    tb.textContent = dm(lat, 'N', 'S', 2) + ' ' + dm(lon, 'E', 'W', 3) + '\n' + String(brg).padStart(3, '0') + '/' + Math.hypot(east, north).toFixed(1).padStart(4, ' ') + 'NM';
+    tb.textContent = TBH + dm(lat, 'N', 'S', 2) + ' ' + dm(lon, 'E', 'W', 3) + '\n' + String(brg).padStart(3, '0') + '/' + Math.hypot(east, north).toFixed(1).padStart(4, ' ') + 'NM';
   });
   canvas.addEventListener('pointerleave', () => { tb.textContent = dash; });
   const tick = () => {
     const t = (typeof G !== 'undefined' && G && isFinite(G.t)) ? G.t : 0, W = (typeof G !== 'undefined' && G && G.wind) || { dir: 250, spd: 25, gust: 0 }, secs = 36000 + Math.floor(t);
     const hh = Math.floor(secs / 3600) % 24, mm = Math.floor(secs / 60) % 60, ss = secs % 60;
-    const eatLine = (typeof G !== 'undefined' && G && G.eatBase != null) ? '\nREF :' + String(G.eatRef).padStart(2, '0') + ' · 1ST EAT :' + String(G.eatBase).padStart(2, '0') : '';
-    const txt = 'Time: ' + String(hh).padStart(2, '0') + String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0') + eatLine + '\nFREQ RED · FB ' + h3z(FB()) + ' DWH ' + h3z(DWH()) + ' BRC ' + h3z(TBRC) + ' ' + fmtMV() + '\n' + String(W.dir).padStart(3, '0') + String(W.spd).padStart(2, '0') + (W.gust ? 'G' + String(W.spd + W.gust).padStart(2, '0') : '') + 'KT 2NM -SN BKN007 AA 29.92';
+    // v105: REF / 1ST EAT line removed from the data block (user request)
+    const txt = 'Time: ' + String(hh).padStart(2, '0') + String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0') + '\nFREQ RED · FB ' + h3z(FB()) + ' DWH ' + h3z(DWH()) + ' BRC ' + h3z(TBRC) + ' ' + fmtMV() + '\n' + String(W.dir).padStart(3, '0') + String(W.spd).padStart(2, '0') + (W.gust ? 'G' + String(W.spd + W.gust).padStart(2, '0') : '') + 'KT 2NM -SN BKN007 AA 29.92';
     if (ib.textContent !== txt) ib.textContent = txt;
   };
   const safeTick = () => { try { tick(); } catch (e) { console.error('info block', e); } };
