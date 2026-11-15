@@ -160,7 +160,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const SIM = 2;                 // intro clock runs at 2x so the story keeps moving (rates below are real per-second rates)
 const TURN_RATE = 6;           // deg/s (v99: tactical-jet turn, was standard rate 3)
-const CLIMB_FPM = 2000, SPD_RATE = 3, NM_FT = 6076.12, GP_TAN = Math.tan(3 * Math.PI / 180), SWEEP_MS = 4000;
+const CLIMB_FPM = 2000, SPD_RATE = 3, NM_FT = 6076.12, GP_TAN = Math.tan(3 * Math.PI / 180), SWEEP_MS = 2000;   // v100: 2 s/rev (was 4 s)
 const FCOL = { red: '#ff5a6e', silver: '#c9ced6', purple: '#b48cff', copper: '#e0915a', none: '#a8f0b2' };
 const FNAME = { red: 'Marshal · Red', silver: 'Approach · Silver', purple: 'Final · Purple', copper: 'Final · Copper' };
 const LS_KEY = 'aatccIntro.v2', LS_MUTE = 'aatccIntroMute', LS_SPEED = 'aatccIntroSpeed';
@@ -395,7 +395,7 @@ function stepAc(a, dt) {
 }
 function tick(dt) {
   W.t += dt;
-  const prev = W.sweep; W.sweep = (W.t * 1000 / SWEEP_MS * 360) % 360;   // one sweep every 4 s, like the scopes
+  const prev = W.sweep; W.sweep = (W.t * 1000 / SWEEP_MS * 360) % 360;   // one sweep every 2 s, like the scopes
   const simDt = dt * SIM * SPEED * (window.__fastK || 1), n = Math.max(1, Math.ceil(simDt / 0.1));
   if (!W.frozen) for (const a of W.acs) for (let i = 0; i < n; i++) stepAc(a, simDt / n * (a.fast || 1));   // voice steps: aircraft hold until the right call
   for (const a of W.acs) {

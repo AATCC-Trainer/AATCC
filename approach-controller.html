@@ -1700,7 +1700,7 @@ function ttsNext() {
     ttsWatch = setTimeout(poll, 300); };
   ttsWatch = setTimeout(poll, 300);
 }
-function pilotSay(a, text, say, force, routine, prio) {
+function pilotSay0(a, text, say, force, routine, prio) {
   if (window.__INST_SILENT) return;   // Instructor actions: no pilot TTS / readback line
   log('plt', text);
   sayLog.push({ t: G ? G.t : 0, cs: a && a.cs, text, routine: !!routine, prio: !!prio });
@@ -1897,7 +1897,55 @@ function pickBestAlt(alts) {
 function setHeard(text, p) { const h = $('heard'); if (!h) return;
   h.textContent = text ? 'Heard: ' + text + (p ? ' → ' + (p.cmds.length ? p.cmds.map(c => cmdStr(c).toUpperCase()).join('; ') + (p.cs ? ` (${(G && G.ac.find(a => a.cs === p.cs) || {}).tel || p.cs}${p.csUnknown ? '?' : ''})` : '') : 'NOT UNDERSTOOD') : ' …') : ''; }
 window.__recTest = { fixSpeech, pickBestAlt, scoreAlt, lev, phon };
+/* v100 combined transmissions: every pilot reply produced while one controller transmission is processed is collected and
+   merged per aircraft into ONE reply, callsign first ("Eagle four eight, angels six, F-18"); plain acknowledgements collapse to
+   the callsign-only readback. Replies that do not start with the callsign (e.g. check-in style lines) are passed through as is. */
+const TXC = { depth: 0, q: [] };
+function pilotSay(...args) { if (TXC.depth > 0 && !window.__INST_SILENT) { TXC.q.push(args); return; } return pilotSay0(...args); }
+function txFlush() {
+  const q = TXC.q; TXC.q = []; if (!q.length) return;
+  const by = new Map(); for (const x of q) { const k = x[0] || null; if (!by.has(k)) by.set(k, []); by.get(k).push(x); }
+  const rx = t => new RegExp('^\\s*' + String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*(?:[,.]\\s*|$)', 'i');
+  for (const [a, L] of by) {
+    if (!a || L.length === 1 || !a.tel) { for (const x of L) pilotSay0(...x); continue; }
+    const tel = a.tel, telS = a.telSay || tel, rT = rx(tel), rS = rx(telS), parts = [], sparts = [], other = [];
+    for (const x of L) {
+      const t = String(x[1] == null ? '' : x[1]), s = String(x[2] == null ? t : x[2]);
+      if (!rT.test(t)) { other.push(x); continue; }
+      const pt = t.replace(rT, '').replace(/[\s.]+$/, '').trim(), ps = (rS.test(s) ? s.replace(rS, '') : rT.test(s) ? s.replace(rT, '') : pt).replace(/[\s.]+$/, '').trim();
+      if (pt && !parts.includes(pt)) { parts.push(pt); sparts.push(ps || pt); }
+    }
+    if (other.length < L.length) pilotSay0(a, tel + (parts.length ? ', ' + parts.join(', ') : '') + '.', telS + (sparts.length ? ', ' + sparts.join(', ') : '') + '.', L.some(x => x[3]), L.every(x => x[4]), L.some(x => x[5]));
+    for (const x of other) pilotSay0(...x);
+  }
+}
 function handleTranscript(text, src) {
+  TXC.depth++; let r;
+  try { r = (typeof txCompound === 'function' && txCompound(text, src)) || handleTranscript0(text, src); }
+  finally { TXC.depth--; if (!TXC.depth) { try { txFlush(); } catch (e) { console.error('txFlush', e); } } }
+  return r;
+}
+/* v100: a transmission that chains a stand-alone call (squawk normal / squawk ####, signal buster) with anything else used to
+   stop at the stand-alone call (its handler returned early and the rest was dropped). Split it off, run it with the callsign,
+   then run the rest of the transmission (which may hold more such calls) through the normal path. */
+const TX_SPECIAL = [/\bsq(?:u|w)?a+w?c?k?s?\s*,?\s*(?:normal|[0-7]{4})\b/i, /\b(?:signal|single|signals|cigna|sig)?\s*bust(?:er|ers|ed|a|ah|in)\b/i];
+function txCompound(text, src) {
+  if (!G || G.over) return null;
+  const t = String(text || '').trim(); let m = null;
+  if (/\bcorrection\b/i.test(t)) return null;   // 'correction' keeps its own rules (everything before the last one is disregarded)
+  for (const re of TX_SPECIAL) { const x = re.exec(t); if (x && (!m || x.index < m.index)) m = x; }
+  if (!m) return null;
+  const head = t.slice(0, m.index), csPart = (head.includes(',') ? head.slice(0, head.indexOf(',')) : head).trim();
+  const rest = (head + ' ' + t.slice(m.index + m[0].length)).replace(/(\s*,\s*)+/g, ', ').replace(/^[\s,]+|[\s,.]+$/g, '');
+  const restBody = rest.slice(rest.toLowerCase().startsWith(csPart.toLowerCase()) ? csPart.length : 0).replace(/[^a-z0-9]+/gi, '');
+  if (!restBody) return null;   // nothing else in the transmission: the normal handler deals with it
+  const r1 = handleTranscript0((csPart ? csPart + ', ' : '') + m[0], src) || { cmds: [] };
+  const r2 = handleTranscript((csPart && !rest.toLowerCase().startsWith(csPart.toLowerCase()) ? csPart + ', ' : '') + rest, src) || { cmds: [] };
+  const cs = r1.cs || r2.cs || null, str = [r1.str, r2.str].filter(Boolean).join('; ');
+  try { $('parsed').textContent = 'Understood → ' + (cs ? cs + ' ' : '') + str; $('parsed').classList.toggle('bad', !cs); } catch (e) {}
+  return { cs, cmds: [...(r1.cmds || []), ...(r2.cmds || [])], str, mar: r2.mar };
+}
+function handleTranscript0(text, src) {
   text = PM(text);
   const known = G ? G.ac.filter(alive).map(a => a.cs) : [];
   const heard = String(text).trim(); text = fixSpeech(text);
@@ -3311,7 +3359,7 @@ function appPanel() {
   const html = list.map((x, i) => `<div class="strip${x === G.selected ? ' sel' : ''}" data-uid="${x.uid}"><span>${x.ltr || i + 1}</span><span>${x.cs} ${x.type}</span><span>${appRng(x).toFixed(0)}NM ${String(Math.round(x.alt / 100)).padStart(3, '0')}</span><span>${hdg3(Math.round(x.hdg))}${G.gsp ? ' ' + Math.round(x.gs) + 'KT' : ''}</span></div>`).join('');   // speed only after GSP
   if (stripsEl.innerHTML !== html) stripsEl.innerHTML = html;
 }
-/* AATCC-style PPI (SPN-43 air search look): black scope, green phosphor, 4 s sweep, TPX-42 style beacon blocks. Visual only. */
+/* AATCC-style PPI (SPN-43 air search look): black scope, green phosphor, 2 s sweep, TPX-42 style beacon blocks. Visual only. */
 /* v93 cone of confusion: only an aircraft OVERFLYING the ship (directly on top, airborne transit) loses its paints.
    Never a launch / departure / climb-out from the deck (it must first get outside CONE_ARM_NM, so anything that starts at the ship
    is never hidden until it has left and come back over), never final / landing traffic, never below CONE_MIN_ALT. Display only. */
@@ -3320,7 +3368,7 @@ const CONE_NO_PH = ['climbout', 'missed', 'final', 'visual', 'landed', 'withFina
 function coneArmTick() { if (G && G.ac) for (const a of G.ac) if (!a.coneArm && Math.hypot(a.e || 0, a.n || 0) > CONE_ARM_NM) a.coneArm = true; }
 function coneOk(a) { return !!a.coneArm && (a.alt || 0) >= CONE_MIN_ALT && !CONE_NO_PH.includes(a.phase) && !CONE_NO_ST.includes(a.st) && !a.withFinal; }
 const inCone = a => coneOk(a) && (Math.hypot(a.e, a.n) < CONE_NM || !!(a.paint && Math.hypot(a.paint.e, a.paint.n) < CONE_NM));
-const PPI = { G: '120,255,140', sweepT: 4000, lastAng: null, scan: null };
+const PPI = { G: '120,255,140', sweepT: 2000,   /* v100: 2 s/rev (was 4 s) */ lastAng: null, scan: null };
 function ppiCol(a) { return `rgba(${PPI.G},${a})`; }
 function appView(w, h) {   // rectangular scope geometry (CSS px): half-extents and px per NM
   const M = 2; let RX = Math.max(10, w / 2 - M), RY = Math.max(10, h / 2 - M);

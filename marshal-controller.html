@@ -1750,7 +1750,7 @@ function ttsNext() {
     ttsWatch = setTimeout(poll, 300); };
   ttsWatch = setTimeout(poll, 300);
 }
-function pilotSay(a, text, say, force, routine, prio) {
+function pilotSay0(a, text, say, force, routine, prio) {
   if (window.__INST_SILENT) return;   // Instructor actions: no pilot TTS / readback line
   log('plt', text);
   sayLog.push({ t: G ? G.t : 0, cs: a && a.cs, text, routine: !!routine, prio: !!prio });
@@ -2014,7 +2014,79 @@ function csByDigits(pre, live) {   // first choice: the callsign number ("... 42
   if (exact.length === 1) return exact[0];
   const c = live.filter(x => x.cs.endsWith(m[1])); return c.length === 1 ? c[0] : null;
 }
+/* v100 combined transmissions: every pilot reply produced while one controller transmission is processed is collected and
+   merged per aircraft into ONE reply, callsign first ("Eagle four eight, angels six, F-18"); plain acknowledgements collapse to
+   the callsign-only readback. Replies that do not start with the callsign (e.g. check-in style lines) are passed through as is. */
+const TXC = { depth: 0, q: [] };
+function pilotSay(...args) { if (TXC.depth > 0 && !window.__INST_SILENT) { TXC.q.push(args); return; } return pilotSay0(...args); }
+function txFlush() {
+  const q = TXC.q; TXC.q = []; if (!q.length) return;
+  const by = new Map(); for (const x of q) { const k = x[0] || null; if (!by.has(k)) by.set(k, []); by.get(k).push(x); }
+  const rx = t => new RegExp('^\\s*' + String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*(?:[,.]\\s*|$)', 'i');
+  for (const [a, L] of by) {
+    if (!a || L.length === 1 || !a.tel) { for (const x of L) pilotSay0(...x); continue; }
+    const tel = a.tel, telS = a.telSay || tel, rT = rx(tel), rS = rx(telS), parts = [], sparts = [], other = [];
+    for (const x of L) {
+      const t = String(x[1] == null ? '' : x[1]), s = String(x[2] == null ? t : x[2]);
+      if (!rT.test(t)) { other.push(x); continue; }
+      const pt = t.replace(rT, '').replace(/[\s.]+$/, '').trim(), ps = (rS.test(s) ? s.replace(rS, '') : rT.test(s) ? s.replace(rT, '') : pt).replace(/[\s.]+$/, '').trim();
+      if (pt && !parts.includes(pt)) { parts.push(pt); sparts.push(ps || pt); }
+    }
+    if (other.length < L.length) pilotSay0(a, tel + (parts.length ? ', ' + parts.join(', ') : '') + '.', telS + (sparts.length ? ', ' + sparts.join(', ') : '') + '.', L.some(x => x[3]), L.every(x => x[4]), L.some(x => x[5]));
+    for (const x of other) pilotSay0(...x);
+  }
+}
 function handleTranscript(text, src) {
+  TXC.depth++; let r;
+  try { r = (typeof txCompound === 'function' && txCompound(text, src)) || handleTranscript0(text, src); }
+  finally { TXC.depth--; if (!TXC.depth) { try { txFlush(); } catch (e) { console.error('txFlush', e); } } }
+  return r;
+}
+/* v100: a transmission that chains a stand-alone call (squawk normal / squawk ####, signal buster) with anything else used to
+   stop at the stand-alone call (its handler returned early and the rest was dropped). Split it off, run it with the callsign,
+   then run the rest of the transmission (which may hold more such calls) through the normal path. */
+const TX_SPECIAL = [/\bsq(?:u|w)?a+w?c?k?s?\s*,?\s*(?:normal|[0-7]{4})\b/i, /\b(?:signal|single|signals|cigna|sig)?\s*bust(?:er|ers|ed|a|ah|in)\b/i];
+function txCompound(text, src) {
+  if (!G || G.over) return null;
+  const t = String(text || '').trim(); let m = null;
+  if (/\bcorrection\b/i.test(t)) return null;   // 'correction' keeps its own rules (everything before the last one is disregarded)
+  for (const re of TX_SPECIAL) { const x = re.exec(t); if (x && (!m || x.index < m.index)) m = x; }
+  if (!m) return null;
+  const head = t.slice(0, m.index), csPart = (head.includes(',') ? head.slice(0, head.indexOf(',')) : head).trim();
+  const rest = (head + ' ' + t.slice(m.index + m[0].length)).replace(/(\s*,\s*)+/g, ', ').replace(/^[\s,]+|[\s,.]+$/g, '');
+  const restBody = rest.slice(rest.toLowerCase().startsWith(csPart.toLowerCase()) ? csPart.length : 0).replace(/[^a-z0-9]+/gi, '');
+  if (!restBody) return null;   // nothing else in the transmission: the normal handler deals with it
+  const r1 = handleTranscript0((csPart ? csPart + ', ' : '') + m[0], src) || { cmds: [] };
+  const r2 = handleTranscript((csPart && !rest.toLowerCase().startsWith(csPart.toLowerCase()) ? csPart + ', ' : '') + rest, src) || { cmds: [] };
+  const cs = r1.cs || r2.cs || null, str = [r1.str, r2.str].filter(Boolean).join('; ');
+  try { $('parsed').textContent = 'Understood → ' + (cs ? cs + ' ' : '') + str; $('parsed').classList.toggle('bad', !cs); } catch (e) {}
+  return { cs, cmds: [...(r1.cmds || []), ...(r2.cmds || [])], str, mar: r2.mar };
+}
+/* v100: calls chained with a marshal / LH / EAT / report / frequency call ("Eagle 48, radar contact, case three recovery, ...,
+   take speed 250"). The marshal call is one compound clause: its own parts (angels, BRC, outbound bearing, EAT, radial/DME)
+   are cut out first so they are never re-read as separate altitude / heading commands; whatever is left is parsed normally. */
+const MAR_NUM = String.raw`(?:\d[\d.:]*|zero|oh|one|two|three|four|five|six|seven|eight|nine|niner|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|point|hundred|thousand)(?:[\s-]+(?:\d[\d.:]*|zero|oh|one|two|three|four|five|six|seven|eight|nine|niner|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|point|hundred|thousand))*`;
+const MAR_SPANS = [
+  String.raw`case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery`,
+  String.raw`(?:expect(?:ed)?\s+|cleared\s+(?:for\s+)?(?:the\s+)?)?(?:lh|l\s*\.?\s*h|lima\s+hotel)\s*-?\s*(?:[1-5]|one|two|three|four|five)(?:\s+approach)?(?:\s*,?\s*with\s+(?:a\s+)?(?:cca|c\s*c\s*a)\s+final)?`,
+  String.raw`(?:with\s+(?:a\s+)?)?(?:cca|c\s*c\s*a)\s+final`, String.raw`(?:expect(?:ed)?\s+)?emergency\s+approach`,
+  String.raw`marsh?al+\s+${MAR_NUM}(?:\s+radial)?\s+(?:at|for)\s+${MAR_NUM}(?:\s*(?:dme|miles?|nm))?`,
+  String.raw`(?<!(?:take|climb|descend|maintain|level|and)\s+)angels\s+${MAR_NUM}`,
+  String.raw`(?:base\s+recovery\s+course|brc)\s+(?:is\s+)?${MAR_NUM}`, String.raw`outbound\s+(?:bearing|heading|course)\s+${MAR_NUM}`,
+  String.raw`(?:(?:expected|expect|push|commence)\s+)?(?:approach\s+)?time\s+(?:is\s+|at\s+)?${MAR_NUM}`, String.raw`\beat\s+(?:is\s+|at\s+)?${MAR_NUM}`,
+  String.raw`altimeter\s+${MAR_NUM}`,
+  String.raw`report\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound(?:\s+bearing)?`, String.raw`report\s+commenc\w*`, String.raw`report\s+turning\s+inbound`, String.raw`report\s+arcing`,
+  String.raw`cleared\s+(?:for\s+)?(?:the\s+)?approach`, String.raw`\bcommence\b(?:\s+approach)?`, String.raw`missed\s+approach(?:\s+instructions)?`,
+  String.raw`go(?:\s+(?:to|too|two))?\s+(?:purple|copper|silver|sliver|blue|red|read|redd)`, String.raw`(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?(?:final|approach)`,
+  String.raw`flight\s+of\s+(?:two|2)`, String.raw`\bexpect(?:ed)?\b`, String.raw`\brecovery\b`,
+].map(x => new RegExp(String.raw`\b` + x + String.raw`\b`, 'gi'));
+function marExtras(t, a, known, src) {
+  let rest = String(t || ''); for (const re of MAR_SPANS) rest = rest.replace(re, ' , ');
+  rest = rest.replace(/(\s*,\s*)+/g, ', ').replace(/^[\s,]+|[\s,.]+$/g, '');
+  const p = parseSpeech(rest, known); if (!p || !p.cmds || !p.cmds.length) return null;
+  p.cs = a.cs; p.csUnknown = false; p.raw = rest; execute(p, src); return p;
+}
+function handleTranscript0(text, src) {
   { const raw = String(text).trim(), fx = MC ? mcFixSpeech(PM(raw)) : PM(raw); if (MC && G && !G.over && src === 'voice') log('sys', `🎙 Recognized: "${raw}"${fx.toLowerCase() !== raw.toLowerCase() ? `  →  read as "${fx}"` : ''}`); text = fx; }
   const known = G ? G.ac.filter(alive).map(a => a.cs) : [];
   const heard = String(text).trim(); text = fixSpeech(text);
@@ -2079,6 +2151,7 @@ function handleTranscript(text, src) {
         if (!a) { log('sys', `Say the callsign (or select a target) first. Heard: "${heard}"`); return { cs: null, cmds: [], str: 'marshal?' }; }
         if (!a.accepted) { log('sys', `${a.cs} not accepted (click its target to accept): no response to "${heard}".`); return { cs: a.cs, cmds: [], str: 'not accepted' }; }
         MAR.exec(mp, a, heard, src);
+        try { marExtras(heardNoShip, a, known, src); } catch (e) { console.error('marshal extras', e); }   // v100: other calls chained with the marshal call
         $('parsed').textContent = 'Understood → ' + a.cs + ' ' + [mp.type && MAR.T[mp.type].name, mp.marshal && `marshal ${mp.marshal.R}/${mp.marshal.D}/${mp.marshal.alt}${mp.marshal.eat != null ? ' EAT ' + String(mp.marshal.eat).padStart(2, '0') : ''}`, !mp.marshal && mp.eat != null && `EAT ${String(mp.eat).padStart(2, '0')}`, mp.cleared && !mp.type && 'cleared/report commencing', mp.commence && 'commence', mp.rptTi && 'report turning inbound', mp.rptArc && 'report arcing', mp.missed && 'missed approach', mp.hoFinal && (mp.hoFreq ? 'go ' + mp.hoFreq : 'final'), mp.hoApp && 'go silver', mp.hoMar && 'go red'].filter(Boolean).join('; ');
         $('parsed').classList.remove('bad');
         return { cs: a.cs, cmds: ['marshal'], str: 'marshal', mar: mp };
@@ -4152,7 +4225,7 @@ function appPanel() {
   const html = list.map((x, i) => `<div class="strip${x === G.selected ? ' sel' : ''}" data-uid="${x.uid}"><span>${x.ltr || i + 1}</span><span>${x.cs} ${x.type}</span><span>${appRng(x).toFixed(0)}NM ${String(Math.round(x.alt / 100)).padStart(3, '0')}</span><span>${hdg3(Math.round(x.hdg))}${G.gsp ? ' ' + Math.round(x.gs) + 'KT' : ''}</span></div>`).join('');   // speed only after GSP
   if (stripsEl.innerHTML !== html) stripsEl.innerHTML = html;
 }
-/* AATCC-style PPI (SPN-43 air search look): black scope, green phosphor, 4 s sweep, TPX-42 style beacon blocks. Visual only. */
+/* AATCC-style PPI (SPN-43 air search look): black scope, green phosphor, 2 s sweep, TPX-42 style beacon blocks. Visual only. */
 /* v93 cone of confusion: only an aircraft OVERFLYING the ship (directly on top, airborne transit) loses its paints.
    Never a launch / departure / climb-out from the deck (it must first get outside CONE_ARM_NM, so anything that starts at the ship
    is never hidden until it has left and come back over), never final / landing traffic, never below CONE_MIN_ALT. Display only. */
@@ -4161,7 +4234,7 @@ const CONE_NO_PH = ['climbout', 'missed', 'final', 'visual', 'landed', 'withFina
 function coneArmTick() { if (G && G.ac) for (const a of G.ac) if (!a.coneArm && Math.hypot(a.e || 0, a.n || 0) > CONE_ARM_NM) a.coneArm = true; }
 function coneOk(a) { return !!a.coneArm && (a.alt || 0) >= CONE_MIN_ALT && !CONE_NO_PH.includes(a.phase) && !CONE_NO_ST.includes(a.st) && !a.withFinal; }
 const inCone = a => coneOk(a) && (Math.hypot(a.e, a.n) < CONE_NM || !!(a.paint && Math.hypot(a.paint.e, a.paint.n) < CONE_NM));
-const PPI = { G: '120,255,140', sweepT: 4000, lastAng: null, scan: null };
+const PPI = { G: '120,255,140', sweepT: 2000,   /* v100: 2 s/rev (was 4 s) */ lastAng: null, scan: null };
 function ppiCol(a) { return `rgba(${PPI.G},${a})`; }
 function appView(w, h) {   // rectangular scope geometry (CSS px): half-extents and px per NM
   const M = 2; let RX = Math.max(10, w / 2 - M), RY = Math.max(10, h / 2 - M);

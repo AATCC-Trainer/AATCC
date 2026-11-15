@@ -2024,7 +2024,7 @@ function ttsNext() {
     ttsWatch = setTimeout(poll, 300); };
   ttsWatch = setTimeout(poll, 300);
 }
-function pilotSay(a, text, say, force, routine, prio) {
+function pilotSay0(a, text, say, force, routine, prio) {
   if (window.__INST_SILENT) return;   // Instructor actions: no pilot TTS / readback line
   log('plt', text);
   sayLog.push({ t: G ? G.t : 0, cs: a && a.cs, text, routine: !!routine, prio: !!prio });
@@ -2183,7 +2183,35 @@ function renderTranscript(fin, inter) {
   $('transcript').innerHTML = (fin || inter) ? `${esc(fin)}<span class="interim">${esc(inter)}</span>` : '<span style="color:var(--dim)">…listening…</span>';
 }
 const PM = t => { try { return window.PhraseMatch ? window.PhraseMatch.normalize(t, { protect: AIRLINES.flatMap(a => a.words) }) : String(t); } catch (e) { return String(t); } };   // shared sound-alike matcher (phrase-match.js)
+/* v100 combined transmissions: every pilot reply produced while one controller transmission is processed is collected and
+   merged per aircraft into ONE reply, callsign first ("Eagle four eight, angels six, F-18"); plain acknowledgements collapse to
+   the callsign-only readback. Replies that do not start with the callsign (e.g. check-in style lines) are passed through as is. */
+const TXC = { depth: 0, q: [] };
+function pilotSay(...args) { if (TXC.depth > 0 && !window.__INST_SILENT) { TXC.q.push(args); return; } return pilotSay0(...args); }
+function txFlush() {
+  const q = TXC.q; TXC.q = []; if (!q.length) return;
+  const by = new Map(); for (const x of q) { const k = x[0] || null; if (!by.has(k)) by.set(k, []); by.get(k).push(x); }
+  const rx = t => new RegExp('^\\s*' + String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*(?:[,.]\\s*|$)', 'i');
+  for (const [a, L] of by) {
+    if (!a || L.length === 1 || !a.tel) { for (const x of L) pilotSay0(...x); continue; }
+    const tel = a.tel, telS = a.telSay || tel, rT = rx(tel), rS = rx(telS), parts = [], sparts = [], other = [];
+    for (const x of L) {
+      const t = String(x[1] == null ? '' : x[1]), s = String(x[2] == null ? t : x[2]);
+      if (!rT.test(t)) { other.push(x); continue; }
+      const pt = t.replace(rT, '').replace(/[\s.]+$/, '').trim(), ps = (rS.test(s) ? s.replace(rS, '') : rT.test(s) ? s.replace(rT, '') : pt).replace(/[\s.]+$/, '').trim();
+      if (pt && !parts.includes(pt)) { parts.push(pt); sparts.push(ps || pt); }
+    }
+    if (other.length < L.length) pilotSay0(a, tel + (parts.length ? ', ' + parts.join(', ') : '') + '.', telS + (sparts.length ? ', ' + sparts.join(', ') : '') + '.', L.some(x => x[3]), L.every(x => x[4]), L.some(x => x[5]));
+    for (const x of other) pilotSay0(...x);
+  }
+}
 function handleTranscript(text, src) {
+  TXC.depth++; let r;
+  try { r = (typeof txCompound === 'function' && txCompound(text, src)) || handleTranscript0(text, src); }
+  finally { TXC.depth--; if (!TXC.depth) { try { txFlush(); } catch (e) { console.error('txFlush', e); } } }
+  return r;
+}
+function handleTranscript0(text, src) {
   text = PM(text);
   { const h = G && !G.over ? hoffTyped(text) : null;
     if (h) {

@@ -331,15 +331,16 @@ function coneElig(a) {
   if (Math.hypot(a.e, a.n) > CONE_ARM_NM) CONE_ARM[a.key] = true; return !!CONE_ARM[a.key] && (a.alt || 0) >= 500;
 }
 const inCone = a => coneElig(a) && (Math.hypot(a.e, a.n) < CONE_NM || !!(I.disp[a.key] && Math.hypot(I.disp[a.key].e, I.disp[a.key].n) < CONE_NM));
+const I_SWEEP = 2000;   // v100: ms per sweep revolution (was 4000)
 function draw() {
   const { cx, cy, RX, RY, sc } = geom(), P = (e, n) => [cx + e * sc, cy - n * sc];
   ctx.fillStyle = '#0b0d0b'; ctx.fillRect(0, 0, W, H);
   ctx.save(); ctx.beginPath(); ctx.rect(cx - RX, cy - RY, 2 * RX, 2 * RY); ctx.clip();
   if (I.ring) { ctx.strokeStyle = ppi(0.18); ctx.font = FONT(10); ctx.fillStyle = ppi(0.45); const maxR = Math.hypot(RX, RY) / sc;
     for (let r = I.ring, i = 1; r <= maxR; r += I.ring, i++) { ctx.lineWidth = r % 10 === 0 ? 1.2 : 0.8; ctx.beginPath(); ctx.arc(cx, cy, r * sc, 0, 2 * Math.PI); ctx.stroke(); if (r % Math.max(I.ring, I.scope >= 40 ? 10 : 5) === 0 || I.ring >= 5) ctx.fillText(r, cx + r * sc * 0.707 + 2, cy - r * sc * 0.707 - 2); } }
-  { const now = performance.now(), dtw = I.lastNow == null ? 0 : Math.min(250, now - I.lastNow); I.lastNow = now;   // radar sweep: 4 s/rev in sim time (1x/3x, stops when the linked sims pause)
+  { const now = performance.now(), dtw = I.lastNow == null ? 0 : Math.min(250, now - I.lastNow); I.lastNow = now;   // radar sweep: 2 s/rev in sim time (v100, was 4 s) (1x/3x, stops when the linked sims pause)
     const st = links().map(x => live(x) && I.src[x].running ? I.src[x] : null).find(Boolean), k = st ? (st.paused ? 0 : st.scale || 1) : 1;
-    I.ph = ((I.ph || 0) + dtw * k) % 4000; I.prevAng = I.ang == null ? I.ph / 4000 * 360 : I.ang; I.ang = I.ph / 4000 * 360;
+    I.ph = ((I.ph || 0) + dtw * k) % I_SWEEP; I.prevAng = I.ang == null ? I.ph / I_SWEEP * 360 : I.ang; I.ang = I.ph / I_SWEEP * 360;
     const RD = Math.hypot(RX, RY) + 2, toC = d => (d - 90) * DEG;
     for (let q = 0; q < 24; q++) { ctx.fillStyle = ppi(0.16 * Math.pow(1 - q / 24, 2)); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, RD, toC(I.ang - (q + 1) * 3), toC(I.ang - q * 3)); ctx.closePath(); ctx.fill(); }
     const g = ctx.createLinearGradient(cx, cy, cx + Math.sin(I.ang * DEG) * RD, cy - Math.cos(I.ang * DEG) * RD); g.addColorStop(0, ppi(0.3)); g.addColorStop(1, ppi(0.95));
