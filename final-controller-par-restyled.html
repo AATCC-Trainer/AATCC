@@ -384,7 +384,8 @@ function normalizeSpeech(raw) {
   let s = ' ' + String(raw).toLowerCase() + ' ';
   s = s.replace(/(\d),(\d{3})/g, '$1$2');
   s = s.replace(/[’`]/g, "'").replace(/\bdon'?t\b/g, 'do not').replace(/\bdo n't\b/g, 'do not').replace(/\backnowledg(?:e)?ment\b/g, 'acknowledgement');
-  s = s.replace(/½|\b1\/2\b/g, ' half ').replace(/¾|\b3\/4\b/g, ' three quarter ');
+  s = s.replace(/(\b(?:(?:expect(?:ed)?\s+)?approach\s+time|eat|(?:push|commence)\s+time|time|minutes?|radial|marshal+|dme|at|angels|brc|heading|squawk|bearing|course)\s*,?\s*(?:is\s+|of\s+)?)(\d)\s*[\/:]\s*(\d)(?!\s*(?:a\s+)?(?:miles?|nm)\b)/g, '$1$2$3').replace(/(\b(?:(?:expect(?:ed)?\s+)?approach\s+time|eat|(?:push|commence)\s+time|time|minutes?|radial|marshal+|dme|at|angels|brc|heading|squawk|bearing|course)\s*,?\s*(?:is\s+|of\s+)?)½(?!\s*(?:a\s+)?(?:miles?|nm)\b)/g, '$112');   // v103: digit-by-digit numbers the recognizer wrote as 1/2, ½ or 1:2 in a number slot (EAT 'one two' = 12, not one half)\n  s = s.replace(/½|\b1\/2\b/g, ' half ').replace(/¾|\b3\/4\b/g, ' three quarter ');
+  for (let k = 0; k < 3; k++) s = s.replace(/\b(heading|brc|radial|bearing|course|squawk)\s+(\d{1,3})\s+(\d{1,3})\b/g, (m, w, a, b) => (a + b).length <= (w === 'squawk' ? 4 : 3) ? w + ' ' + a + b : m);   // v103: '12 0' -> 120 (digit-by-digit heading / squawk split by the recognizer)
   s = s.replace(/\bwave-?off\b|\bwaive\s+off\b|\bwave\s+of\b/g, ' wave off ');
   s = s.replace(/(\d)\.(\d)/g, '$1DOT$2');
   s = s.replace(/,/g, ' , ');

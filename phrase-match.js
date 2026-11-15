@@ -147,9 +147,14 @@ function normalize(raw, opts) {
   opts = opts || {};
   const protect = new Set(CALLSIGNS.concat(opts.protect || []).map(x => String(x).toLowerCase()).flatMap(x => x.split(/\s+/)));
   let s = ' ' + String(raw == null ? '' : raw).toLowerCase().replace(/[’‘`]/g, "'").replace(/[“”]/g, '"') + ' ';
-  s = s.replace(/[.!?;]+(?=\s|$)/g, ' ');   // sentence punctuation (decimals like 1.2 are kept)
+  s = s.replace(/(\b(?:(?:expect(?:ed)?\s+)?approach\s+time|eat|(?:push|commence)\s+time|time|minutes?|radial|marshal+|dme|at|angels|brc|heading|squawk|bearing|course)\s*,?\s*(?:is\s+|of\s+)?)(\d)\s*[\/:]\s*(\d)(?!\s*(?:a\s+)?(?:miles?|nm)\b)/g, '$1$2$3').replace(/(\b(?:(?:expect(?:ed)?\s+)?approach\s+time|eat|(?:push|commence)\s+time|time|minutes?|radial|marshal+|dme|at|angels|brc|heading|squawk|bearing|course)\s*,?\s*(?:is\s+|of\s+)?)½(?!\s*(?:a\s+)?(?:miles?|nm)\b)/g, '$112');   // v103: digit-by-digit numbers the recognizer wrote as 1/2, ½ or 1:2 in a number slot (EAT 'one two' = 12, not one half)\n  s = s.replace(/[.!?;]+(?=\s|$)/g, ' ');   // sentence punctuation (decimals like 1.2 are kept)
+  for (let k = 0; k < 3; k++) s = s.replace(/\b(heading|brc|radial|bearing|course|squawk)\s+(\d{1,3})\s+(\d{1,3})\b/g, (m, w, a, b) => (a + b).length <= (w === 'squawk' ? 4 : 3) ? w + ' ' + a + b : m);   // v103: '12 0' -> 120 (digit-by-digit heading / squawk split by the recognizer)
   s = s.replace(/(\w)-(\w)/g, '$1 $2');   // "two-one", "lightning-21"
   if (opts.numbers !== false) s = numberHomophones(s.replace(/,/g, ' , '), protect).replace(/\s+,/g, ',');
+  // v103: a squawk code spoken digit by digit ("squawk four five two one") -> "squawk 4521" so every scope's squawk handler sees the code
+  { const DW = { zero: 0, oh: 0, o: 0, one: 1, won: 1, two: 2, three: 3, tree: 3, four: 4, fower: 4, five: 5, fife: 5, six: 6, seven: 7 };
+    s = s.replace(/\b(squawk\s*,?\s*)((?:(?:zero|oh|one|won|two|three|tree|four|fower|five|fife|six|seven|o|[0-7])\b[\s,-]*){4})(?![\s,-]*(?:zero|oh|one|two|three|four|five|six|seven|eight|nine|niner|\d))/g,
+      (m, w, run) => { const d = run.trim().split(/[\s,-]+/).filter(Boolean).map(x => /^\d$/.test(x) ? x : String(DW[x])); return d.length === 4 ? w + d.join('') + (run.match(/[\s,-]*$/)[0] || ' ') : m; }); }
   // spoken numbers: canonical words only (the scope parsers turn words into digits themselves)
   s = s.replace(/\b(twenty|thirty|forty|fourty|fifty|sixty|seventy|eighty|ninety)-(one|two|three|four|five|six|seven|eight|nine|niner)\b/g, '$1 $2');
   s = s.replace(/\bniner\b/g, 'nine').replace(/\btree\b(?=\s*(?:,|\d|zero|one|two|three|four|five|six|seven|eight|nine|recovery|miles?|o'clock|$))/g, 'three')

@@ -403,7 +403,8 @@ function normalizeSpeech(raw) {
   let s = ' ' + String(raw).toLowerCase() + ' ';
   s = s.replace(/(\d),(\d{3})/g, '$1$2');
   s = s.replace(/[’`]/g, "'").replace(/\bdon'?t\b/g, 'do not').replace(/\bdo n't\b/g, 'do not').replace(/\backnowledg(?:e)?ment\b/g, 'acknowledgement');
-  s = s.replace(/½|\b1\/2\b/g, ' half ').replace(/¾|\b3\/4\b/g, ' three quarter ');
+  s = s.replace(/(\b(?:(?:expect(?:ed)?\s+)?approach\s+time|eat|(?:push|commence)\s+time|time|minutes?|radial|marshal+|dme|at|angels|brc|heading|squawk|bearing|course)\s*,?\s*(?:is\s+|of\s+)?)(\d)\s*[\/:]\s*(\d)(?!\s*(?:a\s+)?(?:miles?|nm)\b)/g, '$1$2$3').replace(/(\b(?:(?:expect(?:ed)?\s+)?approach\s+time|eat|(?:push|commence)\s+time|time|minutes?|radial|marshal+|dme|at|angels|brc|heading|squawk|bearing|course)\s*,?\s*(?:is\s+|of\s+)?)½(?!\s*(?:a\s+)?(?:miles?|nm)\b)/g, '$112');   // v103: digit-by-digit numbers the recognizer wrote as 1/2, ½ or 1:2 in a number slot (EAT 'one two' = 12, not one half)\n  s = s.replace(/½|\b1\/2\b/g, ' half ').replace(/¾|\b3\/4\b/g, ' three quarter ');
+  for (let k = 0; k < 3; k++) s = s.replace(/\b(heading|brc|radial|bearing|course|squawk)\s+(\d{1,3})\s+(\d{1,3})\b/g, (m, w, a, b) => (a + b).length <= (w === 'squawk' ? 4 : 3) ? w + ' ' + a + b : m);   // v103: '12 0' -> 120 (digit-by-digit heading / squawk split by the recognizer)
   s = s.replace(/\bwave-?off\b|\bwaive\s+off\b|\bwave\s+of\b/g, ' wave off ');
   s = s.replace(/(\d)\.(\d)/g, '$1dot$2');   // lowercase so the strip below keeps it
   s = s.replace(/,/g, ' , ');
@@ -3118,7 +3119,7 @@ function mcSpawnFlight(rel) {   // flight of 2 jets (same callsign word, consecu
   const usedN = usedCsNums();
   let n1 = randi(11, 68);
   for (let k = 0; k < 50; k++) { if (!usedN.has(String(n1)) && !usedN.has(String(n1 + 1)) && !G.ac.some(x => x.cs === al.icao + n1 || x.cs === al.icao + (n1 + 1))) break; n1 = randi(11, 68); }
-  const nums = [n1, n1 + 1], r0 = 10, rRel = rel != null ? rel : rand(150, 250);
+  const nums = [n1, n1 + 1], r0 = 10, rRel = rel != null ? rel : rand(-70, 70);   // v103: check in ahead of the ship, around the BRC (never astern near final)
   for (let i = 0; i < 2; i++) {
     const cs = al.icao + nums[i], ld = i ? G.ac.find(x => x.cs === al.icao + nums[0]) : null;
     mcArrive({ cs, type: al.types.find(t => TYPES[t] && !TYPES[t].helo), rel: rRel, rng: i ? r0 + 0.5 : r0, lead: ld ? ld.uid : null, flight: i ? null : 2, wing: i ? null : al.icao + nums[1] });
@@ -3127,9 +3128,9 @@ function mcSpawnFlight(rel) {   // flight of 2 jets (same callsign word, consecu
 /* ---------- arrival schedule (G.sched): Wave 1 flight -> Wave 2 single CCA bird -> Wave 3 flight; the Instructor can add / delete / retime pending entries over stinger-link ---------- */
 function instPlan() {   // pre-rolled wave times (Instructor roster)
   if (!G.sched) { const w2 = 10 + rand(150, 180), w3 = w2 + rand(150, 180); G.schedN = 3;
-    G.sched = [{ id: 'W1', at: 10, kind: 'flight', rel: 240, label: 'Wave 1 · flight of 2 jets', loc: '10 NM · 240R' },
+    G.sched = [{ id: 'W1', at: 10, kind: 'flight', rel: 330, label: 'Wave 1 · flight of 2 jets', loc: '10 NM · 330R' },
       { id: 'W2', at: w2, kind: 'cca', label: 'Wave 2 · single CCA arrival', loc: '6 NM · 080–100R' },
-      { id: 'W3', at: w3, kind: 'flight', label: 'Wave 3 · flight of 2 jets', loc: '10 NM · 150–250R' }]; }
+      { id: 'W3', at: w3, kind: 'flight', label: 'Wave 3 · flight of 2 jets', loc: '10 NM · 290–070R' }]; }
   return G.sched;
 }
 const schedPending = () => instPlan().filter(e => !e.done).sort((x, y) => x.at - y.at);
@@ -3170,7 +3171,7 @@ function mcArrivals(want) {   // scheduled arrivals (default 3 waves); one entry
 function mcArrive(spec = {}) {
   const used = G.ac.map(a => a.cs);
   let a; for (let i = 0; i < 20; i++) { a = makeAc(spec); if (!used.includes(a.cs)) break; }
-  const helo = isHelo(a), rel = spec.rel != null ? spec.rel : (helo ? rand(40, 140) : rand(150, 260)) , R = spec.rng || 10;   // check in at 10 NM
+  const helo = isHelo(a), rel = spec.rel != null ? spec.rel : (helo ? rand(20, 100) : rand(-70, 70)) , R = spec.rng || 10;   // check in at 10 NM
   const b = norm(BRC + rel); a.e = R * Math.sin(b * DEG); a.n = R * Math.cos(b * DEG);
   a.phase = 'app'; a.pars = 0; a.armed = false; a.turnDir = null;
   a.hdg = a.tgtHdg = Math.round(norm(b + 180 + rand(-20, 20)));   // inbound, roughly toward mother
@@ -3425,6 +3426,7 @@ function sectorGuide(a) {   // fly to the sector's centre radial at the held ran
   a.tgtHdg = Math.round(norm(h)) % 360 || 360;
 }
 window.__sector = { inSector, SECTOR_CTR };
+window.__mar103 = { get MAR() { return MAR; }, brc: () => BRC, isHelo: a => isHelo(a), tx: t => handleTranscript(t, 0.99, 'text') };   // v103 test hook (marshal geometry sweep)
 /* ---------- Marshal + LH-1..LH-5 approaches (all radials RELATIVE to BRC: relative radial R = bearing BRC+R from the ship).
    Geometry runs in the course frame (toLoc): final inbound from local north on local heading 180, so relative radial R
    sits on local bearing R+180 and everything re-orients automatically while the ship turns. ---------- */
@@ -3448,6 +3450,10 @@ const MAR = {
   track(P0, c, p, k = 35) { const r = c * DEG, x = (p[0] - P0[0]) * Math.cos(r) - (p[1] - P0[1]) * Math.sin(r); return c - this.cl(x * k, 45); },
   along(P0, c, p) { const r = c * DEG; return (p[0] - P0[0]) * Math.sin(r) + (p[1] - P0[1]) * Math.cos(r); },
   direct(P, p) { return this.lb(P[0] - p[0], P[1] - p[1]); },
+  crossesFinal(P, Q) {   // v103: does the segment P->Q (local e, n) cross the final bearing (e = 0, n > 0) astern of the ship?
+    if (Math.abs(P[0]) < 0.05 || Math.sign(P[0]) === Math.sign(Q[0])) return false;
+    const t = P[0] / (P[0] - Q[0]), n = P[1] + t * (Q[1] - P[1]); return n > 0;
+  },
   arcH(p, R) { const b = this.lb(p[0], p[1]), rr = Math.hypot(p[0], p[1]); return b + 90 + this.cl((rr - R) * 40, 40); },   // clockwise arc
   eatMin() { return Math.floor((36000 + Math.floor(G.t)) / 60) % 60; },
   calcEatAt(eat) {
@@ -3746,7 +3752,10 @@ const MAR = {
     switch (M.ph) {
       case 'toMar': {   // fly directly over the marshal fix at the marshal altitude before entering the southeast racetrack
         const F = this.pt(M.R, M.D), d = Math.hypot(F[0] - p[0], F[1] - p[1]), cin = M.R;
-        a.tgtAlt = M.alt; this.setH(a, this.direct(F, p));
+        a.tgtAlt = M.alt;
+        // v103: never cross the final bearing (local +n axis, astern) on the way to the fix: if the direct line would, go round ahead of the ship first
+        if (this.crossesFinal(p, F)) { this.setH(a, this.direct([Math.sign(p[0]) * 3, -3], p)); break; }   // round the bow on the aircraft's own side
+        this.setH(a, this.direct(F, p));
         if (d <= 0.30) {
           M.inMar = true; M.t0 = G.t;
           const alignedIn = Math.abs(angDiff(this.hdgL(a), cin)) <= 35;
