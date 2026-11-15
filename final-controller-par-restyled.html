@@ -294,7 +294,8 @@ const fmtAlt = ft => Math.round(ft).toLocaleString('en-US');
 const mmss = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /* phraseology: 'ship' (US Navy amphibious assault ship PAR, default) or 'tower' (shore runway PAR) */
-const SHIP_NAME = 'Stinger';   // ship callsign ("Stinger Final", "Stinger final controller")
+const SHIP_NAME = 'Wasp';   // v102: the ship (USS Wasp)
+const FAC = 'Gator';   // v102: facility self-ID ("Gator Marshal", "Gator Approach", "Gator Final"); the parser still accepts "Stinger"
 function isShip() { return S.phr !== 'tower'; }
 const ph = (ship, tower) => isShip() ? ship : tower;
 const spotOf = a => 6 + (a.uid % 4);     // landing spot 6..9 (display/phrase only)
@@ -622,7 +623,7 @@ function parseSpeech(raw, known = []) {
   if (cmds.some(c => c.k === 'ga') && !cmds.some(c => c.k === 'asrMins')) for (let i = cmds.length - 1; i >= 0; i--) if (cmds[i].k === 'asrIfNot') cmds.splice(i, 1);
   // leftover words (for UI)
   let left = ''; for (let i = 0; i < s.length; i++) left += used[i] ? ' ' : s[i];
-  left = left.replace(/\b(runway|27|two seven|18|one eight|and|the|is|this|your|final|controller|approach|at|of|a|to|now|then|you|are|come|ship|deck|fouled|spot|for|landing|stinger|99|\d)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  left = left.replace(/\b(runway|27|two seven|18|one eight|and|the|is|this|your|final|controller|approach|at|of|a|to|now|then|you|are|come|ship|deck|fouled|spot|for|landing|stinger|gator|wasp|99|\d)\b/g, ' ').replace(/\s+/g, ' ').trim();
   // "turn right heading <garbled>": heading-like words but no usable number -> not understood (no bare turn), except no-gyro
   const hdgMissing = !cmds.some(c => c.k === 'hdg') && /\b(?:turn|come)\s+(?:left|right)\b/.test(s) &&
     /\b(?:heading|hitting|hedding|header|headed|heating|hiding|heeding|hidden|headings?|hit\s+in|head\s+in|had\s+in)\b/.test(norm0);
@@ -1135,8 +1136,8 @@ function onParEntry(a) {
   if (!G.linked && S.soloHoff !== false && !a.owner && !a.hoff) hoffStart(a, 'APP');   // solo: arrives as a flashing APP handoff
   const it = isPrac(a) ? (a.pracNo > 1 ? 'practice approach' : 'request multiple practice PARs') : a.afterPrac ? 'this will be a full stop' : 'full stop';
   const itSay = it.replace('PARs', 'P A Rs');
-  if (isShip()) pilotSay(a, `${SHIP_NAME} Final, ${a.tel}, ${a.r.toFixed(0)} miles, level ${fmtAlt(a.z)}, heading ${hdg3(a.hdg)}, for the PAR to the ship, ${it}.`,
-    `${SHIP_NAME} Final, ${a.telSay}, ${sayMiles(Math.round(a.r))}, level ${sayAlt(a.z)}, heading ${sayDigits(hdg3(a.hdg))}, for the P A R to the ship, ${itSay}.`);
+  if (isShip()) pilotSay(a, `${FAC} Final, ${a.tel}, ${a.r.toFixed(0)} miles, level ${fmtAlt(a.z)}, heading ${hdg3(a.hdg)}, for the PAR to the ship, ${it}.`,
+    `${FAC} Final, ${a.telSay}, ${sayMiles(Math.round(a.r))}, level ${sayAlt(a.z)}, heading ${sayDigits(hdg3(a.hdg))}, for the P A R to the ship, ${itSay}.`);
   else pilotSay(a, `Final, ${a.tel}, ${a.r.toFixed(0)} miles, level ${fmtAlt(a.z)}, PAR runway ${RWY_NUM}.`,
     `Final, ${a.telSay}, ${sayMiles(Math.round(a.r))}, level ${sayAlt(a.z)}, P A R runway ${RWY_SAY}.`);
   if (!G.selected || !PAR_PHASES.includes(G.selected.phase)) selectAc(a);
@@ -1628,11 +1629,11 @@ function execute(p, src) {
       pilotSay(a, `${a.tel}, climbing.`, `${a.telSay}, climbing.`, true, false, true);   // safety reply, even after DNA
     }
   }
-  // ship initial-contact bonus: callsign + "Stinger final" + "how do you hear me" + "wheels should be down" + "report see me"
+  // ship initial-contact bonus: callsign + "Gator final" + "how do you hear me" + "wheels should be down" + "report see me"
   if (isShip() && !a.contactBonus && PAR_PHASES.includes(a.phase) && p.cs === a.cs) {
     const n = ' ' + p.norm + ' ', nm = SHIP_NAME.toLowerCase();
-    if (n.includes(` ${nm} final `) && /\bhow do you (?:hear|read)\b/.test(n) && /\bwheels? should be down\b/.test(n) && /\breport (?:you )?see(?:ing)? (?:me|us|the ship)\b/.test(n)) {
-      a.contactBonus = true; addPts(a, 1, `★ Contact call bonus for ${a.cs}: full "${SHIP_NAME} final, how do you hear me, wheels should be down, report see me"`, 'good');
+    if (/ (?:gator|gators|gator s|gaiter|gaiters|gater|stinger|stingers|wasp) final /.test(n) && /\bhow do you (?:hear|read)\b/.test(n) && /\bwheels? should be down\b/.test(n) && /\breport (?:you )?see(?:ing)? (?:me|us|the ship)\b/.test(n)) {
+      a.contactBonus = true; addPts(a, 1, `★ Contact call bonus for ${a.cs}: full "${FAC} final, how do you hear me, wheels should be down, report see me"`, 'good');
     }
   }
   for (const c of p.cmds) {
@@ -1889,7 +1890,7 @@ function suggestCall(a) {
     else if (a.r <= 0.1) add(ph('contact Tower', 'contact tower'));
     else if (!parts.length) return isShip() ? { text: '(Ship in sight. Next: "over the deck" near 0.2 NM, then "contact Tower".)', say: '' } : { text: '(Runway in sight. Next: "over landing threshold" near 0.2 NM.)', say: '' };
   } else {
-    if (!a.contacted && a.phase === 'final') add(ph(`${SHIP_NAME} final, how do you hear me, wheels should be down, report see me`, 'this is your final controller, how do you hear me'));
+    if (!a.contacted && a.phase === 'final') add(ph(`${FAC} final, how do you hear me, wheels should be down, report see me`, 'this is your final controller, how do you hear me'));
     // "approaching glidepath", "begin descent" and "do not acknowledge further transmissions" are each their own transmission
     if (a.contacted) {
       const solo = t => { const m = G.ac.filter(x => PAR_PHASES.includes(x.phase)).length > 1; return { text: (m ? a.tel + ', ' : '') + t, say: (m ? a.telSay + ', ' : '') + t }; };
@@ -2359,7 +2360,7 @@ $('sServoSpd').addEventListener('input', () => { S.servoSlew = +$('sServoSpd').v
 function setPhr(v) { S.phr = v === 'tower' ? 'tower' : 'ship'; saveSettings(); $('sPhr').value = $('sPhr2').value = S.phr; applyPhrUI(); if (G) refreshPanel(true); }
 function applyPhrUI() {
   const sh = isShip();
-  $('subTitle').textContent = sh ? `Precision Approach Radar talk-down simulator · ${SHIP_NAME} (LHA/LHD) · BRC ${BRC3}` : `Precision Approach Radar talk-down simulator · Runway ${RWY_NUM}`;
+  $('subTitle').textContent = sh ? `Precision Approach Radar talk-down simulator · USS ${SHIP_NAME} (LHD) · BRC ${BRC3}` : `Precision Approach Radar talk-down simulator · Runway ${RWY_NUM}`;
   if (!applyPhrUI.towerIntro) applyPhrUI.towerIntro = $('introP').innerHTML;
   $('introP').innerHTML = sh ? `You're the <b>final controller</b> aboard <b>${SHIP_NAME}</b>, an amphibious assault ship. Each aircraft is handed to you <b>7 to 9 miles</b> astern on the <b>base recovery course (BRC) ${BRC3}</b>. Using your <b>voice</b>, talk it down to the deck: course and glidepath calls with "come left/right heading" corrections, range calls every mile, the wheels check and the landing clearance to its <b>spot</b>, all the way to <b>short final</b>, then hand it to <b>Tower</b>. Some pilots ask for <b>multiple practice PARs</b>: at one mile send them back around ("execute climb outs, go silver" / "enter starboard delta, go green") until their last approach is a <b>full stop</b>. Pilots answer each call with their callsign until you say "do not acknowledge further transmissions"; after that they stay quiet, so keep talking!` : applyPhrUI.towerIntro;
   $('cmdInput').placeholder = sh ? 'Type instead (Enter): lightning 21 come left heading 268' : 'Type instead (Enter): lightning 21 turn left heading 268';
@@ -2480,13 +2481,13 @@ const TUT = [
    <p>Tip: start on <b>Training</b>. The amber hint box shows a good next call; just read it out loud.</p>`],
 ];
 const TUT_SHIP = {
-  0: ['1. What is shipboard PAR?', `${FREQ_HELP}<p><b>Precision Approach Radar (PAR)</b> on an amphibious assault ship (LHA/LHD) lets the ship's <b>final controller</b> (in CATCC/AATCC, callsign "${SHIP_NAME} Final") watch an aircraft on final and <b>talk the pilot down</b> to the deck in bad weather, all the way to <b>short final</b>, about half a mile aft of the ship, where the pilot lands visually.</p>
+  0: ['1. What is shipboard PAR?', `${FREQ_HELP}<p><b>Precision Approach Radar (PAR)</b> on an amphibious assault ship (LHA/LHD) lets the ship's <b>final controller</b> (in CATCC/AATCC, callsign "${FAC} Final") watch an aircraft on final and <b>talk the pilot down</b> to the deck in bad weather, all the way to <b>short final</b>, about half a mile aft of the ship, where the pilot lands visually.</p>
    <p>Aircraft are fed to you <b>7 to 9 miles</b> astern on the <b>base recovery course (BRC) ${BRC3}</b>, a little off course and below the glidepath (level at about 1,300 to 1,550 ft, so they meet it 4 to 5 miles out). You work <b>one aircraft at a time</b>: the next one checks in 10 to 15 seconds after the previous one has left you (on deck, climbing out, or waved off); the status line shows the countdown. Get them onto the final bearing and the 3° glidepath, then hand them to <b>Tower</b> (Primary Flight Control / the Air Boss) for the landing spot.</p>`],
   1: ['2. Reading the two displays', `<p><b>Top: ELEVATION.</b> Range from the landing <b>spot</b> on deck runs left to right (0 to 10 NM, a line every mile). Height runs up. The dotted sloping line is the <b>3° glidepath</b>. The white tick is the aircraft: <i>above</i> the line when it's high, <i>below</i> when it's low. Glidepath calls follow what you see on the tick: dotted line through the <b>middle</b> of the tick = <b>on glidepath</b>; between the middle and the end = <b>slightly above/below glidepath</b>; touching the <b>end</b> of the tick = <b>above/below glidepath</b>; tick not touching the line = <b>well above/below glidepath</b>.</p>
    <p><b>Bottom: AZIMUTH.</b> Same range axis. The horizontal line is the <b>final bearing</b>, the ship's <b>base recovery course (BRC) ${BRC3}</b>. Aircraft are handed to you on a 20° intercept: from the <b>right</b> (above the line) heading <b>${hdg3(BRC - 20)}</b>, from the <b>left</b> (below) heading <b>${hdg3(BRC + 20)}</b>. Turn them onto the BRC before they cross it. <b>Course calls go by what you see</b>: course line through the <b>middle</b> of the tick = "on course"; between the middle and the end = "slightly left/right of course"; touching the <b>end</b> of the tick = "left/right of course"; tick not touching the line = "well left/right of course".</p>
    <p>The side panel has the exact numbers (range, feet above/below glidepath, feet and degrees left/right, groundspeed, heading) and the status line (level, timer). The surveillance view shows the ship.</p>
    <p><b>Ship turns</b> (solo: about every 10 minutes of sim time; linked: when Approach turns the ship): the side panel shows <b>SHIP TURN IN 5 · PORT/STARBOARD</b>, then <b>MOTHER IN PORT/STARBOARD TURN</b> while the ship turns at about 1°/s (BRC, FB = BRC − magvar and DWH update live), then <b>MOTHER STEADY — NEW BRC ___</b>. The final course line moves with the ship, so aircraft already on final drift off it: correct them. Broadcast "<b>ninety-nine, mother is in port turn, standby for new BRC</b>" during the turn and "<b>ninety-nine, mother is steady, new BRC is one seven three</b>" once steady (no readback).</p>`],
-  2: ['3. The talk-down, step by step', `<ol><li><b>Contact</b> (+1 bonus when complete): "Lightning two one, ${SHIP_NAME} final, how do you hear me, wheels should be down, report see me." Pilot: "Lightning two one, loud and clear, wheels down, will report see you."</li>
+  2: ['3. The talk-down, step by step', `<ol><li><b>Contact</b> (+1 bonus when complete): "Lightning two one, ${FAC} final, how do you hear me, wheels should be down, report see me." Pilot: "Lightning two one, loud and clear, wheels down, will report see you."</li>
    <li><b>Line up</b>: say where it is, then a turn: "well right of course, <b>come right heading ${sayDigits(hdg3(BRC - 10))}</b>", then onto the BRC: "come right heading ${BRC_SAY}".</li>
    <li>As the glidepath comes down to the aircraft, <b>10 to 30 seconds before it meets it</b>: "<b>approaching glidepath</b>" (+1 bonus), then, as a separate call when it reaches the glidepath, "<b>begin descent</b>" (the pilot only starts down on this call), then on its own "<b>do not acknowledge further transmissions</b>". Until you say that, the pilot answers every call with just the callsign ("Lightning two one"); it acks that call once more and then stays quiet (except "see you", the deck calls and emergencies).</li>
    <li>Every few seconds: "on course, on glidepath", "slightly above glidepath"… and a <b>range every mile</b>: "four miles", "one and a half miles". At <b>2 miles</b> the pilot reports "<b>Lightning two one, see you</b>" (no reply needed; "roger" is fine).</li>
@@ -2496,7 +2497,7 @@ const TUT_SHIP = {
    <li><b>Practice approaches</b>: at check-in each pilot states an intention: "…for the PAR to the ship, <b>full stop</b>" (FS) or "…<b>request multiple practice PARs</b>" (PRAC; shown in the side panel). A practice aircraft gets no deck call. At <b>one mile</b> instead: jets "<b>one mile, execute climb outs, go silver</b>" (pilot: "Lightning two one"; climbs to 1,200 ft, left turn to ${hdg3(CLIMB_JET.hdg)}); helicopters "<b>one mile, enter starboard delta, go green</b>" (pilot: "Nighthawk three two five"; climbs to 1,000 ft, right turn to ${hdg3(CLIMB_HELO.hdg)}). It then comes back around for another approach; after 1–3 practice approaches it checks in with "<b>this will be a full stop</b>" and lands.</li>
    <li>Full stop, inside half a mile: "<b>over the deck</b>", then "<b>contact Tower</b>" (or "Tower has you").</li></ol>
    <p>If you need to wave it off: "<b>wave off, wave off, climb and maintain two thousand, fly base recovery course ${BRC_SAY}</b>". No deck call (or spot clearance) by half a mile means a <b>fouled deck</b> and the pilot waves off.</p>`],
-  3: ['4. Sample script', `<div class="say">"Lightning two one, ${SHIP_NAME} final, how do you hear me, wheels should be down, report see me." <i>(pilot: "Lightning two one, loud and clear, wheels down, will report see you")</i><br>"Well right of course, come right heading ${sayDigits(hdg3(BRC - 10))}, nine and a half miles." <i>("Lightning two one")</i><br>"Slightly right of course, come right heading ${BRC_SAY}." <i>("Lightning two one")</i><br>"Approaching glidepath." <i>("Lightning two one")</i><br>"Begin descent." <i>("Lightning two one")</i><br>"Do not acknowledge further transmissions." <i>("Lightning two one", then silent)</i><br>"On course, on glidepath, seven miles."<br>"On course, slightly above glidepath."<br>"On course, on glidepath, five miles."<br>"On course, on glidepath, four miles."<br><i>(pilot, at 2 miles: "Lightning two one, see you")</i><br>"On course, on glidepath, one and a half miles."<br>"Three-quarter mile, call the ball." <i>(pilot: "Lightning two one, ball, state four point nine": cleared to land)</i><br>"Over the deck." … "Contact Tower."</div>
+  3: ['4. Sample script', `<div class="say">"Lightning two one, ${FAC} final, how do you hear me, wheels should be down, report see me." <i>(pilot: "Lightning two one, loud and clear, wheels down, will report see you")</i><br>"Well right of course, come right heading ${sayDigits(hdg3(BRC - 10))}, nine and a half miles." <i>("Lightning two one")</i><br>"Slightly right of course, come right heading ${BRC_SAY}." <i>("Lightning two one")</i><br>"Approaching glidepath." <i>("Lightning two one")</i><br>"Begin descent." <i>("Lightning two one")</i><br>"Do not acknowledge further transmissions." <i>("Lightning two one", then silent)</i><br>"On course, on glidepath, seven miles."<br>"On course, slightly above glidepath."<br>"On course, on glidepath, five miles."<br>"On course, on glidepath, four miles."<br><i>(pilot, at 2 miles: "Lightning two one, see you")</i><br>"On course, on glidepath, one and a half miles."<br>"Three-quarter mile, call the ball." <i>(pilot: "Lightning two one, ball, state four point nine": cleared to land)</i><br>"Over the deck." … "Contact Tower."</div>
    <p>For a helicopter, the deck call at one mile is "<b>One mile, go green.</b>" <i>(pilot: "Nighthawk three two five, going green": cleared to land)</i>.</p>
    <p><b>Practice approach</b> (pilot checked in with "request multiple practice PARs"): the same talk-down, but at one mile: jet "<b>One mile, execute climb outs, go silver.</b>" <i>("Lightning two one": climbs to 1,200, left to ${hdg3(CLIMB_JET.hdg)})</i>; helicopter "<b>One mile, enter starboard delta, go green.</b>" <i>("Nighthawk three two five": climbs to 1,000, right to ${hdg3(CLIMB_HELO.hdg)})</i>. It comes back for another PAR; the last one starts "…this will be a full stop".</p>
    <p>Pilots react to glidepath calls: "slightly above" makes them descend a bit faster, "slightly below" a bit slower, and "on glidepath" brings them back to normal. Heading calls are the only way to move them sideways.</p>
@@ -2507,7 +2508,7 @@ const TUT_SHIP = {
    <li><b>Accurate trend calls</b> score; <b>wrong</b> ones (saying "left" when it's right) lose points.</li>
    <li><b>Range call at least every mile.</b> Wheels check and the deck call (go green / call the ball, which is the landing clearance, +5) <b>before half a mile</b>. There is no decision height or "at minimums" call on the ship.</li>
    <li><b>Low altitude alert +5</b> when the aircraft is really sinking; -3 if it isn't. An incomplete alert (missing the callsign, "check your altitude immediately" or "altimeter two niner niner two") is not accepted and the aircraft keeps sinking.</li>
-   <li><b>Bonus +1</b> for the complete contact call ("…${SHIP_NAME} final, how do you hear me, wheels should be down, report see me", with the callsign) and +1 for "approaching glidepath" 10–30 s before the aircraft reaches the glidepath. Both show in the log with ★.</li>
+   <li><b>Bonus +1</b> for the complete contact call ("…${FAC} final, how do you hear me, wheels should be down, report see me", with the callsign) and +1 for "approaching glidepath" 10–30 s before the aircraft reaches the glidepath. Both show in the log with ★.</li>
    <li><b>Deck call</b>: "one mile, go green" (helos) or "three-quarter mile, call the ball" (jets) gives +3 at the right range. Using the wrong one counts as an inaccurate call; missing it by half a mile costs 5.</li>
    <li><b>Practice approaches</b>: the right one-mile call for the type ("execute climb outs, go silver" for jets, "enter starboard delta, go green" for helicopters) between 0.6 and 1.4 NM gives +3, and +10 if the aircraft is stable at that point. A completed practice approach counts as a successful approach (+40). A landing call ("call the ball", "go green") to a practice aircraft, or a climb-out/delta call to a full-stop aircraft, is an inaccurate call (-3); the pilot answers "negative, practice approach" / "unable, full stop". No climb-out call by minimums: the pilot climbs out on its own (-5).</li>
    <li><b>Stable at half a mile</b> (both within "slightly") +10. Unstable or not cleared (no deck call: fouled deck) at half a mile means the pilot waves off.</li>
@@ -2518,7 +2519,7 @@ const TUT_SHIP = {
    <ul><li>come/turn left/right heading ___ · fly base recovery course ___ · heading ___</li><li>on course · slightly left/right of course · left/right of course · well left/right of course · going left/right of course</li>
    <li>approaching glidepath · begin descent · on glidepath · above/below glidepath · slightly/well above/below glidepath · going above/below glidepath</li>
    <li>adjust / reduce / increase rate of descent</li><li>___ miles · one and a half miles · three-quarter mile · do not acknowledge further transmission(s) (pilots ack every call with their callsign until then)</li>
-   <li>[callsign], ${SHIP_NAME} final, how do you hear me, wheels should be down, report see me</li>
+   <li>[callsign], ${FAC} final, how do you hear me, wheels should be down, report see me</li>
    <li>check wheels down · roger · deck is clear, cleared to land spot ___ (winds ___ at ___) · over the deck</li>
    <li><b>one mile, go green</b> (helos) · <b>three-quarter mile, call the ball</b> (jets): the pilot's "(callsign), going green" / "(callsign), ball, state …" reply clears it to land · roger ball (optional)</li>
    <li>practice approaches: <b>one mile, execute climb outs, go silver</b> (jets; "climb out" / "climbout" / "climb outs" all work) · <b>one mile, enter starboard delta, go green</b> (helos)</li>

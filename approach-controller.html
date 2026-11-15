@@ -207,8 +207,8 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 <div class="overlay" id="startOv">
   <div class="card">
     <h1>APPROACH CONTROLLER</h1>
-    <div style="color:var(--dim)" id="subTitle">Approach control radar simulator · Stinger (LHA/LHD)</div>
-    <p id="introP">You're <b>Stinger Approach</b> (Silver) aboard an amphibious assault ship. Aircraft <b>launch from the ship</b> and return for practice PARs. Using your <b>voice</b> (or typed commands), take radar contact, vector with headings / angels / speed, use sectors and traffic calls, give climbout instructions, and hand each aircraft to <b>Final</b> on Purple or Copper.</p>
+    <div style="color:var(--dim)" id="subTitle">Approach control radar simulator · USS Wasp (LHD)</div>
+    <p id="introP">You're <b>Gator Approach</b> (Silver) aboard an amphibious assault ship. Aircraft <b>launch from the ship</b> and return for practice PARs. Using your <b>voice</b> (or typed commands), take radar contact, vector with headings / angels / speed, use sectors and traffic calls, give climbout instructions, and hand each aircraft to <b>Final</b> on Purple or Copper.</p>
     <div class="diffs">
       <div class="diff on" data-d="training"><b>Training</b><span>Launches every 4–6 min, about 1 traffic conflict, and a hint that shows your suggested next call.</span></div>
       <div class="diff" data-d="normal"><b>Normal</b><span>Launches every 4–6 min, 2–4 traffic conflicts, firmer pilots. No hints.</span></div>
@@ -295,7 +295,8 @@ const fmtAlt = ft => Math.round(ft).toLocaleString('en-US');
 const mmss = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /* phraseology: 'ship' (US Navy amphibious assault ship PAR, default) or 'tower' (shore runway PAR) */
-const SHIP_NAME = 'Stinger';   // ship callsign ("Stinger Final", "Stinger final controller")
+const SHIP_NAME = 'Wasp';   // v102: the ship (USS Wasp)
+const FAC = 'Gator';   // v102: facility self-ID ("Gator Marshal", "Gator Approach", "Gator Final"); the parser still accepts "Stinger"
 function isShip() { return S.phr !== 'tower'; }
 const ph = (ship, tower) => isShip() ? ship : tower;
 const spotOf = a => 6 + (a.uid % 4);     // landing spot 6..9 (display/phrase only)
@@ -518,7 +519,7 @@ const PATTERNS = [
   [/\bmark\s+(?:your\s+|you\s+|yer\s+)?(?:father|farther|mother|fathers?)\b/g, () => ({ k: 'markFather' })],
   // radar identification: "vectors for radar identification" (no action of its own) and "radar contact, 5 miles northeast of mother"
   [/\bvectors?\s+(?:for\s+)?(?:radar\s+)?(?:identification|identify|ident|i\s+d|id)\b/g, () => ({ k: 'rid' })],
-  [/\bradar\s+(?:contacts?|contract|contacted|contact\s+s)\b\s*,?\s*(?:(\d+(?:\.\d+)?)\s+miles?\s*,?\s*(?:(north\s*east|north\s*west|south\s*east|south\s*west|northeast|northwest|southeast|southwest|north|south|east|west)|(?:bearing\s+)?(\d{1,3}))(?:\s+(?:of|from)\s+(?:mother|mothers|the\s+ship|ship|stinger))?|(?:bearing\s+)?(\d{3})\s+(?:for|at)\s+(\d+(?:\.\d+)?)(?:\s+miles?)?(?:\s+(?:of|from)\s+(?:mother|mothers|the\s+ship|ship|stinger))?)/g,
+  [/\bradar\s+(?:contacts?|contract|contacted|contact\s+s)\b\s*,?\s*(?:(\d+(?:\.\d+)?)\s+miles?\s*,?\s*(?:(north\s*east|north\s*west|south\s*east|south\s*west|northeast|northwest|southeast|southwest|north|south|east|west)|(?:bearing\s+)?(\d{1,3}))(?:\s+(?:of|from)\s+(?:mother|mothers|the\s+ship|ship|stinger|gator|wasp))?|(?:bearing\s+)?(\d{3})\s+(?:for|at)\s+(\d+(?:\.\d+)?)(?:\s+miles?)?(?:\s+(?:of|from)\s+(?:mother|mothers|the\s+ship|ship|stinger|gator|wasp))?)/g,
     m => { const d = m[2] ? DIRBRG[m[2].replace(/\s+/g, '')] : null, b = d != null ? d : m[3] != null ? +m[3] : m[4] != null ? +m[4] : null; return { k: 'radarContact', rng: parseFloat(m[1] ?? m[5]), brg: b, dirTxt: m[2] ? m[2].replace(/\s+/g, '') : String(b).padStart(3, '0') }; }],
   [/\bradar\s+(?:contacts?|contract|contacted|contact\s+s)\b|\bradar\s+context\b/g, () => ({ k: 'radarContact' })],
   [/\blow\s+altitude\s+alerts?\b|\bcheck\s+(?:your\s+)?altitude\s+immediately\b/g, () => ({ k: 'laa' })],
@@ -566,16 +567,16 @@ const PATTERNS = [
 ];
 
 // '<cs>, your climbout instructions are ...': the content is parsed but stored, not executed now
-const STINGER_RE_G = /\b(?:stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's)\s*,?\s*approach(?:es|s)?\b\s*,?/gi;
-const STINGER_RE = /\b(?:stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's)\s*,?\s*approach(?:es|s)?\b/i;
-function parseSpeech(raw, known = []) {   // detect 'Stinger Approach' BEFORE it is stripped (grading task 1)
+const STINGER_RE_G = /\b(?:gator|gators|gator's|gaiter|gaiters|gater|gaters|later|stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's)\s*,?\s*approach(?:es|s)?\b\s*,?/gi;
+const STINGER_RE = /\b(?:gator|gators|gator's|gaiter|gaiters|gater|gaters|later|stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's)\s*,?\s*approach(?:es|s)?\b/i;
+function parseSpeech(raw, known = []) {   // detect 'Gator Approach' BEFORE it is stripped (grading task 1)
   const st = STINGER_RE.test(String(raw)), p0 = parseSpeech0(String(raw).replace(STINGER_RE_G, ' '), known);
   const p = p0.traffic ? p0 : parseSpeech1(raw, known); if (p) p.stinger = st; return p;
 }
 const CLIMBOUT_HDR_RE = /\b(?:(?:on|after|your)\s+)?climb(?:ed|ing|s)?\s*-?\s*outs?\b(?:\s+instructions?)?(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?|\b(?:missed\s+approach|wave\s*-?\s*off|on\s+(?:the\s+)?go)\s+instructions?\b(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?|(?<!\bmarshal\s)(?<!\bmarshall\s)(?<!\bmartial\s)(?<!\bsay\s)\b(?:climb\w*\s+|your\s+)?instructions?\b(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?(?=\s*,?\s*(?:fly|turn|come|climb|descend|maintain|heading|runway|brc|base\s+recovery|angels|on\s+climb|go\s+(?:red|silver)))/i;
 function parseSpeech1(raw, known = []) {
-  // our own station name ('Stinger Approach' and recognizer variants) is ignored wherever it appears
-  raw = String(raw).replace(/\b(?:stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's)\s*,?\s*approach(?:es|s)?\b\s*,?/gi, ' ').replace(/^\s*,\s*/, '');
+  // our own station name ('Gator Approach' and recognizer variants) is ignored wherever it appears
+  raw = String(raw).replace(/\b(?:gator|gators|gator's|gaiter|gaiters|gater|gaters|later|stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's)\s*,?\s*approach(?:es|s)?\b\s*,?/gi, ' ').replace(/^\s*,\s*/, '');
   // ANY mention of climbout / climbout instructions makes this a climbout-storage call ONLY:
   // heading / altitude / speed / frequency inside it are stored in a.climbout, never executed now
   const m = CLIMBOUT_HDR_RE.exec(String(raw));
@@ -625,7 +626,7 @@ function parseSpeech0(raw, known = []) {
   for (const k of ['climbOut', 'starDelta', 'ga']) { const ix = cmds.map((c, i) => c.k === k ? i : -1).filter(i => i >= 0); for (const i of ix.slice(1).reverse()) cmds.splice(i, 1); }
   // leftover words (for UI)
   let left = ''; for (let i = 0; i < s.length; i++) left += used[i] ? ' ' : s[i];
-  left = left.replace(/\b(runway|27|two seven|18|one eight|and|the|is|this|your|final|controller|approach|at|of|a|to|now|then|you|are|come|ship|deck|fouled|spot|for|landing|stinger|99|\d)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  left = left.replace(/\b(runway|27|two seven|18|one eight|and|the|is|this|your|final|controller|approach|at|of|a|to|now|then|you|are|come|ship|deck|fouled|spot|for|landing|stinger|gator|wasp|99|\d)\b/g, ' ').replace(/\s+/g, ' ').trim();
   // turn/heading call with heading-like words but no usable number -> pilot asks for the heading again
   const hdgMissing = !cmds.some(c => c.k === 'hdg' || c.k === 'climbout') && !/\b(?:runway|ship\s+s)\s+heading\b/.test(norm0) &&
     (/\bheading\b/.test(norm0) || /\b(?:turn|come)\s+(?:left|right)\b/.test(s));
@@ -965,8 +966,8 @@ function onParEntry(a) {
   a.lastTx = a.lastRealTx = G.t;
   const it = isPrac(a) ? (a.pracNo > 1 ? 'practice approach' : 'request multiple practice PARs') : a.afterPrac ? 'this will be a full stop' : 'full stop';
   const itSay = it.replace('PARs', 'P A Rs');
-  if (isShip()) pilotSay(a, `${SHIP_NAME} Final, ${a.tel}, ${a.r.toFixed(0)} miles, level ${fmtAlt(a.z)}, heading ${hdg3(a.hdg)}, for the PAR to the ship, ${it}.`,
-    `${SHIP_NAME} Final, ${a.telSay}, ${sayMiles(Math.round(a.r))}, level ${sayAlt(a.z)}, heading ${sayDigits(hdg3(a.hdg))}, for the P A R to the ship, ${itSay}.`);
+  if (isShip()) pilotSay(a, `${FAC} Final, ${a.tel}, ${a.r.toFixed(0)} miles, level ${fmtAlt(a.z)}, heading ${hdg3(a.hdg)}, for the PAR to the ship, ${it}.`,
+    `${FAC} Final, ${a.telSay}, ${sayMiles(Math.round(a.r))}, level ${sayAlt(a.z)}, heading ${sayDigits(hdg3(a.hdg))}, for the P A R to the ship, ${itSay}.`);
   else pilotSay(a, `Final, ${a.tel}, ${a.r.toFixed(0)} miles, level ${fmtAlt(a.z)}, PAR runway ${RWY_NUM}.`,
     `Final, ${a.telSay}, ${sayMiles(Math.round(a.r))}, level ${sayAlt(a.z)}, P A R runway ${RWY_SAY}.`);
   if (!G.selected || !PAR_PHASES.includes(G.selected.phase)) selectAc(a);
@@ -1365,11 +1366,11 @@ function execute(p, src) {
       pilotSay(a, `${a.tel}, climbing.`, `${a.telSay}, climbing.`, true, false, true);   // safety reply, even after DNA
     } else { judge(a, false, 'low altitude alert', `not sinking (${actualGp(a)})`); }
   }
-  // ship initial-contact bonus: callsign + "Stinger final" + "how do you hear me" + "wheels should be down" + "report see me"
+  // ship initial-contact bonus: callsign + "Gator final" + "how do you hear me" + "wheels should be down" + "report see me"
   if (isShip() && !a.contactBonus && PAR_PHASES.includes(a.phase) && p.cs === a.cs) {
     const n = ' ' + p.norm + ' ', nm = SHIP_NAME.toLowerCase();
-    if (n.includes(` ${nm} final `) && /\bhow do you (?:hear|read)\b/.test(n) && /\bwheels? should be down\b/.test(n) && /\breport (?:you )?see(?:ing)? (?:me|us|the ship)\b/.test(n)) {
-      a.contactBonus = true; addPts(a, 1, `★ Contact call bonus for ${a.cs}: full "${SHIP_NAME} final, how do you hear me, wheels should be down, report see me"`, 'good');
+    if (/ (?:gator|gators|gator s|gaiter|gaiters|gater|stinger|stingers|wasp) final /.test(n) && /\bhow do you (?:hear|read)\b/.test(n) && /\bwheels? should be down\b/.test(n) && /\breport (?:you )?see(?:ing)? (?:me|us|the ship)\b/.test(n)) {
+      a.contactBonus = true; addPts(a, 1, `★ Contact call bonus for ${a.cs}: full "${FAC} final, how do you hear me, wheels should be down, report see me"`, 'good');
     }
   }
   for (const c of p.cmds) {
@@ -1544,7 +1545,7 @@ function suggestCall(a) {
     else if (a.r <= 0.1) add(ph('contact Tower', 'contact tower'));
     else if (!parts.length) return isShip() ? { text: '(Ship in sight. Next: "over the deck" near 0.2 NM, then "contact Tower".)', say: '' } : { text: '(Runway in sight. Next: "over landing threshold" near 0.2 NM.)', say: '' };
   } else {
-    if (!a.contacted && a.phase === 'final') add(ph(`${SHIP_NAME} final, how do you hear me, wheels should be down, report see me`, 'this is your final controller, how do you hear me'));
+    if (!a.contacted && a.phase === 'final') add(ph(`${FAC} final, how do you hear me, wheels should be down, report see me`, 'this is your final controller, how do you hear me'));
     // "approaching glidepath", "begin descent" and "do not acknowledge further transmissions" are each their own transmission
     if (a.contacted) {
       const solo = t => { const m = G.ac.filter(x => PAR_PHASES.includes(x.phase)).length > 1; return { text: (m ? a.tel + ', ' : '') + t, say: (m ? a.telSay + ', ' : '') + t }; };
@@ -1868,7 +1869,7 @@ function fuzzyCallsigns(s) {   // replace 1-2 word near-misses of an active call
   }
   return ' ' + out.join(' ') + ' ';
 }
-const VOCAB = ['stinger approach', 'radar contact', 'take angels', 'angels', 'climb out instructions', 'climbout instructions', 'climb out', 'climbout', 'runway heading', 'dirty up', 'perform landing checks', 'expect final button', 'copper', 'purple', 'silver', 'red', 'go purple', 'go copper', 'go silver', 'go red', 'vectors for cca', 'cca approach', 'mark your father', 'upwind', 'crosswind', 'downwind', 'base', 'abeam', 'dogleg', 'heading', 'miles', 'left', 'right', 'maintain', 'knots', 'turn'];
+const VOCAB = ['gator approach', 'radar contact', 'take angels', 'angels', 'climb out instructions', 'climbout instructions', 'climb out', 'climbout', 'runway heading', 'dirty up', 'perform landing checks', 'expect final button', 'copper', 'purple', 'silver', 'red', 'go purple', 'go copper', 'go silver', 'go red', 'vectors for cca', 'cca approach', 'mark your father', 'upwind', 'crosswind', 'downwind', 'base', 'abeam', 'dogleg', 'heading', 'miles', 'left', 'right', 'maintain', 'knots', 'turn'];
 const VOCAB_WORDS = new Set(VOCAB.join(' ').split(' ').concat(['your', 'for', 'approach', 'final', 'button', 'take', 'expect', 'checks', 'landing', 'perform', 'contact', 'radar', 'mother', 'father', 'mark', 'climb', 'climbout', 'climbouts', 'instructions', 'instruction', 'runway', 'out', 'dirty', 'up', 'go', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'zero']));
 function scoreAlt(t, conf) {
   const f = ' ' + fixSpeech(PM(t)) + ' '; let sc = (conf || 0) * 2;
@@ -2191,11 +2192,11 @@ function setPhr(v) { S.phr = v === 'tower' ? 'tower' : 'ship'; saveSettings(); $
 function applyPhrUI() {
   const sh = isShip();
   $('subTitle').textContent = sh
-    ? `Approach control radar simulator · ${SHIP_NAME} (LHA/LHD) · FB ${h3z(FB())} DWH ${h3z(DWH())} BRC ${h3z(TBRC)} ${fmtMV()}`
+    ? `Approach control radar simulator · USS ${SHIP_NAME} (LHD) · FB ${h3z(FB())} DWH ${h3z(DWH())} BRC ${h3z(TBRC)} ${fmtMV()}`
     : `Approach control radar simulator · Runway ${RWY_NUM}`;
   if (!applyPhrUI.towerIntro) applyPhrUI.towerIntro = $('introP').innerHTML;
   $('introP').innerHTML = sh
-    ? `You're <b>${SHIP_NAME} Approach</b> (Silver) aboard an amphibious assault ship. Aircraft <b>launch from the ship</b> one at a time and come back for practice PARs on the <b>base recovery course (BRC) ${h3z(TBRC)}</b> (final bearing ${BRC3} magnetic). Using your <b>voice</b> (or typed commands): take <b>radar contact</b>, vector with headings / angels / speed, send them to a <b>sector</b>, pass <b>traffic</b>, give <b>climbout instructions</b> ("at one mile take angels …, turn left/right heading …"), and hand them to <b>Final</b> with "go purple" or "go copper". Turn Link ON to hand off to the Final page, or leave it OFF to practice solo.`
+    ? `You're <b>${FAC} Approach</b> (Silver) aboard an amphibious assault ship. Aircraft <b>launch from the ship</b> one at a time and come back for practice PARs on the <b>base recovery course (BRC) ${h3z(TBRC)}</b> (final bearing ${BRC3} magnetic). Using your <b>voice</b> (or typed commands): take <b>radar contact</b>, vector with headings / angels / speed, send them to a <b>sector</b>, pass <b>traffic</b>, give <b>climbout instructions</b> ("at one mile take angels …, turn left/right heading …"), and hand them to <b>Final</b> with "go purple" or "go copper". Turn Link ON to hand off to the Final page, or leave it OFF to practice solo.`
     : applyPhrUI.towerIntro;
   $('cmdInput').placeholder = sh ? 'Type instead (Enter): lightning 21 turn left heading 180, take angels 1.2' : 'Type instead (Enter): lightning 21 turn left heading 180';
   if (!helpOv.classList.contains('hidden')) renderTut();
@@ -2279,13 +2280,13 @@ function endGame() {
 
 /* ===================== tutorial ===================== */
 const TUT = [
-  ['1. What is Approach control?', `${FREQ_HELP}<p>You are <b>${SHIP_NAME} Approach</b> (Silver) in CATCC/AATCC aboard an amphibious assault ship (LHA/LHD). Aircraft <b>launch from the ship</b> every 4–6 minutes, climb out near the BRC, then come back for up to <b>3</b> practice PARs (the last one is a full stop). Your job is to identify them, vector them around the CCA pattern, keep them separated, and hand them to <b>Final</b> (Purple / Copper) once they are lined up inbound.</p>
+  ['1. What is Approach control?', `${FREQ_HELP}<p>You are <b>${FAC} Approach</b> (Silver) in CATCC/AATCC aboard an amphibious assault ship (LHA/LHD). Aircraft <b>launch from the ship</b> every 4–6 minutes, climb out near the BRC, then come back for up to <b>3</b> practice PARs (the last one is a full stop). Your job is to identify them, vector them around the CCA pattern, keep them separated, and hand them to <b>Final</b> (Purple / Copper) once they are lined up inbound.</p>
    <p>This is <b>not</b> the PAR talk-down — Final Control does the precision approach. You work the outer PPI scope: headings, angels, speed, sectors, traffic, climbout instructions, and the handoff.</p>`],
   ['2. Reading the PPI scope', `<p>The big display is a <b>plan-position indicator (PPI)</b> centred on <b>${SHIP_NAME}</b>. Range rings and the live zoom (⚙ or the on-scope slider) set how much ocean you see. The ship’s <b>BRC</b> (base recovery course), <b>FB</b> (final bearing) and <b>DWH</b> (downwind heading) are shown in the status line.</p>
    <p>Each target has a data block (callsign, type, angels, heading, speed). <b>Click (tap) a target to accept it</b> before it will answer you. The side panel shows grading tasks, the live transcript, and a suggested next call on Training.</p>
    <p>Four <b>sector</b> hold points sit around the ship (1 = NE, 2 = SE, 3 = SW, 4 = NW). Pattern legs you can call: upwind, crosswind, downwind, abeam, dogleg, base.</p>`],
   ['3. Working a launch, step by step', `<ol>
-   <li><b>Accept</b> the departure (click its target). First transmission with "<b>${SHIP_NAME} Approach</b>" scores the Stinger Approach task.</li>
+   <li><b>Accept</b> the departure (click its target). First transmission with "<b>${FAC} Approach</b>" scores the Gator Approach task.</li>
    <li><b>Radar contact</b> within <b>2 NM</b> of the ship ("Lightning two one, radar contact"). Past 2 NM costs points. You can also give a full ID: "radar contact, 5 miles northeast of mother".</li>
    <li><b>First altitude</b> after check-in must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets.</li>
    <li><b>Vector</b>: "turn left heading 180, take angels 1.2, vectors for CCA approach, expect final button purple".</li>
@@ -2294,7 +2295,7 @@ const TUT = [
    <li><b>Handoff to Final</b>: when lined up inbound and down to ~3,000 ft or below inside ~3 NM, "<b>go purple</b>" or "<b>go copper</b>". With Link ON the Final page takes them; solo, they self-recover on the final bearing.</li>
    </ol>
    <p>Also useful: <b>sectors</b> ("proceed to sector 2, report established"), <b>traffic</b> advisories (pilot answers "tally-ho"), "<b>say angels</b>", "<b>say state</b>", "<b>mark your father</b>" (posit from the ship), and <b>99</b> ship-turn calls when Mother turns.</p>`],
-  ['4. Sample script', `<div class="say">"Lightning two one, ${SHIP_NAME} Approach, radar contact."<br>
+  ['4. Sample script', `<div class="say">"Lightning two one, ${FAC} Approach, radar contact."<br>
 "Lightning two one, turn left heading 180, take angels 1.2, vectors for CCA approach, expect final button purple."<br>
 "Lightning two one, dirty up."<br>
 "Lightning two one, your climbout instructions are at one mile take angels 2, turn left heading 270."<br>
@@ -2302,7 +2303,7 @@ const TUT = [
 "Lightning two one, go purple."</div>
    <p>Pilots answer every instruction with their <b>callsign only</b> (headings, angels, speed, frequency changes, climbout instructions, sectors). Only content replies are spoken after the callsign: "unable …", "loud and clear", "tally-ho" for traffic, and reports such as "established on sector 2". If you misspoke, say "<b>correction</b>" and give the right instruction. After "go purple" / "go copper" they leave your frequency for Final.</p>`],
   ['5. Scoring', `<ul>
-   <li>Each graded task is <b>+10</b>: Stinger Approach · radar contact · first angels · vectors for CCA · expect final button · pattern position · climbout instructions · dirty up / landing checks.</li>
+   <li>Each graded task is <b>+10</b>: Gator Approach · radar contact · first angels · vectors for CCA · expect final button · pattern position · climbout instructions · dirty up / landing checks.</li>
    <li><b>−5</b> for late radar contact (past 2 NM), wrong first angels, wrong pattern position / range, or a bad radar-ID call.</li>
    <li><b>Ship turns</b>: correct "99 … Mother is in a port/starboard turn" and "99 … Mother steady, BRC …" calls score a bonus. The ship turns about every <b>10 minutes</b> (sim time), 5–20°; the Instructor screen can change the interval or turn it on demand.</li>
    <li><b>Separation losses</b> between aircraft cost heavily — slow the follower or vector them apart.</li>
@@ -2315,7 +2316,7 @@ const TUT = [
    <li>Allow the microphone when the browser asks. You can test it under ⚙ Voice → Test microphone.</li></ul>`],
   ['7. Phrases the game understands', `<p>Callsigns are tactical callsigns plus a number, spoken digit by digit: jets and fixed wing have 2 digits ("Lightning two one"), helos 3 ("Nighthawk one zero two"). Say "niner" for 9 ("heading zero niner zero"); "nine" works too. If you leave the callsign out, the call goes to the selected aircraft. Number words can be digit-by-digit or grouped ("angels one point two", "one hundred eighty knots"). A shared sound-alike matcher cleans up common mishearings first.</p>
    <ul>
-   <li>${SHIP_NAME} Approach · radar contact (… miles … of mother) · vectors for radar identification</li>
+   <li>${FAC} Approach · radar contact (… miles … of mother) · vectors for radar identification</li>
    <li>turn/come left/right heading ___ · fly heading ___ (shorter way) · <b>take angels ___</b> (climb or descend; "climb/descend and maintain angels ___ / ___ feet" still works) · <b>take speed ___</b> ("maintain ___ knots" still works)</li>
    <li>off mothers ___ at __, radar contact (pilot: "&lt;callsign&gt;, radar contact") · say type (pilot: "&lt;callsign&gt;, &lt;type&gt;") · report level angels ___ (pilot reports "&lt;callsign&gt;, level angels ___" on reaching it; handy with a primary-only target)</li>
    <li>take speed ___ · take approach speed ___ · in __ miles take approach speed ___ (after flying that many more miles) · in __ seconds take approach speed ___ (jets 130–170 kt, configures like dirty up; helos 70–130 kt, like landing checks)</li>
@@ -2534,7 +2535,7 @@ inset.addEventListener('pointerdown', e => {
 });
 
 /* ===================== APPROACH CONTROL (live-zoom plan view) ===================== */
-// Geographic frame: e = NM east of the ship, n = NM north of the ship. Ship (Stinger) at the scope centre, BRC 180,
+// Geographic frame: e = NM east of the ship, n = NM north of the ship. Ship (USS Wasp) at the scope centre, BRC 180,
 // so the final approach course runs inbound from the north (aircraft fly 180 down it to the stern).
 const RID = { rngTol: 2, brgTol: 45, deadline: 90, wrongPen: 5, latePen: 5 };   // radar identification grading
 const APP = true, APP_COUNT = { training: 4, normal: 6, gusty: 8 };
@@ -2676,7 +2677,7 @@ const APP_FUEL = { F35B: [10.5, 90, 1, 1], AV8B: [6.5, 70, 1, 1], AH1Z: [2.4, 18
 const appFuelSpec = a => APP_FUEL[a.type] || [5, 40, 2, 2];
 const appState = a => Math.max(0.1, a.fuel0 - appFuelSpec(a)[1] * (G.t - a.launchT) / 60000);
 const NUMW = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
-const GRADE_TASKS = [['cs', 'Stinger Approach'], ['rc', 'radar contact'], ['alt', 'angels'], ['cca', 'vectors CCA'], ['btn', 'final button'], ['pos', 'position'], ['co', 'climbout'], ['slow', 'landing chk/dirty']];
+const GRADE_TASKS = [['cs', 'Gator Approach'], ['rc', 'radar contact'], ['alt', 'angels'], ['cca', 'vectors CCA'], ['btn', 'final button'], ['pos', 'position'], ['co', 'climbout'], ['slow', 'landing chk/dirty']];
 function coDefer(a) {   // stored climbout with "at one mile": hold the default climbout (BRC, angels 1 / 1.2) until 1 NM past the ship
   const L = a.climbout; if (!L || !L.some(c => c.k === 'mile') || appRng(a) >= 1) return;
   const P = { hdg: a.tgtHdg, dir: a.turnDir, alt: a.tgtAlt };
@@ -2854,8 +2855,8 @@ function appCheckIn(a, again) {
   const posit = `${pB} for ${pR} from mother, `, positSay = `${pB.split('').map(d => DIGW[+d]).join(' ')} for ${pRSay} from mother, `;
   a.checkInPosit = { brg: appBrg(a), rng: pR0, text: posit };
   const angT = a.fromMar && !again ? `angels ${appAngels(a.alt)}, ` : '', angS = a.fromMar && !again ? `angels ${appAngelsSay(a.alt)}, ` : '', req = a.fromMar && !again ? 'PAR approach' : 'practice PAR approach', reqS = a.fromMar && !again ? 'P A R approach' : 'practice P A R approach';
-  pilotSay(a, `${SHIP_NAME} Approach, ${a.tel}, ${pre}${posAlso ? posit : ""}${angT}state ${f}, ${n} ${sw} on board, request ${req}.`,
-    `${SHIP_NAME} Approach, ${a.telSay}, ${pre}${posAlso ? positSay : ""}${angS}state ${fSay}, ${NUMW[n]} ${sw} on board, request ${reqS}.`);
+  pilotSay(a, `${FAC} Approach, ${a.tel}, ${pre}${posAlso ? posit : ""}${angT}state ${f}, ${n} ${sw} on board, request ${req}.`,
+    `${FAC} Approach, ${a.telSay}, ${pre}${posAlso ? positSay : ""}${angS}state ${fSay}, ${NUMW[n]} ${sw} on board, request ${reqS}.`);
   if (!G.selected) selectAc(a);
 }
 /* ---------- ship turns (v95): every SHIPCFG.every s of sim time (default 10 min, v99), 5-20 deg (multiples of 5) port/starboard, 5 s warning, ~1 deg/s.
@@ -3044,7 +3045,7 @@ function appStep(dt) {
     if (a.phase !== 'app') continue;
     coStep(a);
     const rng0 = appRng(a);
-    if (a.st === 'final') {   // flown by Stinger Final: straight in, low approach (or full stop), then climb back out
+    if (a.st === 'final') {   // flown by Gator Final: straight in, low approach (or full stop), then climb back out
       if (!a.lowDone) {
         const brgTo = norm(Math.atan2(-a.e, -a.n) / DEG);
         a.tgtHdg = rng0 < 0.4 ? a.tgtHdg : brgTo; a.turnDir = null;
@@ -3115,8 +3116,8 @@ function appStep(dt) {
     // auto straight-in / low approach / climbout / re-check-in loop) is disabled
     if (APP_AUTO_HANDOFF && a.st === 'ctl' && a.armed && rng <= 3 && a.alt <= 3000) {
       a.st = 'final'; a.pars++; a.armed = false; a.lowDone = false; G.landed++; G.score += 10;
-      log('good', `${a.cs} handed to ${SHIP_NAME} Final at ${rng.toFixed(1)} NM, ${fmtAlt(a.alt)} ft (+10). Practice PAR ${a.pars}/${APP_MAX_PARS}${a.pars >= APP_MAX_PARS ? ', full stop' : ''}.`);
-      if (a.pars >= APP_MAX_PARS) pilotSay(a, `${SHIP_NAME} Final, ${a.tel}, this will be a full stop.`, `${SHIP_NAME} Final, ${a.telSay}, this will be a full stop.`);
+      log('good', `${a.cs} handed to ${FAC} Final at ${rng.toFixed(1)} NM, ${fmtAlt(a.alt)} ft (+10). Practice PAR ${a.pars}/${APP_MAX_PARS}${a.pars >= APP_MAX_PARS ? ', full stop' : ''}.`);
+      if (a.pars >= APP_MAX_PARS) pilotSay(a, `${FAC} Final, ${a.tel}, this will be a full stop.`, `${FAC} Final, ${a.telSay}, this will be a full stop.`);
       if (G.selected === a) selectAc(null);
     } else if (Math.abs(a.e) > (G.viewE || APP_RANGE) + 3 || Math.abs(a.n) > (G.viewN || APP_RANGE) + 3) {   // rectangular scope: leaves 3 NM beyond the displayed edge
       a.phase = 'gone'; a.removeAt = G.t; G.missed++;
@@ -3200,7 +3201,7 @@ function appExecute(p, src) {
   selectAc(a); a.lastTx = G.t;
   { const snap = snapTx(a), sc0 = G.score, rec = { a, t: G.t, snap, dScore: 0, irreversible: p.cmds.some(c => c.k === 'purple') }; G.lastTx = rec; queueMicrotask(() => { rec.dScore = G.score - sc0; }); }
   log('ctl', `${a.cs}${p.cs ? '' : ' (selected)'}: "${p.raw.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${p.cmds.length ? p.cmds.map(cmdStr).join('; ') : '??'}`);
-  if (a.firstTx) { a.firstTx = false; if (p.stinger) award(a, 'cs', 'Stinger Approach'); }   // never penalized
+  if (a.firstTx) { a.firstTx = false; if (p.stinger) award(a, 'cs', 'Gator Approach'); }   // never penalized
   const rb = [], rbSay = []; let marked = false, secRb = 0;
   for (const c of p.cmds) {
     if (c.k === 'landChk') {   // helos slow to 100-130 kt; jets ignore it
@@ -3343,7 +3344,7 @@ ${G.gsp ? `IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} K
 function appPanel() {
   const hint = $('hint');
   hint.style.display = G.d.hints ? 'block' : 'none';
-  if (G.d.hints) hint.innerHTML = `💡 Vector your launches onto the final approach course (FB ${BRC3}, inbound from ${hdg3(norm(BRC + 180))}) and descend them to 3,000 ft or below inside 3 NM to hand them to ${SHIP_NAME} Final. Aircraft launch from ${SHIP_NAME} one at a time (every 4–6 min), fly up to ${APP_MAX_PARS} practice PARs (low approach, then back to you) and recover full stop on the last. After each check-in, your first altitude must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets (−5 if not). Call <b>radar contact</b> within 2 NM of the ship (−5 if later). To slow down: ${G.selected && G.selected.phase === 'app' ? (isHelo(G.selected) ? `${G.selected.tel} (helo): "<b>perform landing checks</b>"` : `${G.selected.tel} (jet): "<b>dirty up</b>"`) : 'helos "<b>perform landing checks</b>", jets "<b>dirty up</b>"'}.`;
+  if (G.d.hints) hint.innerHTML = `💡 Vector your launches onto the final approach course (FB ${BRC3}, inbound from ${hdg3(norm(BRC + 180))}) and descend them to 3,000 ft or below inside 3 NM to hand them to ${FAC} Final. Aircraft launch from ${SHIP_NAME} one at a time (every 4–6 min), fly up to ${APP_MAX_PARS} practice PARs (low approach, then back to you) and recover full stop on the last. After each check-in, your first altitude must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets (−5 if not). Call <b>radar contact</b> within 2 NM of the ship (−5 if later). To slow down: ${G.selected && G.selected.phase === 'app' ? (isHelo(G.selected) ? `${G.selected.tel} (helo): "<b>perform landing checks</b>"` : `${G.selected.tel} (jet): "<b>dirty up</b>"`) : 'helos "<b>perform landing checks</b>", jets "<b>dirty up</b>"'}.`;
   $('scopeStatus').textContent = `APPROACH · ${SHIP_NAME.toUpperCase()} · SILVER · FB ${BRC3} · ${APP_RANGE} NM · WIND ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   
   const list = G.ac.filter(appCtl).sort((p, q) => appRng(p) - appRng(q));

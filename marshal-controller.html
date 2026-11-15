@@ -219,8 +219,8 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 <div class="overlay" id="startOv">
   <div class="card">
     <h1>MARSHAL CONTROLLER</h1>
-    <div style="color:var(--dim)" id="subTitle">Marshal control · holding and LH-1 to LH-5 approaches · Stinger (LHA/LHD)</div>
-    <p id="introP">You're <b>Stinger Marshal</b> (Red). Arriving aircraft check in for Case III recovery. Assign each one a <b>marshal</b> (radial, distance, angels, BRC, outbound bearing, expected approach time) and an <b>LH approach</b>, keep the altitudes apart, clear them to <b>commence</b>, then hand them to <b>Approach</b> (Silver) or <b>Final</b> (Purple / Copper). Patterns are drawn on the scope.</p>
+    <div style="color:var(--dim)" id="subTitle">Marshal control · holding and LH-1 to LH-5 approaches · USS Wasp (LHD)</div>
+    <p id="introP">You're <b>Gator Marshal</b> (Red). Arriving aircraft check in for Case III recovery. Assign each one a <b>marshal</b> (radial, distance, angels, BRC, outbound bearing, expected approach time) and an <b>LH approach</b>, keep the altitudes apart, clear them to <b>commence</b>, then hand them to <b>Approach</b> (Silver) or <b>Final</b> (Purple / Copper). Patterns are drawn on the scope.</p>
     <div class="diffs">
       <div class="diff on" data-d="training"><b>Training</b><span>Up to 4 arrivals, a hint that shows your suggested next call.</span></div>
       <div class="diff" data-d="normal"><b>Normal</b><span>Up to 6 arrivals, firmer pilots. No hints.</span></div>
@@ -312,7 +312,8 @@ const fmtAlt = ft => Math.round(ft).toLocaleString('en-US');
 const mmss = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /* phraseology: 'ship' (US Navy amphibious assault ship PAR, default) or 'tower' (shore runway PAR) */
-const SHIP_NAME = 'Stinger';   // ship callsign ("Stinger Final", "Stinger final controller")
+const SHIP_NAME = 'Wasp';   // v102: the ship (USS Wasp)
+const FAC = 'Gator';   // v102: facility self-ID ("Gator Marshal", "Gator Approach", "Gator Final"); the parser still accepts "Stinger"
 function isShip() { return S.phr !== 'tower'; }
 const ph = (ship, tower) => isShip() ? ship : tower;
 const spotOf = a => 6 + (a.uid % 4);     // landing spot 6..9 (display/phrase only)
@@ -558,7 +559,7 @@ const PATTERNS = [
   [/\bmark\s+(?:your\s+|you\s+|yer\s+)?(?:father|farther|mother|fathers?)\b/g, () => ({ k: 'markFather' })],
   // radar identification: "vectors for radar identification" (no action of its own) and "radar contact, 5 miles northeast of mother"
   [/\bvectors?\s+(?:for\s+)?(?:radar\s+)?(?:identification|identify|ident|i\s+d|id)\b/g, () => ({ k: 'rid' })],
-  [/\bradar\s+(?:contacts?|contract|contacted|contact\s+s)\b\s*,?\s*(?:(\d+(?:\.\d+)?)\s+miles?\s*,?\s*(?:(north\s*east|north\s*west|south\s*east|south\s*west|northeast|northwest|southeast|southwest|north|south|east|west)|(?:bearing\s+)?(\d{1,3}))(?:\s+(?:of|from)\s+(?:mother|mothers|the\s+ship|ship|stinger))?|(?:bearing\s+)?(\d{3})\s+(?:for|at)\s+(\d+(?:\.\d+)?)(?:\s+miles?)?(?:\s+(?:of|from)\s+(?:mother|mothers|the\s+ship|ship|stinger))?)/g,
+  [/\bradar\s+(?:contacts?|contract|contacted|contact\s+s)\b\s*,?\s*(?:(\d+(?:\.\d+)?)\s+miles?\s*,?\s*(?:(north\s*east|north\s*west|south\s*east|south\s*west|northeast|northwest|southeast|southwest|north|south|east|west)|(?:bearing\s+)?(\d{1,3}))(?:\s+(?:of|from)\s+(?:mother|mothers|the\s+ship|ship|stinger|gator|wasp))?|(?:bearing\s+)?(\d{3})\s+(?:for|at)\s+(\d+(?:\.\d+)?)(?:\s+miles?)?(?:\s+(?:of|from)\s+(?:mother|mothers|the\s+ship|ship|stinger|gator|wasp))?)/g,
     m => { const d = m[2] ? DIRBRG[m[2].replace(/\s+/g, '')] : null, b = d != null ? d : m[3] != null ? +m[3] : m[4] != null ? +m[4] : null; return { k: 'radarContact', rng: parseFloat(m[1] ?? m[5]), brg: b, dirTxt: m[2] ? m[2].replace(/\s+/g, '') : String(b).padStart(3, '0') }; }],
   [/\bradar\s+(?:contacts?|contract|contacted|contact\s+s)\b|\bradar\s+context\b/g, () => ({ k: 'radarContact' })],
   [/\blow\s+altitude\s+alerts?\b|\bcheck\s+(?:your\s+)?altitude\s+immediately\b/g, () => ({ k: 'laa' })],
@@ -604,15 +605,15 @@ const PATTERNS = [
 ];
 
 // '<cs>, your climbout instructions are ...': the content is parsed but stored, not executed now
-const STINGER_RE_G = /\b(?:stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's|wasp)\s*,?\s*(?:approach(?:es|s)?|marshal+|martial)\b\s*,?/gi;
-const STINGER_RE = /\b(?:stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's|wasp)\s*,?\s*(?:approach(?:es|s)?|marshal+|martial)\b/i;
-function parseSpeech(raw, known = []) {   // detect 'Stinger Approach' / 'Stinger Marshal' / self-ID 'Marshal' BEFORE it is stripped
+const STINGER_RE_G = /\b(?:gator|gators|gator's|gaiter|gaiters|gater|gaters|later|stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's|wasp)\s*,?\s*(?:approach(?:es|s)?|marshal+|martial)\b\s*,?/gi;
+const STINGER_RE = /\b(?:gator|gators|gator's|gaiter|gaiters|gater|gaters|later|stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's|wasp)\s*,?\s*(?:approach(?:es|s)?|marshal+|martial)\b/i;
+function parseSpeech(raw, known = []) {   // detect 'Gator Approach' / 'Gator Marshal' / self-ID 'Marshal' BEFORE it is stripped
   const st = STINGER_RE.test(String(raw)) || /\b(?:marshal+|martial)\b/i.test(String(raw)), p0 = parseSpeech0(String(raw).replace(STINGER_RE_G, ' '), known);
   const p = p0.traffic ? p0 : parseSpeech1(raw, known); if (p) p.stinger = st; return p;
 }
 const CLIMBOUT_HDR_RE = /\b(?:(?:on|after|your)\s+)?climb(?:ed|ing|s)?\s*-?\s*outs?\b(?:\s+instructions?)?(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?|\b(?:missed\s+approach|wave\s*-?\s*off|on\s+(?:the\s+)?go)\s+instructions?\b(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?|(?<!\bmarshal\s)(?<!\bmarshall\s)(?<!\bmartial\s)(?<!\bsay\s)\b(?:climb\w*\s+|your\s+)?instructions?\b(?:\s+(?:are|is|will\s+be|would\s+be|r|be)\b)?(?=\s*,?\s*(?:fly|turn|come|climb|descend|maintain|heading|runway|brc|base\s+recovery|angels|on\s+climb|go\s+(?:red|silver)))/i;
 function parseSpeech1(raw, known = []) {
-  // our own station name ('Stinger Approach' / 'Stinger Marshal' and recognizer variants) is ignored wherever it appears
+  // our own station name ('Gator Approach' / 'Gator Marshal' and recognizer variants) is ignored wherever it appears
   raw = String(raw).replace(STINGER_RE_G, ' ').replace(/^\s*,\s*/, '');
   // ANY mention of climbout / climbout instructions makes this a climbout-storage call ONLY:
   // heading / altitude / speed / frequency inside it are stored in a.climbout, never executed now
@@ -663,7 +664,7 @@ function parseSpeech0(raw, known = []) {
   for (const k of ['climbOut', 'starDelta', 'ga']) { const ix = cmds.map((c, i) => c.k === k ? i : -1).filter(i => i >= 0); for (const i of ix.slice(1).reverse()) cmds.splice(i, 1); }
   // leftover words (for UI)
   let left = ''; for (let i = 0; i < s.length; i++) left += used[i] ? ' ' : s[i];
-  left = left.replace(/\b(runway|27|two seven|18|one eight|and|the|is|this|your|final|controller|approach|marshal+|martial|at|of|a|to|now|then|you|are|come|ship|deck|fouled|spot|for|landing|stinger|99|\d)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  left = left.replace(/\b(runway|27|two seven|18|one eight|and|the|is|this|your|final|controller|approach|marshal+|martial|at|of|a|to|now|then|you|are|come|ship|deck|fouled|spot|for|landing|stinger|gator|wasp|99|\d)\b/g, ' ').replace(/\s+/g, ' ').trim();
   // turn/heading call with heading-like words but no usable number -> pilot asks for the heading again
   const hdgMissing = !cmds.some(c => c.k === 'hdg' || c.k === 'climbout') && !/\b(?:runway|ship\s+s)\s+heading\b/.test(norm0) &&
     (/\bheading\b/.test(norm0) || /\b(?:turn|come)\s+(?:left|right)\b/.test(s));
@@ -919,7 +920,7 @@ function newGame(diffKey, opts = {}) {
   try { window.SplatT && SplatT.clear(); } catch (e) {}   // SPLAT-T lines are per simulation
   logEl.innerHTML = '';
   setScale(1); setPaused(false);
-  log('sys', `${d.name}: ${'Marshal, ' + SHIP_NAME + ', BRC ' + BRC3}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? (MC_MORE_ARRIVALS ? 'Arrivals check in for marshal every 4–5 min;' : 'Three waves: flight of two at 20 NM, single CCA arrival at 10 NM (270–090), then a second flight of two at 20 NM;') + ' press End to finish.' : G.toSpawn + ' arrivals.'}`);
+  log('sys', `${d.name}: ${FAC + ' Marshal, USS ' + SHIP_NAME + ', BRC ' + BRC3}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? (MC_MORE_ARRIVALS ? 'Arrivals check in for marshal every 4–5 min;' : 'Three waves: flight of two at 20 NM, single CCA arrival at 10 NM (270–090), then a second flight of two at 20 NM;') + ' press End to finish.' : G.toSpawn + ' arrivals.'}`);
   if (d.hints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
   if (MC && opts.eatRef != null) mcSetEatRef(opts.eatRef);
   priOnlyInit(opts);
@@ -1016,8 +1017,8 @@ function onParEntry(a) {
   a.lastTx = a.lastRealTx = G.t;
   const it = isPrac(a) ? (a.pracNo > 1 ? 'practice approach' : 'request multiple practice PARs') : a.afterPrac ? 'this will be a full stop' : 'full stop';
   const itSay = it.replace('PARs', 'P A Rs');
-  if (isShip()) pilotSay(a, `${SHIP_NAME} Final, ${a.tel}, ${a.r.toFixed(0)} miles, level ${fmtAlt(a.z)}, heading ${hdg3(a.hdg)}, for the PAR to the ship, ${it}.`,
-    `${SHIP_NAME} Final, ${a.telSay}, ${sayMiles(Math.round(a.r))}, level ${sayAlt(a.z)}, heading ${sayDigits(hdg3(a.hdg))}, for the P A R to the ship, ${itSay}.`);
+  if (isShip()) pilotSay(a, `${FAC} Final, ${a.tel}, ${a.r.toFixed(0)} miles, level ${fmtAlt(a.z)}, heading ${hdg3(a.hdg)}, for the PAR to the ship, ${it}.`,
+    `${FAC} Final, ${a.telSay}, ${sayMiles(Math.round(a.r))}, level ${sayAlt(a.z)}, heading ${sayDigits(hdg3(a.hdg))}, for the P A R to the ship, ${itSay}.`);
   else pilotSay(a, `Final, ${a.tel}, ${a.r.toFixed(0)} miles, level ${fmtAlt(a.z)}, PAR runway ${RWY_NUM}.`,
     `Final, ${a.telSay}, ${sayMiles(Math.round(a.r))}, level ${sayAlt(a.z)}, P A R runway ${RWY_SAY}.`);
   if (!G.selected || !PAR_PHASES.includes(G.selected.phase)) selectAc(a);
@@ -1416,11 +1417,11 @@ function execute(p, src) {
       pilotSay(a, `${a.tel}, climbing.`, `${a.telSay}, climbing.`, true, false, true);   // safety reply, even after DNA
     } else { judge(a, false, 'low altitude alert', `not sinking (${actualGp(a)})`); }
   }
-  // ship initial-contact bonus: callsign + "Stinger final" + "how do you hear me" + "wheels should be down" + "report see me"
+  // ship initial-contact bonus: callsign + "Gator final" + "how do you hear me" + "wheels should be down" + "report see me"
   if (isShip() && !a.contactBonus && PAR_PHASES.includes(a.phase) && p.cs === a.cs) {
     const n = ' ' + p.norm + ' ', nm = SHIP_NAME.toLowerCase();
-    if (n.includes(` ${nm} final `) && /\bhow do you (?:hear|read)\b/.test(n) && /\bwheels? should be down\b/.test(n) && /\breport (?:you )?see(?:ing)? (?:me|us|the ship)\b/.test(n)) {
-      a.contactBonus = true; addPts(a, 1, `★ Contact call bonus for ${a.cs}: full "${SHIP_NAME} final, how do you hear me, wheels should be down, report see me"`, 'good');
+    if (/ (?:gator|gators|gator s|gaiter|gaiters|gater|stinger|stingers|wasp) final /.test(n) && /\bhow do you (?:hear|read)\b/.test(n) && /\bwheels? should be down\b/.test(n) && /\breport (?:you )?see(?:ing)? (?:me|us|the ship)\b/.test(n)) {
+      a.contactBonus = true; addPts(a, 1, `★ Contact call bonus for ${a.cs}: full "${FAC} final, how do you hear me, wheels should be down, report see me"`, 'good');
     }
   }
   for (const c of p.cmds) {
@@ -1595,7 +1596,7 @@ function suggestCall(a) {
     else if (a.r <= 0.1) add(ph('contact Tower', 'contact tower'));
     else if (!parts.length) return isShip() ? { text: '(Ship in sight. Next: "over the deck" near 0.2 NM, then "contact Tower".)', say: '' } : { text: '(Runway in sight. Next: "over landing threshold" near 0.2 NM.)', say: '' };
   } else {
-    if (!a.contacted && a.phase === 'final') add(ph(`${SHIP_NAME} final, how do you hear me, wheels should be down, report see me`, 'this is your final controller, how do you hear me'));
+    if (!a.contacted && a.phase === 'final') add(ph(`${FAC} final, how do you hear me, wheels should be down, report see me`, 'this is your final controller, how do you hear me'));
     // "approaching glidepath", "begin descent" and "do not acknowledge further transmissions" are each their own transmission
     if (a.contacted) {
       const solo = t => { const m = G.ac.filter(x => PAR_PHASES.includes(x.phase)).length > 1; return { text: (m ? a.tel + ', ' : '') + t, say: (m ? a.telSay + ', ' : '') + t }; };
@@ -1929,7 +1930,7 @@ function fuzzyCallsigns(s) {   // replace 1-2 word near-misses of an active call
   }
   return ' ' + out.join(' ') + ' ';
 }
-const VOCAB = ['99 weather', 'ninety nine weather', 'stinger approach', 'stinger marshal', 'case three recovery', 'marshal', 'outbound bearing', 'lima hotel', 'brc', 'expected approach time', 'report commencing', 'cleared for', 'radar contact', 'take angels', 'angels', 'climb out instructions', 'climbout instructions', 'climb out', 'climbout', 'runway heading', 'dirty up', 'perform landing checks', 'expect final button', 'copper', 'purple', 'silver', 'red', 'go purple', 'go copper', 'go silver', 'go red', 'vectors for cca', 'cca approach', 'mark your father', 'upwind', 'crosswind', 'downwind', 'base', 'abeam', 'dogleg', 'heading', 'miles', 'left', 'right', 'maintain', 'knots', 'turn'];
+const VOCAB = ['99 weather', 'ninety nine weather', 'gator approach', 'gator marshal', 'case three recovery', 'marshal', 'outbound bearing', 'lima hotel', 'brc', 'expected approach time', 'report commencing', 'cleared for', 'radar contact', 'take angels', 'angels', 'climb out instructions', 'climbout instructions', 'climb out', 'climbout', 'runway heading', 'dirty up', 'perform landing checks', 'expect final button', 'copper', 'purple', 'silver', 'red', 'go purple', 'go copper', 'go silver', 'go red', 'vectors for cca', 'cca approach', 'mark your father', 'upwind', 'crosswind', 'downwind', 'base', 'abeam', 'dogleg', 'heading', 'miles', 'left', 'right', 'maintain', 'knots', 'turn'];
 const VOCAB_WORDS = new Set(VOCAB.join(' ').split(' ').concat(['weather', 'ninety', 'eat', 'your', 'for', 'approach', 'final', 'button', 'take', 'expect', 'checks', 'landing', 'perform', 'contact', 'radar', 'mother', 'father', 'mark', 'climb', 'climbout', 'climbouts', 'instructions', 'instruction', 'runway', 'out', 'dirty', 'up', 'go', 'case', 'recovery', 'outbound', 'bearing', 'marshal', 'commencing', 'commence', 'cleared', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'zero']));
 function scoreAlt(t, conf) {
   t = PM(t); const f = ' ' + fixSpeech(MC ? mcFixSpeech(t) : t) + ' '; let sc = (conf || 0) * 2;
@@ -1971,15 +1972,15 @@ function mcFixSpeech(t) {   // forgiving marshal-flow wording: common speech-to-
   s = s.replace(/\bcleared\s+(?:four|for|to|2)\s+(?=LH|approach)/gi, 'cleared for ').replace(/\bclear\s+for\b/gi, 'cleared for');
   s = s.replace(/\b(?:three|tree|3)\s*(?:mile|miles|mi|nm)\b/gi, '3 miles').replace(/\b(?:redial|radio|radiol)\b/gi, 'radial');
   s = s.replace(/\b(?:expect(?:ed|ing)?|accepted)\s+(?:a\s+)?(?:proach|approach)\s+(?:time|times|dime|sign|climb|line)\b/gi, 'expected approach time').replace(/\b(?:expect(?:ed|ing)?|push|commence)\s+time\b/gi, 'expected approach time').replace(/\b(?<!expected\s)approach\s+time\b/gi, 'expected approach time').replace(/\be\s*\.?\s*a\s*\.?\s*t\.?\b/gi, 'expected approach time');
-  s = s.replace(/\b(?:ninety[\s\-]*nine|niner[\s\-]*niner|nine[\s\-]*nine|9\s+9|ninety[\s\-]*niner)\s*,?\s*(?:(?:stinger|wasp)\s*,?\s*(?:marshal\s*,?\s*)?)?(?:weather|whether|wether|weathers|feather|leather)\b/gi, '99 weather').replace(/\b99\s*,?\s*(?:(?:stinger|wasp)\s*,?\s*(?:marshal\s*,?\s*)?)?(?:whether|wether|weathers|feather|leather)\b/gi, '99 weather');
+  s = s.replace(/\b(?:ninety[\s\-]*nine|niner[\s\-]*niner|nine[\s\-]*nine|9\s+9|ninety[\s\-]*niner)\s*,?\s*(?:(?:gator|gators|gaiter|stinger|wasp)\s*,?\s*(?:marshal\s*,?\s*)?)?(?:weather|whether|wether|weathers|feather|leather)\b/gi, '99 weather').replace(/\b99\s*,?\s*(?:(?:gator|gators|gaiter|stinger|wasp)\s*,?\s*(?:marshal\s*,?\s*)?)?(?:whether|wether|weathers|feather|leather)\b/gi, '99 weather');
   // callsign digits split or spoken as tens/teens: "Eagle 3 4", "Venom twenty one", or bare leading "one two, ..." / "twelve, ..."
   const TNW = { twenty: 20, thirty: 30, forty: 40, fourty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
   const TEW = { ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
-  s = s.replace(/^\s*((?:(?:stinger|wasp)?\s*marshal\s*,?\s*)?(?:[a-z]{2,12}\s+)?)(twenty|thirty|forty|fourty|fifty|sixty|seventy|eighty|ninety)(?:[\s,-]+(one|won|two|to|too|three|tree|four|for|fore|five|fife|six|seven|eight|ate|nine|niner))?(?=\s*,|\s+(?:marshal|stinger|radar|turn|fly|come|heading|climb|descend|maintain|cleared|expect|squawk|signal|buster|vectors?|go|switch|contact|report|say|roger|dirty|perform|angels))\b/i,
+  s = s.replace(/^\s*((?:(?:gator|gators|gaiter|stinger|wasp)?\s*marshal\s*,?\s*)?(?:[a-z]{2,12}\s+)?)(twenty|thirty|forty|fourty|fifty|sixty|seventy|eighty|ninety)(?:[\s,-]+(one|won|two|to|too|three|tree|four|for|fore|five|fife|six|seven|eight|ate|nine|niner))?(?=\s*,|\s+(?:marshal|stinger|gator|radar|turn|fly|come|heading|climb|descend|maintain|cleared|expect|squawk|signal|buster|vectors?|go|switch|contact|report|say|roger|dirty|perform|angels))\b/i,
     (m, pre, tn, u) => { const w0 = pre.trim().toLowerCase(); if (/^(?:heading|angels|marshal|outbound|speed|sector|case|lh\d?)$/.test(w0)) return m; const n = TNW[tn.toLowerCase()] + (u ? NW[u.toLowerCase()] : 0); return n === 99 ? m : pre + n + ' '; });
-  s = s.replace(/^\s*((?:(?:stinger|wasp)?\s*marshal\s*,?\s*)?(?:[a-z]{2,12}\s+)?)(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen)(?=\s*,|\s+(?:marshal|stinger|radar|turn|fly|come|heading|climb|descend|maintain|cleared|expect|squawk|signal|buster|vectors?|go|switch|contact|report|say|roger|dirty|perform|angels))\b/i,
+  s = s.replace(/^\s*((?:(?:gator|gators|gaiter|stinger|wasp)?\s*marshal\s*,?\s*)?(?:[a-z]{2,12}\s+)?)(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen)(?=\s*,|\s+(?:marshal|stinger|gator|radar|turn|fly|come|heading|climb|descend|maintain|cleared|expect|squawk|signal|buster|vectors?|go|switch|contact|report|say|roger|dirty|perform|angels))\b/i,
     (m, pre, te) => { const w0 = pre.trim().toLowerCase(); if (/^(?:heading|angels|marshal|outbound|speed|sector|case|lh\d?)$/.test(w0)) return m; return pre + TEW[te.toLowerCase()] + ' '; });
-  s = s.replace(new RegExp('^\\s*((?:(?:stinger|wasp)?\\s*marshal\\s*,?\\s*)?(?:[a-z]{2,12}\\s+)?)((?:\\d|' + NWR + ')[\\s,-]+(?:\\d|' + NWR + '))(?=\\s*,|\\s+(?:marshal|stinger|radar|turn|fly|come|heading|climb|descend|maintain|cleared|expect|squawk|signal|buster|vectors?|go|switch|contact|report|say|roger|dirty|perform|angels))\\b', 'i'),
+  s = s.replace(new RegExp('^\\s*((?:(?:gator|gators|gaiter|stinger|wasp)?\\s*marshal\\s*,?\\s*)?(?:[a-z]{2,12}\\s+)?)((?:\\d|' + NWR + ')[\\s,-]+(?:\\d|' + NWR + '))(?=\\s*,|\\s+(?:marshal|stinger|gator|radar|turn|fly|come|heading|climb|descend|maintain|cleared|expect|squawk|signal|buster|vectors?|go|switch|contact|report|say|roger|dirty|perform|angels))\\b', 'i'),
     (m, pre, ds) => { const w0 = pre.trim().toLowerCase(); if (/^(?:heading|angels|marshal|outbound|speed|sector|case|lh\d?)$/.test(w0)) return m; const dig = ds.trim().split(/[\s,-]+/).map(x => /^\d+$/.test(x) ? x : NW[x.toLowerCase()]); if (dig.some(x => x == null) || dig.join('') === '99') return m; return pre + dig.join('') + ' '; });
   const words = (typeof G !== 'undefined' && G ? G.ac : []).map(a => String(a.tel || '').split(/\s+/)[0]).filter(Boolean);
   for (const w of [...new Set(words)]) {
@@ -2398,11 +2399,11 @@ function setPhr(v) { S.phr = v === 'tower' ? 'tower' : 'ship'; saveSettings(); $
 function applyPhrUI() {
   const sh = isShip();
   $('subTitle').textContent = sh
-    ? `Marshal control · holding & LH approaches · ${SHIP_NAME} (LHA/LHD) · FB ${h3z(FB())} DWH ${h3z(DWH())} BRC ${h3z(TBRC)} ${fmtMV()}`
+    ? `Marshal control · holding & LH approaches · USS ${SHIP_NAME} (LHD) · FB ${h3z(FB())} DWH ${h3z(DWH())} BRC ${h3z(TBRC)} ${fmtMV()}`
     : `Marshal control · holding & LH approaches · Runway ${RWY_NUM}`;
   if (!applyPhrUI.towerIntro) applyPhrUI.towerIntro = $('introP').innerHTML;
   $('introP').innerHTML = sh
-    ? `You're <b>${SHIP_NAME} Marshal</b> (Red) aboard an amphibious assault ship. Arriving aircraft check in for <b>Case III recovery</b> on BRC ${h3z(TBRC)} (final bearing ${BRC3} magnetic). Using your <b>voice</b> (or typed commands): assign a <b>marshal</b> (radial, DME, angels, BRC, outbound bearing, expected approach time) and an <b>LH-1…LH-5</b> approach, keep the stack altitudes apart, clear them to <b>commence</b>, take the outbound-bearing report, then hand them to <b>Approach</b> ("go silver") or <b>Final</b> ("go purple" / "go copper"). Patterns are drawn on the scope.`
+    ? `You're <b>${FAC} Marshal</b> (Red) aboard an amphibious assault ship. Arriving aircraft check in for <b>Case III recovery</b> on BRC ${h3z(TBRC)} (final bearing ${BRC3} magnetic). Using your <b>voice</b> (or typed commands): assign a <b>marshal</b> (radial, DME, angels, BRC, outbound bearing, expected approach time) and an <b>LH-1…LH-5</b> approach, keep the stack altitudes apart, clear them to <b>commence</b>, take the outbound-bearing report, then hand them to <b>Approach</b> ("go silver") or <b>Final</b> ("go purple" / "go copper"). Patterns are drawn on the scope.`
     : applyPhrUI.towerIntro;
   $('cmdInput').placeholder = sh ? `Type instead (Enter): gunfighter 21 case three recovery, LH2 approach, marshal ${radA(30)} at 2, angels 2, BRC ${h3z(TBRC)}, outbound bearing ${h3z(MAR.outbound())}` : `Type instead (Enter): venom 21 marshal ${radA(30)} at 2, angels 2`;
   if (!helpOv.classList.contains('hidden')) renderTut();
@@ -2803,7 +2804,7 @@ inset.addEventListener('pointerdown', e => {
 });
 
 /* ===================== APPROACH CONTROL (30 NM plan view) ===================== */
-// Geographic frame: e = NM east of the ship, n = NM north of the ship. Ship (Stinger) at the scope centre, BRC 180,
+// Geographic frame: e = NM east of the ship, n = NM north of the ship. Ship (USS Wasp) at the scope centre, BRC 180,
 // so the final approach course runs inbound from the north (aircraft fly 180 down it to the stern).
 const RID = { rngTol: 2, brgTol: 45, deadline: 90, wrongPen: 5, latePen: 5 };   // radar identification grading
 const APP = true, APP_COUNT = { training: 4, normal: 6, gusty: 8 };
@@ -2943,7 +2944,7 @@ const APP_FUEL = { F35B: [10.5, 90, 1, 1], AV8B: [6.5, 70, 1, 1], AH1Z: [2.4, 18
 const appFuelSpec = a => APP_FUEL[a.type] || [5, 40, 2, 2];
 const appState = a => Math.max(0.1, a.fuel0 - appFuelSpec(a)[1] * (G.t - a.launchT) / 60000);
 const NUMW = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
-const GRADE_TASKS = [['cs', 'Stinger Approach'], ['rc', 'radar contact'], ['alt', 'angels'], ['cca', 'vectors CCA'], ['btn', 'final button'], ['pos', 'position'], ['co', 'climbout'], ['slow', 'landing chk/dirty']];
+const GRADE_TASKS = [['cs', 'Gator Approach'], ['rc', 'radar contact'], ['alt', 'angels'], ['cca', 'vectors CCA'], ['btn', 'final button'], ['pos', 'position'], ['co', 'climbout'], ['slow', 'landing chk/dirty']];
 function coDefer(a) {   // stored climbout with "at one mile": hold the default climbout (BRC, angels 1 / 1.2) until 1 NM past the ship
   const L = a.climbout; if (!L || !L.some(c => c.k === 'mile') || appRng(a) >= 1) return;
   const P = { hdg: a.tgtHdg, dir: a.turnDir, alt: a.tgtAlt };
@@ -3219,16 +3220,16 @@ function appCheckIn(a, again) {
   a.checkInPosit = { brg: appBrg(a), rng: pR0, text: posit };
   if (MC && a.lead) return;   // wingman
   if (MC && a.parArr) {   // CCA arrival 6 NM from the right: Approach-style check-in on Marshal, requesting CCA approach
-    pilotSay(a, `${SHIP_NAME} Marshal, ${a.tel}, ${posit}angels ${appAngels(a.alt)}, state ${f}, ${n} ${sw} on board, request CCA approach.`,
-      `${SHIP_NAME} Marshal, ${a.telSay}, ${positSay}angels ${appAngelsSay(a.alt)}, state ${fSay}, ${NUMW[n]} ${sw} on board, request C C A approach.`);
+    pilotSay(a, `${FAC} Marshal, ${a.tel}, ${posit}angels ${appAngels(a.alt)}, state ${f}, ${n} ${sw} on board, request CCA approach.`,
+      `${FAC} Marshal, ${a.telSay}, ${positSay}angels ${appAngelsSay(a.alt)}, state ${fSay}, ${NUMW[n]} ${sw} on board, request C C A approach.`);
     if (!G.selected) selectAc(a); return; }
   if (MC) { const st = (Math.floor(appState(a) * 10) / 10).toFixed(1), dB = String(Math.round(appBrg(a)) % 360 || 360).padStart(3, '0'), dR = Math.round(appRng(a));
     const wt = a.wingCs ? telephony(a.wingCs) : null, fl = a.flight ? `flight of ${a.flight}, ${wt ? wt.text + ', ' : ''}` : '', flS = a.flight ? `flight of ${NUMW[a.flight]}, ${wt ? wt.say + ', ' : ''}` : '';
-    pilotSay(a, `${SHIP_NAME} Marshal, ${a.tel}, ${fl}${dB} for ${dR}, angels ${appAngels(a.alt)}, state ${st}, ${n} ${sw} on board.`,
-      `${SHIP_NAME} Marshal, ${a.telSay}, ${flS}${dB.split('').map(d => DIGW[+d]).join(' ')} for ${dR >= 10 ? sayTwo(dR) : NUMW[dR]}, angels ${String(appAngels(a.alt)).split('.').map((x, i) => i ? NUMW[+x] : sayTwo(+x)).join(' point ')}, state ${fSay}, ${NUMW[n]} ${sw} on board.`);
+    pilotSay(a, `${FAC} Marshal, ${a.tel}, ${fl}${dB} for ${dR}, angels ${appAngels(a.alt)}, state ${st}, ${n} ${sw} on board.`,
+      `${FAC} Marshal, ${a.telSay}, ${flS}${dB.split('').map(d => DIGW[+d]).join(' ')} for ${dR >= 10 ? sayTwo(dR) : NUMW[dR]}, angels ${String(appAngels(a.alt)).split('.').map((x, i) => i ? NUMW[+x] : sayTwo(+x)).join(' point ')}, state ${fSay}, ${NUMW[n]} ${sw} on board.`);
     if (!G.selected) selectAc(a); return; }
-  pilotSay(a, `${SHIP_NAME} Approach, ${a.tel}, ${pre}${again ? posit : ""}state ${f}, ${n} ${sw} on board, request practice PAR approach.`,
-    `${SHIP_NAME} Approach, ${a.telSay}, ${pre}${again ? positSay : ""}state ${fSay}, ${NUMW[n]} ${sw} on board, request practice P A R approach.`);
+  pilotSay(a, `${FAC} Approach, ${a.tel}, ${pre}${again ? posit : ""}state ${f}, ${n} ${sw} on board, request practice PAR approach.`,
+    `${FAC} Approach, ${a.telSay}, ${pre}${again ? positSay : ""}state ${fSay}, ${NUMW[n]} ${sw} on board, request practice P A R approach.`);
   if (!G.selected) selectAc(a);
 }
 /* ---------- ship turns (v95): every SHIPCFG.every s of sim time (default 10 min, v99), 5-20 deg (multiples of 5) port/starboard, 5 s warning, ~1 deg/s.
@@ -3495,11 +3496,11 @@ const MAR = {
   },
   helo90(a, R, D, alt) { return isHelo(a) && Math.abs(angDiff(R, 90)) <= 5 && this.EMER_ALT[Math.round(D)] === alt && Math.round(D) > 5; },
   isHoldAfter(after) {
-    return /^\s*(?:on\s+(?:the\s+)?)?(?:(?:mother|stinger)(?:\s*s)?\s+)?(?:radial\s*\d{1,3}\b|\d{1,3}\s*(?:radial|r\b)|\d{1,3}\s+at\s+\d|\d{1,3}\s+\d+(?:\.\d+)?\s*(?:miles?|mi|nm|dme)\b(?!\s*(?:north|south|east|west))|\d{1,3}\s+angels?\s*\d|at\s+\d+(?:\.\d+)?\s*(?:miles?|mi|nm|dme|angels?)\b|angels?\s*\d)/.test(after);
+    return /^\s*(?:on\s+(?:the\s+)?)?(?:(?:mother|stinger|gator|wasp)(?:\s*s)?\s+)?(?:radial\s*\d{1,3}\b|\d{1,3}\s*(?:radial|r\b)|\d{1,3}\s+at\s+\d|\d{1,3}\s+\d+(?:\.\d+)?\s*(?:miles?|mi|nm|dme)\b(?!\s*(?:north|south|east|west))|\d{1,3}\s+angels?\s*\d|at\s+\d+(?:\.\d+)?\s*(?:miles?|mi|nm|dme|angels?)\b|angels?\s*\d)/.test(after);
   },
   parse(raw) {
     let s = ' ' + String(raw).toLowerCase()
-      .replace(/\b(?:stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's|wasp)\s*,?\s*(?:marshal+|martial|approach(?:es|s)?)\b/g, ' ')
+      .replace(/\b(?:gator|gators|gator's|gaiter|gaiters|gater|gaters|later|stinger|stingers|stringer|stringers|singer|singers|stinker|stinga|stinga's|wasp)\s*,?\s*(?:marshal+|martial|approach(?:es|s)?)\b/g, ' ')
       .replace(/\b10:([0-5]\d)\b/g, '$1')
       .replace(/\b(\d{1,2}):00\b/g, '$1')
       .replace(/\b(\d{1,2}):([0-5]\d)\b/g, '$1$2')
@@ -3541,7 +3542,7 @@ const MAR = {
       }
       if (holdPost) {
         const post = holdPost;
-        const r = post.match(/(\d{1,3})\s*(?:radial|r\b)/) || post.match(/radial\s*(\d{1,3})/) || post.match(/^(?:marshal+|martial)\s+(?:on\s+(?:the\s+)?)?(?:(?:mother|stinger)(?:\s*s)?\s+)?(\d{1,3})\b/), d = post.match(/(\d+(?:\.\d+)?)\s*(?:miles?|mi|nm|dme)\b/) || post.match(/\bat\s+(\d+(?:\.\d+)?)\b/);
+        const r = post.match(/(\d{1,3})\s*(?:radial|r\b)/) || post.match(/radial\s*(\d{1,3})/) || post.match(/^(?:marshal+|martial)\s+(?:on\s+(?:the\s+)?)?(?:(?:mother|stinger|gator|wasp)(?:\s*s)?\s+)?(\d{1,3})\b/), d = post.match(/(\d+(?:\.\d+)?)\s*(?:miles?|mi|nm|dme)\b/) || post.match(/\bat\s+(\d+(?:\.\d+)?)\b/);
         const an = post.match(/angels?\s*(\d+(?:\.\d+)?)/), ft = post.match(/(\d{4,5})\s*(?:feet|ft)\b/);
         const e = post.match(eatRe);
         const eatM = e ? (+e[1]) % 100 : (out.eat != null ? out.eat : null);
@@ -3900,7 +3901,7 @@ function appStep(dt) {
     if (a.phase !== 'app') continue;
     coStep(a);
     const rng0 = appRng(a);
-    if (a.st === 'final') {   // flown by Stinger Final: straight in, low approach (or full stop), then climb back out
+    if (a.st === 'final') {   // flown by Gator Final: straight in, low approach (or full stop), then climb back out
       if (!a.lowDone) {
         const brgTo = norm(Math.atan2(-a.e, -a.n) / DEG);
         a.tgtHdg = rng0 < 0.4 ? a.tgtHdg : brgTo; a.turnDir = null;
@@ -3974,8 +3975,8 @@ function appStep(dt) {
     // auto straight-in / low approach / climbout / re-check-in loop) is disabled
     if (APP_AUTO_HANDOFF && a.st === 'ctl' && a.armed && rng <= 3 && a.alt <= 3000) {
       a.st = 'final'; a.pars++; a.armed = false; a.lowDone = false; G.landed++; G.score += 10;
-      log('good', `${a.cs} handed to ${SHIP_NAME} Final at ${rng.toFixed(1)} NM, ${fmtAlt(a.alt)} ft (+10). Practice PAR ${a.pars}/${APP_MAX_PARS}${a.pars >= APP_MAX_PARS ? ', full stop' : ''}.`);
-      if (a.pars >= APP_MAX_PARS) pilotSay(a, `${SHIP_NAME} Final, ${a.tel}, this will be a full stop.`, `${SHIP_NAME} Final, ${a.telSay}, this will be a full stop.`);
+      log('good', `${a.cs} handed to ${FAC} Final at ${rng.toFixed(1)} NM, ${fmtAlt(a.alt)} ft (+10). Practice PAR ${a.pars}/${APP_MAX_PARS}${a.pars >= APP_MAX_PARS ? ', full stop' : ''}.`);
+      if (a.pars >= APP_MAX_PARS) pilotSay(a, `${FAC} Final, ${a.tel}, this will be a full stop.`, `${FAC} Final, ${a.telSay}, this will be a full stop.`);
       if (G.selected === a) selectAc(null);
     } else if (Math.abs(a.e) > (G.viewE || APP_RANGE) + 3 || Math.abs(a.n) > (G.viewN || APP_RANGE) + 3) {   // rectangular scope: leaves 3 NM beyond the displayed edge
       a.phase = 'gone'; a.removeAt = G.t; G.missed++;
@@ -4064,7 +4065,7 @@ function appExecute(p, src) {
   selectAc(a); a.lastTx = G.t;
   { const snap = snapTx(a), sc0 = G.score, rec = { a, t: G.t, snap, dScore: 0, irreversible: p.cmds.some(c => c.k === 'purple') }; G.lastTx = rec; queueMicrotask(() => { rec.dScore = G.score - sc0; }); }
   log('ctl', `${a.cs}${p.cs ? '' : ' (selected)'}: "${p.raw.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${p.cmds.length ? p.cmds.map(cmdStr).join('; ') : '??'}`);
-  if (a.firstTx) { a.firstTx = false; if (p.stinger && !MC) award(a, 'cs', 'Stinger Approach'); }   // never penalized
+  if (a.firstTx) { a.firstTx = false; if (p.stinger && !MC) award(a, 'cs', 'Gator Approach'); }   // never penalized
   const rb = [], rbSay = []; let marked = false, secRb = 0;
   for (const c of p.cmds) {
     if (MC && !a.parArr && ['sector', 'purple', 'cca', 'button', 'climbOut', 'pos', 'rid', 'landChk', 'dirty'].includes(c.k)) { log('sys', `${cmdStr(c)}: not used on the Marshal scope (Approach only).`); continue; }
@@ -4209,7 +4210,7 @@ function appPanel() {
   const hint = $('hint');
   hint.style.display = G.d.hints ? 'block' : 'none';
   if (G.d.hints && MC) { const eEx = G.eatBase != null ? String(G.eatBase).padStart(2, '0') : '12'; hint.innerHTML = `💡 Click a target to accept it, assign marshal + EAT ("<b>${G.selected ? G.selected.tel : 'Gunfighter two one'}</b>, Case three recovery, LH2 approach with CCA final, marshal ${radA(30)} at 2, angels 2, BRC ${BRC3}, outbound bearing ${h3z(MAR.outbound())}, expected approach time ${eEx}"), and broadcast "<b>99 weather</b>" (1 pt per marshal bird; repeat when new birds arrive). Each marshal bird commences from ${radA(30)} at 2 at the EAT you assign.`; }
-  else if (G.d.hints) hint.innerHTML = `💡 Vector your launches onto the final approach course (FB ${BRC3}, inbound from ${hdg3(norm(BRC + 180))}) and descend them to 3,000 ft or below inside 3 NM to hand them to ${SHIP_NAME} Final. Aircraft launch from ${SHIP_NAME} one at a time (every 4–6 min), fly up to ${APP_MAX_PARS} practice PARs (low approach, then back to you) and recover full stop on the last. After each check-in, your first altitude must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets (−5 if not). Call <b>radar contact</b> within 2 NM of the ship (−5 if later). To slow down: ${G.selected && G.selected.phase === 'app' ? (isHelo(G.selected) ? `${G.selected.tel} (helo): "<b>perform landing checks</b>"` : `${G.selected.tel} (jet): "<b>dirty up</b>"`) : 'helos "<b>perform landing checks</b>", jets "<b>dirty up</b>"'}.`;
+  else if (G.d.hints) hint.innerHTML = `💡 Vector your launches onto the final approach course (FB ${BRC3}, inbound from ${hdg3(norm(BRC + 180))}) and descend them to 3,000 ft or below inside 3 NM to hand them to ${FAC} Final. Aircraft launch from ${SHIP_NAME} one at a time (every 4–6 min), fly up to ${APP_MAX_PARS} practice PARs (low approach, then back to you) and recover full stop on the last. After each check-in, your first altitude must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets (−5 if not). Call <b>radar contact</b> within 2 NM of the ship (−5 if later). To slow down: ${G.selected && G.selected.phase === 'app' ? (isHelo(G.selected) ? `${G.selected.tel} (helo): "<b>perform landing checks</b>"` : `${G.selected.tel} (jet): "<b>dirty up</b>"`) : 'helos "<b>perform landing checks</b>", jets "<b>dirty up</b>"'}.`;
   $('scopeStatus').textContent = `${MC ? 'MARSHAL' : 'APPROACH'} · ${SHIP_NAME.toUpperCase()} · RED · FB ${BRC3} · ${APP_RANGE} NM · WIND ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   
   const list = G.ac.filter(appCtl).sort((p, q) => appRng(p) - appRng(q));

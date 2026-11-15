@@ -449,7 +449,7 @@ function draw(now) {
   ctx.lineWidth = 1;
   { const E = edge(Math.sin(sw), Math.cos(sw)); ctx.strokeStyle = 'rgba(160,255,175,0.75)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.sin(sw) * E, cy - Math.cos(sw) * E); ctx.stroke(); }
   ctx.fillStyle = W.hl.ship ? '#ffbf3c' : '#cfe8d2'; ctx.beginPath(); ctx.moveTo(cx, cy - 9); ctx.lineTo(cx + 4, cy - 3); ctx.lineTo(cx + 4, cy + 8); ctx.lineTo(cx - 4, cy + 8); ctx.lineTo(cx - 4, cy - 3); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = W.hl.ship ? '#ffbf3c' : 'rgba(207,232,210,0.7)'; ctx.fillText('STINGER', cx + 8, cy + 18);
+  ctx.fillStyle = W.hl.ship ? '#ffbf3c' : 'rgba(207,232,210,0.7)'; ctx.fillText('WASP', cx + 8, cy + 18);
   for (const a of W.acs) {
     if (a.landed) { a.hit = null; continue; }
     const Qp = P(a.paint.x, a.paint.y); a.hit = { x: Qp[0], y: Qp[1] };
@@ -679,7 +679,7 @@ const STEPS = [
   { ch: 0, id: 'meet', type: 'name', range: 15, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
     say: `<p>Hey there, and welcome! I'm <b>Aero</b>, your Personal Air Traffic Control Guide for this training.</p><p>Think of me as your coach in the headset. I'll show you how to read the radar scope, teach you the radio calls controllers use, and let you know the moment you nail one. Mess something up? No problem. I'll explain it and we'll run it again.</p><p>I'll be right here with you the whole way, from your first look at the scope to bringing a jet aboard the ship.</p><p>First things first: what should I call you? Your name or a callsign works.</p>` },
   { ch: 0, id: 'welcome', type: 'info', range: 15, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
-    say: () => `<p>Alright, <b>${esc(userName())}</b>, welcome aboard <b>USS Stinger</b>. Tonight you're working your first <b>night recovery</b>: bringing aircraft back aboard the ship in the dark.</p><p>At night pilots can't see much, so they rely on <b>you</b>, the controller, watching them on radar and talking them home.</p><p>We'll do it in four short chapters: <b>the scope</b>, <b>the flow</b>, <b>phraseology</b>, then a real <b>mission</b>. Let's get to work.</p><p><span class="ui">Tap <b>Next</b> (or press Enter) when you're ready.</span></p>` },
+    say: () => `<p>Alright, <b>${esc(userName())}</b>, welcome aboard <b>USS Wasp</b>. Tonight you're working your first <b>night recovery</b>: bringing aircraft back aboard the ship in the dark.</p><p>At night pilots can't see much, so they rely on <b>you</b>, the controller, watching them on radar and talking them home.</p><p>We'll do it in four short chapters: <b>the scope</b>, <b>the flow</b>, <b>phraseology</b>, then a real <b>mission</b>. Let's get to work.</p><p><span class="ui">Tap <b>Next</b> (or press Enter) when you're ready.</span></p>` },
   // ---------- Chapter A: the scope ----------
   { ch: 1, id: 'scope1', type: 'info', watch: true, range: 15, hl: { ship: true }, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
     say: `<p>This is your <b>radar scope</b>. Picture a map seen from straight above, with <b>north at the top</b>.</p><p>The <span class="k">ship</span> is always in the center. The bright rotating line is the <b>sweep</b>, the radar antenna turning. Each time it passes an aircraft, the target <b>jumps</b> to its new spot. That's why targets move in little steps.</p>` },
@@ -772,7 +772,7 @@ const STEPS = [
     hint: 'Lightning 21, take speed two zero zero', good: 'The speed in the block drops from 25 to 20 as it slows.' },
   // ---------- Final mission ----------
   { ch: 4, id: 'm0', type: 'info', range: 15, course: true, acs: [LT24({ x: 7, y: -11, hdg: 270, alt: 4000, spd: 250, freq: 'silver' })],
-    pilot: 'Stinger Approach, Lightning 24, one three miles southeast of mother, angels four, request PAR approach, full stop.',
+    pilot: 'Gator Approach, Lightning 24, one three miles southeast of mother, angels four, request PAR approach, full stop.',
     say: `<p>This is it. <b>Lightning 24</b>, an F-35, just checked in with you on <b class="f-silver">Approach</b>. Your job: get it lined up, hand it to Final, then talk it all the way down to the deck.</p><p>The dashed purple line is the <b>final approach course</b>. Ships land into the wind, so tonight final comes from the south, heading <b>360</b>.</p>` },
   { ch: 4, id: 'm1', type: 'voice', range: 15, course: true, keep: true, acs: [LT24({ x: 7, y: -11, hdg: 270, alt: 4000, spd: 250, freq: 'silver' })],
     say: `<p>Final approach starts at <b>1,200 feet</b>, which is angels one point two.</p>`, task: `🎯 Descend Lightning 24 to <b>angels 1.2</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'alt', v: 1200 }] },
@@ -802,7 +802,7 @@ const STEPS = [
   { ch: 5, id: 'pf4', type: 'info', range: 10, course: true, par: true, watch: true, hl: { ranges: true }, acs: [LT24({ x: 0, y: -5, hdg: 360, alt: Math.round(5 * NM_FT * GP_TAN + 60), spd: 150, freq: 'purple', trackCL: true, gpOn: true })],
     say: `<p><b>Your job on Final</b> is a steady stream of short calls, all the way down:</p><p><span class="ex">Course: "on course", "slightly left of course"…<br>Glidepath: "on glidepath", "slightly above glidepath"…<br>Range, every mile: "four miles", "three miles"…</span></p><p>The pilot answers with just the <b>callsign</b> and keeps flying.</p><p>Close in comes the <b>deck call</b>, which clears the aircraft to land. Jets get "<b>three-quarter mile, call the ball</b>". The pilot answers "<b>Lightning 24, ball, state 4.9</b>" (the state is the fuel left, in thousands of pounds), and that reply is the landing clearance. Helicopters get "<b>one mile, go green</b>" instead.</p>` },
   { ch: 5, id: 'm5', type: 'info', range: 10, course: true, par: true, acs: [LT24({ x: -0.05, y: -8, hdg: 360, alt: 1200, spd: 150, freq: 'purple' })],
-    pilot: 'Stinger Final, Lightning 24, eight miles, level one thousand two hundred, heading three six zero.',
+    pilot: 'Gator Final, Lightning 24, eight miles, level one thousand two hundred, heading three six zero.',
     say: `<p>Your turn. <b>You</b> are the <b class="f-purple">Final controller</b>, and Lightning 24 just checked in on Purple at 8 miles.</p><p>Remember: a course call like "<b>left of course</b>" says where the aircraft <i>is</i> (below the line in the azimuth view), so the pilot corrects back to the <b>right</b>. You can add a heading to fix it faster: "<b>come right heading …</b>".</p>` },
   { ch: 5, id: 'm6', type: 'voice', range: 10, course: true, par: true, acs: [LT24({ x: -0.2, y: -6.8, hdg: 356, alt: 1200, spd: 150, freq: 'purple' })],
     say: `<p>Uh oh: in the azimuth view it's sitting <b>well below</b> the course line, far from it. It's <b>well left</b> of course.</p><p>Give the course call, and you can add a <b>heading</b> to bring it back, the way Final does it: "well left of course, <b>come right heading zero one zero</b>".</p>`,
@@ -1207,11 +1207,11 @@ function onEvent(kind, a) {
 function renderDone() {
   const got = GRADED.filter(s => res[s.id] === 1).length, tot = GRADED.length, pct = got / tot;
   const stars = pct >= 0.85 ? 3 : pct >= 0.6 ? 2 : 1;
-  $('say').innerHTML = `<p><b>Mission complete.</b> Lightning 24 is safely aboard USS Stinger. Welcome to the team, ${esc(userName())}.</p>`;
+  $('say').innerHTML = `<p><b>Mission complete.</b> Lightning 24 is safely aboard USS Wasp. Welcome to the team, ${esc(userName())}.</p>`;
   $('task').innerHTML = `<div class="row"><button id="bAgain">↺ Restart intro</button><button id="bResult">Show results</button></div>`;
   $('bAgain').onclick = restart; $('bResult').onclick = renderDone;
   updNav();
-  openOv(`<h1>MISSION COMPLETE</h1><h2>First night recovery · USS Stinger</h2>
+  openOv(`<h1>MISSION COMPLETE</h1><h2>First night recovery · USS Wasp</h2>
     <div class="stars" aria-label="${stars} of 3 stars">${'★'.repeat(stars)}<span class="e">${'★'.repeat(3 - stars)}</span></div>
     <p>${got} of ${tot} tasks right on the first try.</p>
     <p>${stars === 3 ? 'Outstanding. You\'re ready for the real trainers.' : stars === 2 ? 'Solid work. A few reps on the trainers and you\'ll be sharp.' : 'You got it aboard, and that\'s what counts. Replay the intro any time.'}</p>
@@ -1239,7 +1239,7 @@ $('bVoice').onclick = () => toggleVoicePanel();
 fillSpeed(); $('spdSel').onchange = () => setSpeed($('spdSel').value);
 $('vClose').onclick = () => toggleVoicePanel(false);
 $('vSel').onchange = () => { try { localStorage.setItem(LS_VOICE, $('vSel').value); } catch (e) {} loadVoices(); hush(); speak(`Hi ${userName()}, this is how I'll sound.`, 'mentor'); };
-$('vTest').onclick = () => { hush(); if (muted) setMute(false); speak(`Hi ${userName()}, I'm Aero, your Personal Air Traffic Control Guide. Let's bring them home.`, 'mentor'); speak('Stinger Approach, Lightning two four, angels four.', 'pilot'); };
+$('vTest').onclick = () => { hush(); if (muted) setMute(false); speak(`Hi ${userName()}, I'm Aero, your Personal Air Traffic Control Guide. Let's bring them home.`, 'mentor'); speak('Gator Approach, Lightning two four, angels four.', 'pilot'); };
 $('bRestart').onclick = () => { if (confirm('Restart the intro from the beginning? Your progress will be cleared.')) restart(); };
 $('ov').addEventListener('keydown', e => { if (e.key === 'Escape' && STEPS[cur].type === 'done') closeOv(); });
 cv.addEventListener('pointerdown', e => {
@@ -1275,7 +1275,7 @@ buildProg(); setMute(muted); resize(); requestAnimationFrame(frame);
   setScene(STEPS[cur], true); updProg(); $('say').innerHTML = sayOf(STEPS[cur]); updNav();
   // nothing speaks until the first tap (iOS needs a user gesture for audio)
   const go = `style="background:#123f1a;border-color:var(--g);color:#d8ffde;font-weight:bold"`;
-  openOv(`<h1>FIRST NIGHT ABOARD STINGER</h1><h2>A guided intro to air traffic control</h2>
+  openOv(`<h1>FIRST NIGHT ABOARD USS WASP</h1><h2>A guided intro to air traffic control</h2>
     <p>No experience needed. <b>Aero</b>, your Personal Air Traffic Control Guide, will teach you to <b>read the radar scope</b> and <b>talk like a controller</b>. Then you'll bring an aircraft aboard the ship yourself, by voice.</p>
     <p class="small">About 10 minutes · progress saves automatically · 🔊 voices on (toggle with the speaker button or M)</p>
     <div class="btns">${resume ? `<button id="ovGo" ${go}>Continue: ${CHAPTERS[STEPS[cur].ch]}, step ${cur + 1}</button><button id="ovRe">↺ Restart from the beginning</button>` : `<button id="ovGo" ${go}>Meet Aero ▸</button>`}</div>`);

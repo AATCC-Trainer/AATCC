@@ -13,7 +13,7 @@ const VOCAB = ('arc arcing inbound turning abeam above acknowledge adjust alert 
   'expected father feet final from further farther gear glidepath going green gyro half heading hear height identification immediately increase ' +
   'instructions knots land landing left maintain make mark marshal mile miles minimum minimums missed monitor mother normal outbound outs ' +
   'over perform port prepare proceed purple quarter radar radial rate recovery reduce report right roger runway sector should sight signal ' +
-  'silver slightly slow speed spot squawk standard standby starboard state steady stinger stop surveillance switch take this threshold time ' +
+  'silver slightly slow speed spot squawk standard standby starboard state steady stinger gator stop surveillance switch take this threshold time ' +
   'touchdown tower traffic transmissions transmission turn turns type upwind vectors wave weather well wheels will wind winds with your ' +
   'read radio verify fuel frequency normally prifly boss ship say fly see red blue final approach clock oclock tally north south east west ' +
   'northbound southbound eastbound westbound northeast northwest southeast southwest direction miles feet leg base rate further ' +
@@ -25,13 +25,15 @@ const NUMW = new Set(('zero oh o one won two to too three tree four for fore fow
   'point half quarter dot').split(' '));
 const NATO = new Set('alpha alfa bravo charlie delta echo foxtrot fox golf hotel india juliet juliett kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey whisky xray yankee zulu'.split(' '));
 // default callsign names (the scopes pass their own list too)
-const CALLSIGNS = ['lightning', 'lightening', 'nighthawk', 'viper', 'vipers', 'piper', 'venom', 'eagle', 'eagles', 'ridge', 'gunfighter', 'gunfighters', 'charger', 'chargers', 'stinger', 'wasp'];
+const CALLSIGNS = ['lightning', 'lightening', 'nighthawk', 'viper', 'vipers', 'piper', 'venom', 'eagle', 'eagles', 'ridge', 'gunfighter', 'gunfighters', 'charger', 'chargers', 'stinger', 'gator', 'gators', 'wasp'];
 // recognizer sound-alikes the scopes already map themselves (left alone so their own fixers keep working)
-const KEEP = new Set(['angles', 'angle', 'angel', 'angus', 'ankles', 'people', 'pupil', 'sliver', 'martial', 'marshall', 'comments', 'cooper', 'coper', 'stringer', 'singer', 'stinker']);
+const KEEP = new Set(['angles', 'angle', 'angel', 'angus', 'ankles', 'people', 'pupil', 'sliver', 'martial', 'marshall', 'comments', 'cooper', 'coper', 'stringer', 'singer', 'stinker', 'gaiter', 'gaiters', 'gater']);
 
 /* ---------- 1. known sound-alikes (phrase level, from the notes in the phrase list) ---------- */
 const NW = '(?:\\d+|zero|oh|one|won|two|to|too|three|tree|four|for|fore|five|fife|six|seven|eight|ate|nine|niner)';
 const ALIASES = [
+  // v102: self-ID "Gator" and its recognizer near-misses, only right before a position name (so a plain "later" is untouched)
+  [/\b(?:gaiters?|gaters?|gators?|gator's|gator s|gaitor|gayter|gator|later|alligator)\s*,?\s+(marshal+|marshall|martial|approach(?:es)?|final)\b/g, 'gator $1'],
   // permanent frequency colors: never "blue"
   [/\bgo(?:\s+to)?\s+(?:blue|blew)\b/g, 'go silver'],
   [/\b(?:goal|gold|go\s+on|grow)\s+(silver|red|purple|copper)\b/g, 'go $1'],
