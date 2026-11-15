@@ -7,6 +7,7 @@
 <script src="bg-clock.js"></script>
 <script src="pilot-voice.js"></script>
 <script src="shorthand.js"></script>
+<script src="splat-t.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Marshal</title>
@@ -907,6 +908,7 @@ function newGame(diffKey, opts = {}) {
   };
   G.gateAt = rand(FIRST_GAP[0], FIRST_GAP[1]);
   try { GP.clear(); } catch (e) {}   // no geopoints carry over between simulations
+  try { window.SplatT && SplatT.clear(); } catch (e) {}   // SPLAT-T lines are per simulation
   logEl.innerHTML = '';
   setScale(1); setPaused(false);
   log('sys', `${d.name}: ${'Marshal, ' + SHIP_NAME + ', BRC ' + BRC3}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${APP ? (MC_MORE_ARRIVALS ? 'Arrivals check in for marshal every 4–5 min;' : 'Three waves: flight of two at 20 NM, single CCA arrival at 10 NM (270–090), then a second flight of two at 20 NM;') + ' press End to finish.' : G.toSpawn + ' arrivals.'}`);
@@ -2463,7 +2465,7 @@ const TUT = [
    <li>Chrome's speech recognition <b>needs an internet connection</b>, because the audio goes to Google's speech service.</li>
    <li>If the mic is blocked on a <b>file://</b> page, serve the folder locally: open a terminal in the folder with this file and run<br><code>python -m http.server</code><br>then open <code>http://localhost:8000/marshal-controller.html</code></li>
    <li>Allow the microphone when the browser asks. You can test it under ⚙ Voice → Test microphone.</li></ul>`],
-  ['4. Keys', `<p><span class="kbd">Space</span> hold to talk · <span class="kbd">P</span> pause · <span class="kbd">1</span>/<span class="kbd">2</span> = 1x/2x speed · <span class="kbd">Tab</span> select next aircraft · <span class="kbd">Enter</span> type a command · <span class="kbd">?</span> this help · <span class="kbd">L</span> cycle layout · <span class="kbd">Esc</span> close.</p>
+  ['4. Keys', `<p><span class="kbd">Space</span> hold to talk · <span class="kbd">P</span> pause · <span class="kbd">1</span>/<span class="kbd">2</span> = 1x/2x speed · <span class="kbd">Tab</span> select next aircraft · <span class="kbd">Enter</span> type a command · <span class="kbd">?</span> this help · <span class="kbd">L</span> cycle layout · <span class="kbd">Esc</span> close.</p><p><b>SPLAT-T</b> (range/bearing line): point at a target and press <span class="kbd">T</span>: a dashed line follows the mouse with the bearing from the aircraft and the range (e.g. <code>LT21 045/12.3 NM</code>). Press <span class="kbd">T</span> again to hold it: the far end stays fixed on that spot and the line stays on the aircraft, so the numbers update as it flies. <span class="kbd">C</span> over a line's aircraft or end clears that line; <span class="kbd">C</span> anywhere else on the scope clears them all. The keys only work with the mouse on the scope and the command box empty, so typing a command is never affected. Lines clear on a new sim.</p>
    <p>Tip: start on <b>Training</b>. The amber hint box shows a good next call; just read it out loud.</p>`]
 ];
 const tutPage = i => TUT[i];
@@ -2513,7 +2515,7 @@ const px5 = v => Math.round(v) + 0.5;
 
 function draw(now) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  if (APP) { drawApp(now); return; }
+  if (APP) { drawApp(now); if (window.SplatT) try { ctx.setTransform(DPR, 0, 0, DPR, 0, 0); SplatT.draw(); } catch (e) { console.error('splat-t', e); } return; }
   glow(false);
   // screen: dark indigo with a very soft vignette
   ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
@@ -4226,6 +4228,16 @@ function drawApp(now) {
     a.hitR = appCtl(a) ? { x: Q[0], y: Q[1], bx: bx - 2, by: by - 12, bw: tw + 4, bh: 28 } : null;   // blip or data text selects
   }
 }
+
+/* ---------- SPLAT-T (splat-t.js): hover a target + T = range/bearing line, T again = hold, C = clear ---------- */
+if (window.SplatT) SplatT.attach({
+  canvas, ctx: () => ctx,
+  toScreen: (e, n) => { const { sc } = appView(W, H); return [W / 2 + e * sc, H / 2 - n * sc]; },
+  toWorld: (x, y) => { const { sc } = appView(W, H); return [(x - W / 2) / sc, (H / 2 - y) / sc]; },
+  aircraft: () => !G ? [] : G.ac.filter(a => a.phase === 'app' && a.st !== 'dep' && !a.cone && !(a.sq === false && a.priCut)).map(a => { const p = a.paint || a; return { id: a, e: p.e, n: p.n, cs: a.cs }; }),
+  enabled: () => !!G && startOv.classList.contains('hidden') && helpOv.classList.contains('hidden') && setOv.classList.contains('hidden'),
+  simKey: () => G,
+});
 
 /* ===================== main loop ===================== */
 let last = performance.now();
