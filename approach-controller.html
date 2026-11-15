@@ -802,9 +802,12 @@ window.__land = () => LAND && { seed: LAND.seed, coasts: LAND.coasts, islands: L
 window.__brc = () => BRC; window.__tbrc = () => TBRC;   // test hooks
 window.__makeLand = s => makeLand(s);
 function setBRC(v) {   // random BRC per simulation start; everything course-related derives from it
+  let prev3 = null; try { prev3 = BRC3 + '/' + (typeof TBRC !== 'undefined' ? h3z(TBRC) : ''); } catch (e) {}
   BRC = norm(v) % 360 || 360; RWY = BRC; BRC_OFF = BRC - 270; BRC3 = h3z(BRC); BRC_SAY = sayDigits(BRC3);
   RWY_NUM = String(Math.round(BRC / 10) || 36).padStart(2, '0'); RWY_SAY = sayDigits(RWY_NUM);
   CLIMB_JET.hdg = norm(BRC - 90); CLIMB_HELO.hdg = norm(BRC + 90);
+  let now3 = null; try { now3 = BRC3 + '/' + (typeof TBRC !== 'undefined' ? h3z(TBRC) : ''); } catch (e) {}
+  if (prev3 !== now3) { try { applyPhrUI(); } catch (e) {} try { if (typeof shipInfoUI === 'function') shipInfoUI(); } catch (e) {} }   // v104: on-screen BRC / outbound follow the current BRC
 }
 const FB = () => BRC, DWH = () => norm(TBRC + 180) % 360 || 360;   // opposite of the TRUE BRC (display/handoff only)
 // course frame: (le, ln) = (e, n) rotated so the final course is inbound 180 from the north (the original geometry)

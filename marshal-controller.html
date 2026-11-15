@@ -840,9 +840,11 @@ function landLayer(cx, cy, RX, RY, sc) {   // offscreen pre-render, rebuilt only
 window.__land = () => LAND && { seed: LAND.seed, coasts: LAND.coasts, islands: LAND.islands, polys: LAND.polys, stats: LAND.stats };
 window.__makeLand = s => makeLand(s);
 function setBRC(v) {   // random BRC per simulation start; everything course-related derives from it
+  let prev3 = null; try { prev3 = BRC3 + '/' + h3z(TBRC); } catch (e) {}
   BRC = norm(v) % 360 || 360; RWY = BRC; BRC_OFF = BRC - 270; BRC3 = h3z(BRC); BRC_SAY = sayDigits(BRC3);
   RWY_NUM = String(Math.round(BRC / 10) || 36).padStart(2, '0'); RWY_SAY = sayDigits(RWY_NUM);
   CLIMB_JET.hdg = norm(BRC - 90); CLIMB_HELO.hdg = norm(BRC + 90);
+  if (prev3 !== BRC3 + '/' + h3z(TBRC)) { try { applyPhrUI(); } catch (e) {} try { shipInfoUI(); } catch (e) {} }   // v104: subtitle / intro / typed example follow the current BRC (random roll, ship turns)
 }
 const radA = r => h3z(BRC + r);   // relative marshal radial (LH tables) -> spoken magnetic radial (030 at BRC 360)
 const FB = () => BRC, DWH = () => norm(TBRC + 180) % 360 || 360;   // opposite of the TRUE BRC (display/handoff only)
@@ -1990,6 +1992,9 @@ function mcFixSpeech(t) {   // forgiving marshal-flow wording: common speech-to-
     s = s.replace(reT, (m, nm, tn, u) => nm + ' ' + (TNW[tn.toLowerCase()] + (u ? NW[u.toLowerCase()] : 0)) + ' ');
     const reE = new RegExp('\\b(' + wc + ')\\s+(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen)(?=\\s|,|$)', 'gi');
     s = s.replace(reE, (m, nm, te) => nm + ' ' + TEW[te.toLowerCase()] + ' ');
+    const three = G.ac.some(a => String(a.tel || '').split(/\s+/)[0] === w && /\d{3}$/.test(a.cs));   // v104: helo callsigns have 3 digits ("Ridge one one three")
+    if (three) s = s.replace(new RegExp('\\b(' + wc + ')\\s+((?:\\d|' + NWR + ')[\\s-]+(?:\\d|' + NWR + ')[\\s-]+(?:\\d|' + NWR + '))(?=\\s|,|$)', 'gi'),
+      (m, nm, ds) => { const dig = ds.trim().split(/[\s-]+/).map(x => /^\d$/.test(x) ? x : NW[x.toLowerCase()]); if (dig.some(x => x == null)) return m; const n = dig.join(''); return G.ac.some(a => a.cs.endsWith(n)) ? nm + ' ' + n + ' ' : m; });
     const re = new RegExp('\\b(' + wc + ')\\s+(\\b(?:\\d|' + NWR + ')[\\s,-]+(?:\\d|' + NWR + '))(?=\\s|,|$)', 'gi');   // two single digits
     s = s.replace(re, (m, nm, ds) => { const parts = ds.trim().split(/[\s,-]+/); const dig = parts.map(x => /^\d+$/.test(x) ? x : NW[x.toLowerCase()]); if (dig.some(x => x == null)) return m;
       return nm + ' ' + dig.join('') + ' '; });
@@ -3440,6 +3445,7 @@ const MAR = {
     EMER: { jet: false, name: 'EMER', marR: 90, faf: 3, map: 0.5 },
   },
   EMER_R: [45, 90, 135], EMER_ALT: { 5: 1500, 6: 2000, 7: 2500, 8: 3000, 9: 3500, 10: 4000, 11: 4500, 12: 5000 },
+  TOL: 10,   // v104: degrees a stated BRC / outbound bearing may be off and still be accepted
   HELO_MIN: 1500, HELO_MIN_MIXED: 2500, HOLD_LEG: 60, PTS_OK: 10, PEN: 5,
   pt(R, D) { const r = R * DEG; return [-D * Math.sin(r), -D * Math.cos(r)]; },   // relative radial -> local (e, n)
   lb(e, n) { return norm(Math.atan2(e, n) / DEG); },
@@ -3471,7 +3477,22 @@ const MAR = {
     if (near(R, 45) || near(R, 135)) return 'EMER';
     return near(R, 90) ? 'LH4' : null;
   },
-  outbound() { return norm(BRC + 180 + 30) % 360 || 360; },   // DWH + 30 (DWH = BRC + 180); assumed for all LH types for now
+  outbound(base) { return norm((base != null ? base : BRC) + 180 + 30) % 360 || 360; },
+  /* v104: BRCs the controller may legitimately be using right now: the current one, and during / up to 3 min after a ship turn the one before it
+     (and the one the ship is turning to). Final-bearing frame: FB = TBRC - MV. */
+  bases() {
+    const out = [BRC], rec = G && G.shipTurns && G.shipTurns[G.shipTurns.length - 1];
+    if (rec && (rec.steady == null || G.t - rec.steady <= 180)) { out.push(norm(rec.from - MV) % 360 || 360); if (rec.to != null) out.push(norm(rec.to - MV) % 360 || 360); }
+    return out;
+  },
+  validRel(R, type) { const near = (x, y) => Math.abs(angDiff(x, y)) <= 5, t = this.T[type]; return t ? (type === 'EMER' ? this.EMER_R.some(r => near(R, r)) : near(R, t.marR)) : [30, 45, 90, 135, 180].some(r => near(R, r)); },
+  /* v104: spoken (magnetic) radial -> relative radial. Normal case: spoken = BRC + relative. Also accepted without penalty:
+     the radial worked out from the BRC before a ship turn, and the bare relative value ("marshal 030 at 2" whatever the BRC). */
+  relRadial(Rabs, type) {
+    for (const b of this.bases()) { const r = norm(Rabs - b) % 360; if (this.validRel(r, type)) return r; }
+    if (this.validRel(Rabs % 360, type)) return Rabs % 360;
+    return norm(Rabs - BRC) % 360;
+  },   // DWH + 30 (DWH = BRC + 180); assumed for all LH types for now
   fixD(type, alt) { const t = this.T[type]; return type === 'LH3' ? alt / 1000 + 15 : t ? t.marD : null; },
   mixed(a) { return G.ac.some(x => x !== a && x.phase === 'app' && x.mar && x.mar.alt && isHelo(x) !== isHelo(a)); },
   // marshal rules -> list of problems ([] = correct)
@@ -3565,7 +3586,7 @@ const MAR = {
     if (/\b(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?final(?:\s+controller)?\b/.test(s)) out.hoFinal = true;
     { const g = s.match(/\bgo(?:\s+(?:to|2))?\s+(purple|purpel|copper|cooper|coper|silver|sliver|silvar|blue|red|read|redd)(?:\s+(?:buttons?|for\s+final|to\s+final|final|approach|marshal+))?\b/); if (g) { let f = g[1]; if (/^purp|^people|^pupil/i.test(f)) f = 'purple'; else if (/^cop|^coop/i.test(f)) f = 'copper'; else if (/^sil|^sliv|^blue/i.test(f)) f = 'silver'; else if (/^red|^read/i.test(f)) f = 'red'; if (f === 'silver') { out.hoApp = true; out.hoFreq = 'silver'; } else if (f === 'red') { out.hoMar = true; out.hoFreq = 'red'; } else { out.hoFinal = true; out.hoFreq = f; } } }
     if (/\b(?:execute\s+)?missed\s+approach\b/.test(s) && !out.marshal) out.missed = true;
-    if (out.marshal && out.marshal.R != null) out.marshal.R = norm(out.marshal.R - BRC) % 360;   // spoken radial is BRC + relative value
+    if (out.marshal && out.marshal.R != null) out.marshal.R = this.relRadial(out.marshal.R, out.type);   // spoken radial is BRC + relative value (v104: tolerant, see relRadial)
     return (out.type || out.marshal || out.eat != null || out.cleared || out.commence || out.missed || out.rpt3 || out.rptTi || out.rptArc || out.hoFinal || out.hoApp || out.hoMar) ? out : null;
   },
   trigger: /\b(?:go(?:\s+(?:to|too|two))?\s+(?:purple|copper|silver|sliver|blue|red|read|redd)\b|report\s+(?:3|three)\s*(?:miles?|nm|dme)?\s+outbound|report\s+commenc|report\s+turning\s+inbound|report\s+arcing|cleared\s+(?:for\s+)?(?:the\s+)?approach|(?:contact|switch(?:\s+to)?|over\s+to)\s+(?:the\s+)?(?:final|approach)|case\s+(?:[1-3]|one|two|three|i{1,3})\s+recovery|(?:(?:expected|expect|push|commence)\s+)?approach\s+time|(?:expected|expect|push|commence)\s+time|\beat\s+(?:is\s+|at\s+)?(?:\d|zero|oh|one|two|three|four|five|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)|marshal+|martial|commence|missed\s+approach|emergency\s+(?:marshal|approach)|lh\s*-?\s*[1-5]|lima\s+hotel|l\.?\s*h\.?\s*-?\s*(?:[1-5]|one|two|three|four|five)\b|el\s+h\s)/i,
@@ -3619,10 +3640,12 @@ const MAR = {
       says.push(`expected approach time ${this.dg(String(m.eat).padStart(2, '0'))}`);
       log('sys', `${a.cs} expected approach time set to :${String(m.eat).padStart(2, '0')} (will commence and report commencing at :${String(m.eat).padStart(2, '0')}).`);
     }
-    if (m.outbound != null) { const ob = this.outbound(); M.outbound = m.outbound;
-      if (Math.abs(angDiff(m.outbound, ob)) > 2) { G.score -= this.PEN; log('bad', `−${this.PEN}: ${a.cs} outbound bearing ${h3z(m.outbound)} is wrong: should be ${h3z(ob)} (DWH ${h3z(norm(BRC + 180))} + 30).`); Sound.buzz(); }
+    if (m.outbound != null) { const ob = this.outbound(), okOb = this.bases().some(b => Math.abs(angDiff(m.outbound, this.outbound(b))) <= this.TOL);
+      M.obRel = norm(m.outbound - BRC) % 360; if (okOb) M.obRel = 210; M.outbound = null;   // v104: kept relative to BRC so it turns with the ship
+      if (!okOb) { G.score -= this.PEN; log('bad', `−${this.PEN}: ${a.cs} outbound bearing ${h3z(m.outbound)} is wrong: should be ${h3z(ob)} (DWH ${h3z(norm(BRC + 180))} + 30).`); Sound.buzz(); }
       parts.push(`outbound ${h3z(m.outbound)}`); }
-    if (m.brc != null && Math.abs(angDiff(m.brc, BRC)) > 2) { G.score -= this.PEN; log('bad', `−${this.PEN}: BRC given to ${a.cs} as ${h3z(m.brc)}; BRC is ${BRC3}.`); Sound.buzz(); }
+    if (m.brc != null && !this.bases().some(b => Math.abs(angDiff(m.brc, b)) <= this.TOL)) {   // v104: a few degrees off (or the BRC from just before a ship turn) is accepted
+      G.score -= this.PEN; log('bad', `−${this.PEN}: BRC given to ${a.cs} as ${h3z(m.brc)}; BRC is ${BRC3}.`); Sound.buzz(); }
     if (m.caseN != null && m.caseN !== 3) log('warn', `${a.cs}: marshal ops here are Case III (heard Case ${m.caseN}).`);
     if (m.rptComm) M.rptComm = true;
     if (m.cleared) {
@@ -3716,7 +3739,7 @@ const MAR = {
     queueMicrotask(() => { if (a.mar === M && M.ph === 'turnF') this.phEvt(a); });   // LH-3 starts on the turn onto the final bearing
     if (M.alt == null) M.alt = Math.round(a.alt / 100) * 100;
     a.tgtSpd = isHelo(a) ? Math.min(a.tgtSpd, 120) : Math.min(a.tgtSpd, 250);
-    const obMag = M.outbound || this.outbound();
+    const obMag = M.obRel != null ? norm(BRC + M.obRel) % 360 || 360 : (M.outbound || this.outbound());
     log('sys', `${a.cs} commencing ${this.T[type].name === 'EMER' ? 'emergency (LH-4 profile)' : this.T[type].name} approach at ${h3z(BRC + fR)}/${fD} (outbound bearing ${h3z(obMag)}).`);
   },
   missed(a) {
@@ -3745,7 +3768,7 @@ const MAR = {
   },
   step(a) {
     const M = a.mar, p = this.loc(a), r = Math.hypot(p[0], p[1]), b = this.lb(p[0], p[1]), dt = G.t - (M.t0 || 0), O = [0, 0], t = this.T[M.run] || null;
-    const obMag = M.outbound || this.outbound(), obL = norm(obMag - BROT());   // local course of outbound bearing (30 when BRC 360 & outbound 210)
+    const obMag = M.obRel != null ? norm(BRC + M.obRel) % 360 || 360 : (M.outbound || this.outbound()), obL = norm(obMag - BROT());   // local course of outbound bearing (30 when BRC 360 & outbound 210)
     if (M.run && M.rpt3 && !M.rpt3Done && this.along(O, obL, p) >= 3 && Math.abs(angDiff(b, obL)) <= 35 && /^(out1|out2|out5)$/.test(M.ph || '')) {
       M.rpt3Done = true; if (a.st === 'ctl') { this.say(a, 'established in outbound bearing'); log('sys', `${a.cs} 3 NM outbound bearing ${h3z(obMag)}.`); } }
     if (a.st === 'mfinal' && M.ph === 'final' && t && (r <= t.map || p[1] < 0)) { a.phase = 'gone'; a.removeAt = G.t; M.ph = null; log('good', `${a.cs} recovered aboard ${SHIP_NAME} (${t.name}, Final).`); return; }
