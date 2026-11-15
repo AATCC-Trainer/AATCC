@@ -33,6 +33,7 @@ const CODES = [
   [new RegExp('^c' + NUM + '$'), SC, (m, s) => takeOr('climb', m[1], s.sc), 'c3', 'take angels 3 (Final: climb and maintain feet; c1500 = feet)'],
   [new RegExp('^d' + NUM + '$'), SC, (m, s) => takeOr('descend', m[1], s.sc), 'd1.2', 'take angels 1.2 (Final: descend and maintain feet)'],
   [/^s(\d{2,3})$/, SC, (m, s) => s.sc === 'final' ? `maintain ${m[1]} knots` : `take speed ${m[1]}`, 's250', 'take speed 250 (Final: maintain 250 knots)'],
+  [new RegExp('^rl' + NUM + '$'), MA, m => `report level angels ${m[1]}`, 'rl3', 'report level angels 3 (climbs or descends, reports level)'],   // v101
   [/^as(\d{2,3})?$/, MA, m => 'take approach speed' + (m[1] ? ' ' + m[1] : ''), 'as140', 'take approach speed 140 (jets dirty up, helos landing checks)'],
   [/^bu$|^sb$|^buster$/, SC, () => 'signal buster', 'bu / sb', 'signal buster'],
   // ---- frequencies (permanent colors) ----
@@ -237,7 +238,15 @@ function attach(opt) {
     prev.textContent = '';
   }, true);
 }
-const api = { expand, attach, scopeCmd, shortCs, assignLetters, letterSub, table: sc => tableFor(sc).map(c => ({ code: c[3], meaning: c[4] })), CODES };
+/* v101: every code with its scopes and real expansion (playbook + index list it, so the pages stay in sync with this table) */
+function rows() {
+  return CODES.map(c => {
+    const label = c[3], first = label.split(' / ')[0], sc = c[1][0];
+    let ex = ''; try { const r = expand(first, { scope: sc }); ex = r && r.shorthand ? r.text : ''; } catch (e) {}
+    return { code: label, meaning: c[4], scopes: c[1].slice(), expands: ex };
+  });
+}
+const api = { expand, rows, attach, scopeCmd, shortCs, assignLetters, letterSub, table: sc => tableFor(sc).map(c => ({ code: c[3], meaning: c[4] })), CODES };
 if (typeof window !== 'undefined') window.Shorthand = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

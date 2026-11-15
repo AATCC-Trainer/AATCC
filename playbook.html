@@ -43,6 +43,12 @@ main{padding:14px 16px 60px}
 mark{background:#3a3a10;color:#fff3a0}
 .legend{font-size:12px;color:var(--dim);margin-top:8px}
 .legend span{margin-right:14px}
+.shi{color:var(--dim);font-size:13px;margin:6px 0 10px}.shi b{color:#eaffee}
+.shr{display:grid;grid-template-columns:92px 1fr auto;gap:4px 12px;align-items:baseline;background:var(--card);border:1px solid var(--line);border-left:3px solid var(--g);padding:7px 10px;margin:6px 0}
+.shr code{color:#ffd27a;font:bold 14px monospace;word-break:break-all}.shr .m{color:#eaffee}.shr .p{font-size:11px;color:var(--dim);white-space:nowrap}
+.shr .p i{font-style:normal;margin-left:6px}
+.tabs button[data-s=shorthand].on{border-color:#ffd27a}
+@media (max-width:560px){.shr{grid-template-columns:76px 1fr}.shr .p{grid-column:2;white-space:normal}}
 @media (max-width:560px){.row{grid-template-columns:1fr}.row b{padding-top:4px}}
 @media print{
   header .bar,.tabs,#count,.legend{display:none!important}
@@ -61,14 +67,15 @@ mark{background:#3a3a10;color:#fff3a0}
 </style></head><body>
 <header><div class="wrap">
 <h1>Phraseology Playbook <span style="font-size:12px;color:#ffd27a;letter-spacing:0">PROTOTYPE</span></h1>
-<div class="sub">The radio calls each trainer position understands, when to use them, and what the sim pilot says back. Spoken calls only (typed shorthand codes are on the code card). Trainer guidance, not an official publication. <a href="index.html">← Home</a></div>
+<div class="sub">The radio calls each trainer position understands, when to use them, and what the sim pilot says back. Spoken calls, plus a <a href="#shorthand" id="lShort">Shorthand</a> tab with every typed code. Trainer guidance, not an official publication. <a href="index.html">← Home</a></div>
 <div class="bar"><input id="q" type="search" placeholder="Search calls, e.g. glidepath, go purple, commencing…" autocomplete="off" aria-label="Search phraseology"><button class="btn" id="bClear" type="button">Clear</button><button class="btn" id="bPrint" type="button">🖨 Print</button></div>
 <div class="tabs" role="tablist">
-<button type="button" data-s="all" class="on">All</button><button type="button" data-s="general">General</button><button type="button" data-s="marshal"><span class="red">Marshal</span></button><button type="button" data-s="approach"><span class="slv">Approach</span></button><button type="button" data-s="final"><span class="prp">Final</span>/<span class="cop">PAR</span></button>
+<button type="button" data-s="all" class="on">All</button><button type="button" data-s="general">General</button><button type="button" data-s="marshal"><span class="red">Marshal</span></button><button type="button" data-s="approach"><span class="slv">Approach</span></button><button type="button" data-s="final"><span class="prp">Final</span>/<span class="cop">PAR</span></button><button type="button" data-s="shorthand">Shorthand</button>
 </div>
 <div class="legend"><span class="say">Controller says</span><span class="ph">&lt;placeholder&gt;</span><span class="ex">Example</span><span class="rb">Pilot says / replies</span></div>
 </div></header>
 <main><div class="wrap"><div id="count"></div><div id="out"></div></div></main>
+<script src="shorthand.js"></script>
 <script>
 (function () {
 'use strict';
@@ -88,17 +95,18 @@ var E = [
  { s: 'general', t: 'Turn to a heading', w: 'Vectoring. Say the heading digit by digit.', c: '<callsign>, turn <left|right> heading <heading>', e: 'Lightning two one, turn left heading two seven zero.', r: 'Lightning two one.', n: '"Come right heading…" also works. A turn with no usable 3-digit heading gets "Lightning two one, unable." and nothing changes.' },
  { s: 'general', t: 'Fly heading', w: 'Vectoring when the direction of turn does not matter: the aircraft turns the shorter way onto the heading.', c: '<callsign>, fly heading <heading>', e: 'Eagle one six, fly heading zero niner zero.', r: 'Eagle one six.', n: 'Say "turn left / right heading …" when the turn direction matters. On Final use "come left / right heading …".' },
  { s: 'general', t: 'Take angels (climb or descend)', w: 'Altitude changes on Marshal and Approach, up or down. Angels are thousands of feet.', c: '<callsign>, take angels <angels>', e: 'Eagle one six, take angels three.', r: 'Eagle one six.', n: 'The same call works for a climb or a descent ("take angels one point two" = 1,200 ft). Out of range (below 1,000 ft, above 12,000 helo / 30,000 jet): "Eagle one six, unable angels …". The older "climb / descend and maintain angels …" is still understood. Final keeps feet ("climb and maintain two thousand").' },
- { s: 'general', t: 'Take speed', w: 'Spacing and sequencing on Marshal and Approach.', c: '<callsign>, take speed <knots>', e: 'Lightning two one, take speed two two zero.', r: 'Lightning two one.', n: 'Below the aircraft\'s slowest speed (130 kt once dirty, 100 kt after landing checks) or too fast: "Lightning two one, unable speed …". "Reduce speed to … knots" and "maintain … knots" still work.' },
+ { s: 'general', t: 'Take speed', w: 'Spacing and sequencing on Marshal and Approach.', c: '<callsign>, take speed <knots>', e: 'Lightning two one, take speed two two zero.', r: 'Lightning two one.', n: 'Below the aircraft\'s slowest speed (130 kt once dirty, 100 kt after landing checks) or too fast: "Lightning two one, unable speed …". "Reduce speed to … knots" and "maintain … knots" still work. Take speed is immediate only; the delayed form ("in five miles …" / "in thirty seconds …") works for take approach speed.' },
  { s: 'general', t: 'Take approach speed', w: 'Marshal and Approach: slow an aircraft to its approach speed and configure it, now or later.', c: '<callsign>, take approach speed <knots>  |  in <miles> miles take approach speed <knots>  |  in <seconds> seconds take approach speed <knots>', e: 'Lightning two one, in five miles take approach speed one four zero.', r: 'Lightning two one.', n: 'Jets 130–170 kt (gear and flaps down, like "dirty up"); helos 70–130 kt (like "perform landing checks"). "In <miles> miles" = after the aircraft has flown that many more miles; "in <seconds> seconds" = after that many seconds. Any new speed call cancels a pending one. Outside the range: "unable speed …".' },
  { s: 'general', t: 'Radar contact off mother', w: 'Marshal and Approach: tell the pilot you have it on radar, with its radial and range from the ship.', c: '<callsign>, off mothers <radial> at <miles>, radar contact', e: 'Ridge three one one, off mothers two one zero at one two, radar contact.', r: 'Ridge three one one, radar contact.', n: 'Read the radial and range off the scope. "Off off mothers…" is understood too.' },
  { s: 'general', t: 'Say type', w: 'Marshal and Approach: ask what the aircraft is.', c: '<callsign>, say type', e: 'Ridge three one one, say type.', r: 'Ridge three one one, CH-53E.' },
  { s: 'general', t: 'Report level', w: 'Marshal and Approach: you only have a primary target (no altitude readout) and want a call when it reaches its altitude.', c: '<callsign>, report level angels <angels>', e: 'Viper four five two, report level angels two.', r: 'Viper four five two.  …when level: "Viper four five two, level angels two."', n: 'If it is already level it reports right away. If <angels> is a new altitude, the aircraft also climbs or descends to it. A later altitude change cancels the report.' },
  { s: 'general', t: 'Say angels', w: 'Marshal and Approach: check an aircraft\'s altitude.', c: '<callsign>, say angels', e: 'Ridge three one one, say angels.', r: 'Ridge three one one, angels two.', n: 'Below 1,000 ft the pilot answers in feet.' },
- { s: 'general', t: 'Say state (fuel)', w: 'Marshal and Approach: check fuel state, in thousands of pounds.', c: '<callsign>, say state', e: 'Gunfighter five seven, say state.', r: 'Gunfighter five seven, state four point five.' },
+ { s: 'general', t: 'Say state (fuel)', w: 'Marshal and Approach: check fuel state, in thousands of pounds.', c: '<callsign>, say state', e: 'Gunfighter five seven, say state.', r: 'Gunfighter five seven, state four, five.', n: 'Fuel state is thousands of pounds, spoken digit by digit with a pause for the decimal: 4.9 is "state four, niner", 5.0 is "state five, zero".' },
  { s: 'general', t: 'Say callsign', w: 'You are not sure who called or the callsign was garbled.', c: '<callsign>, say callsign', e: 'Lightning two one, say callsign.', r: 'Lightning two one.' },
  { s: 'general', t: 'Mark your father (position check)', w: 'Marshal and Approach: ask the pilot for a bearing and range from the ship.', c: '<callsign>, mark your father', e: 'Viper four five two, mark your father.', r: 'Viper four five two, two one zero for eight.' },
  { s: 'general', t: 'Traffic advisory', w: 'Another aircraft is close. Information only; the pilot does not maneuver.', c: '<callsign>, traffic, <clock> o\'clock, <miles> miles, <direction>bound, <type>, angels <angels>', e: 'Lightning two one, traffic, two o\'clock, five miles, northbound, F-35, angels three.', r: 'Lightning two one, tally-ho.', n: '"Traffic" must be the first word after the callsign.' },
  { s: 'general', t: 'Squawk normal', w: 'An aircraft shows as a primary return only (no data block), e.g. a wingman or the one primary-only arrival per sim.', c: '<callsign>, squawk normal', e: 'Eagle one seven, squawk normal.', r: 'Eagle one seven.', n: '"Squawk <code>" (e.g. "squawk four five two one") also brings the data block back.' },
+ { s: 'general', t: 'Chained calls (one transmission)', w: 'Any position: give several instructions or questions in one call, in any order, after the callsign.', c: '<callsign>, <call>, <call>, <call> …', e: 'Eagle four eight, squawk normal, case three recovery, LH2 approach with CCA final, marshal zero three zero at two one, angels six, BRC three six zero, outbound bearing two one zero, expected approach time one five.', r: 'Eagle four eight.', n: 'The pilot carries out every call he understood and reads back once, callsign only. Questions in the same call get one combined answer, callsign first: "Ridge three one one, say type, say angels" gets one reply like "Ridge three one one, CH-53E, angels two". A full Case III marshal call counts as one unit. If one part is not understood the rest still happens; "unable" only for a value out of limits (e.g. "Lightning two one, unable speed …"). Typed shorthand chains too: ea48 sqn 030/21 a6 brc360 ob210 eat15.' },
  { s: 'general', t: 'Correction', w: 'You misspoke in the middle of a call.', c: '<callsign>, <wrong words>, correction, <right instruction>', e: 'Lightning two one, turn left heading two seven zero, correction, turn right heading two seven zero.', r: 'Lightning two one.', n: '"Correction" is the only correction word (not "negative"). Everything before the last "correction" is disregarded; the callsign carries over. A call that starts with "correction" within about 10 seconds of your last call to that aircraft undoes that call.' },
  { s: 'general', t: 'Roger', w: 'Acknowledge a pilot report (e.g. "see you", "established"). No action.', c: 'Roger', e: 'Roger.', r: '(no action)' },
  { s: 'general', t: 'Ship turn: mother in a turn', w: 'The ship starts turning (about every 10 minutes on every position; the instructor can change the interval or turn the ship). Broadcast to everyone on frequency.', c: 'Ninety-nine, mother is in a <port|starboard> turn, standby for new BRC', e: 'Ninety-nine, mother is in a port turn, standby for new BRC.', r: 'No readback (sometimes one pilot answers "roger").', n: 'Scored on Marshal, Approach and Final. Use the turn direction shown on the scope banner.' },
@@ -106,7 +114,7 @@ var E = [
  { s: 'general', t: 'Frequency changes', w: 'Sending an aircraft to another position. Colors are fixed: Marshal Red, Approach Silver, Final Purple and Copper.', c: '<callsign>, go <red|silver|purple|copper>', e: 'Lightning two one, go purple.', r: 'Lightning two one.', n: 'Callsign-only on every position. "Contact final controller" also hands an aircraft to Final.' },
  { s: 'general', t: 'When the pilot says "unable"', w: 'Not a call you make: what the pilot\'s "unable" means.', c: '(pilot) <callsign>, unable', e: 'Lightning two one, unable.', r: '—', cr: 'Fix the call and say it again.', n: 'The sim could not use the call (nothing understood, or a turn with no valid heading), or the value is out of limits ("unable angels …", "unable speed …"). Marshal: "unable, not on the approach" (handoff or missed approach before commencing). Final: "unable, full stop", "unable, practice approach", "unable, request climb out / starboard delta", "unable heading, no gyro". The callsign always comes first. Fix the call and say it again.' },
  /* ---------------- Marshal ---------------- */
- { s: 'marshal', t: 'Check-in (pilot calls you)', w: 'An arrival or flight of two checks in. Click its target to accept it before you answer.', c: '(pilot) Stinger Marshal, <callsign>, [flight of two, <wingman>,] <bearing> for <miles>, angels <angels>, state <fuel>, <souls> souls on board', e: 'Stinger Marshal, Gunfighter two one, flight of two, Gunfighter two two, two one zero for ten, angels six, state five point zero, two souls on board.', r: '—', cr: 'Accept the target, then give the marshal instructions (full call, below).', n: 'One arrival per sim checks in from about 6 NM and asks for a CCA approach: work that one with the Approach calls (radar contact, angels 1.2 / 1, vectors for CCA, go purple).' },
+ { s: 'marshal', t: 'Check-in (pilot calls you)', w: 'An arrival or flight of two checks in. Click its target to accept it before you answer.', c: '(pilot) Stinger Marshal, <callsign>, [flight of two, <wingman>,] <bearing> for <miles>, angels <angels>, state <fuel>, <souls> souls on board', e: 'Stinger Marshal, Gunfighter two one, flight of two, Gunfighter two two, two one zero for ten, angels six, state five, zero, two souls on board.', r: '—', cr: 'Accept the target, then give the marshal instructions (full call, below).', n: 'One arrival per sim checks in from about 6 NM and asks for a CCA approach: work that one with the Approach calls (radar contact, angels 1.2 / 1, vectors for CCA, go purple).' },
  { s: 'marshal', t: '99 weather', w: 'Once marshal aircraft are on frequency: the Case III weather broadcast. One point per marshal aircraft that hears it.', c: 'Ninety-nine, Stinger Marshal, weather <conditions>', e: 'Ninety-nine, Stinger Marshal, weather, ceiling eight hundred overcast, visibility two miles, altimeter two niner niner two.', r: 'No readback.', n: 'The sim listens for "ninety-nine" and "weather"; the rest is your brief.' },
  { s: 'marshal', t: 'Marshal instructions (full call)', w: 'After check-in: the whole Case III assignment in one call.', c: '<callsign>, case three recovery, <LH-#> approach with CCA final, marshal <radial> at <DME>, angels <angels>, BRC <BRC>, outbound bearing <bearing>, expected approach time <minutes>', e: 'Gunfighter two one, case three recovery, LH2 approach with CCA final, marshal zero three zero at two, angels two, BRC three six zero, outbound bearing two one zero, expected approach time one two.', r: 'Gunfighter two one.', n: 'Radials are relative to BRC. Outbound bearing = DWH + 30. Jets: LH-1 030/4, LH-2 030/2, LH-3 180/(angels+15), minimum angels 2. Helos: LH-4 090/7, LH-5 030/2, minimum 1,500 ft. "Emergency approach" for the emergency helo marshal. The pilot holds quietly at the fix.' },
  { s: 'marshal', t: 'Expected approach time', w: 'Give or change an aircraft\'s EAT on its own.', c: '<callsign>, expected approach time <minutes>', e: 'Eagle one six, expected approach time one eight.', r: 'Eagle one six.', n: 'The aircraft commences at its marshal fix at that minute and says "commencing".' },
@@ -120,7 +128,7 @@ var E = [
  { s: 'marshal', t: 'Handoff to Approach', w: 'Send an aircraft to Approach (Silver).', c: '<callsign>, go silver', e: 'Eagle one six, go silver.', r: 'Eagle one six.', n: 'Cancels any LH procedure in progress. With Link Marshal ↔ Approach ON, the Approach page takes it and it checks in on Silver; otherwise it just leaves Marshal frequency.' },
  { s: 'marshal', t: 'Radar vectors (cancels the procedure)', w: 'You need to take an aircraft off its LH procedure.', c: '<callsign>, turn <left|right> heading <heading>', e: 'Eagle one six, turn right heading one two zero.', r: 'Eagle one six.', n: 'Any heading, altitude, sector or go-purple call cancels the LH procedure and the aircraft is on radar vectors.' },
  /* ---------------- Approach ---------------- */
- { s: 'approach', t: 'Check-in (pilot calls you)', w: 'A launch from the ship checks in. Click its target to accept it.', c: '(pilot) Stinger Approach, <callsign>, airborne, state <fuel>, <souls> souls on board, request practice PAR approach', e: 'Stinger Approach, Lightning two one, airborne, state four point five, two souls on board, request practice PAR approach.', r: '—', cr: '<callsign>, Stinger Approach, radar contact', n: 'After a low approach it checks in again "off the low approach" with its position from mother.' },
+ { s: 'approach', t: 'Check-in (pilot calls you)', w: 'A launch from the ship checks in. Click its target to accept it.', c: '(pilot) Stinger Approach, <callsign>, airborne, state <fuel>, <souls> souls on board, request practice PAR approach', e: 'Stinger Approach, Lightning two one, airborne, state four, five, two souls on board, request practice PAR approach.', r: '—', cr: '<callsign>, Stinger Approach, radar contact', n: 'After a low approach it checks in again "off the low approach" with its position from mother.' },
  { s: 'approach', t: 'Radar contact', w: 'First call after check-in, within 2 NM of the ship (later costs points). Saying "Stinger Approach" in the first call scores too.', c: '<callsign>, Stinger Approach, radar contact', e: 'Lightning two one, Stinger Approach, radar contact.', r: 'Lightning two one.' },
  { s: 'approach', t: 'Radar contact with position', w: 'Radar identification by position; graded against the real range and bearing.', c: '<callsign>, radar contact, <miles> miles <direction> of mother', e: 'Lightning two one, radar contact, five miles northeast of mother.', r: 'Lightning two one.' },
  { s: 'approach', t: 'First altitude after check-in', w: 'The first altitude you give: angels 1.2 for jets, angels 1 for helos.', c: '<callsign>, take angels <1.2|1>', e: 'Lightning two one, take angels one point two.', r: 'Lightning two one.' },
@@ -149,7 +157,7 @@ var E = [
  { s: 'final', t: 'Low altitude alert', w: 'The aircraft keeps sinking below the glidepath and glidepath calls do not stop it. All four parts are required.', c: 'Low altitude alert, <callsign>, check your altitude immediately, altimeter two niner niner two', e: 'Low altitude alert, Lightning two one, check your altitude immediately, altimeter two niner niner two.', r: 'Lightning two one, climbing.', n: 'The pilot answers even after "do not acknowledge", then climbs back to the glidepath on its own; no further glidepath calls are needed for the recovery. Incomplete alerts are not accepted. +5 when it is really sinking, −3 when it is not.' },
  { s: 'final', t: 'Check wheels down', w: 'If you did not say "wheels should be down" in the contact call.', c: 'Check wheels down', e: 'Check wheels down.', r: 'Lightning two one.' },
  { s: 'final', t: 'Deck call: helicopter (landing clearance)', w: 'Full-stop helicopter at about one mile, before half a mile.', c: 'One mile, go green', e: 'One mile, go green.', r: 'Nighthawk three two five, going green.', n: 'The reply is the landing clearance. Without a deck call by half a mile the deck is fouled and the pilot waves off.' },
- { s: 'final', t: 'Deck call: jet (landing clearance)', w: 'Full-stop jet at about three-quarter mile.', c: 'Three-quarter mile, call the ball', e: 'Three-quarter mile, call the ball.', r: 'Lightning two one, ball, state four point nine.', n: '"Roger ball" is optional. "Deck is clear, cleared to land spot seven" is also accepted as the clearance.' },
+ { s: 'final', t: 'Deck call: jet (landing clearance)', w: 'Full-stop jet at about three-quarter mile.', c: 'Three-quarter mile, call the ball', e: 'Three-quarter mile, call the ball.', r: 'Lightning two one, ball, state four, niner.', n: '"Roger ball" is optional. "Deck is clear, cleared to land spot seven" is also accepted as the clearance.' },
  { s: 'final', t: 'Practice approach: jet climb out', w: 'Practice approach, jet, at one mile (instead of the deck call).', c: 'One mile, execute climb outs, go silver', e: 'One mile, execute climb outs, go silver.', r: 'Lightning two one.', n: 'Climbs to 1,200 ft with a left turn and comes back for another approach. To a full-stop aircraft: "Lightning two one, unable, full stop."' },
  { s: 'final', t: 'Practice approach: helo starboard delta', w: 'Practice approach, helicopter, at one mile.', c: 'One mile, enter starboard delta, go green', e: 'One mile, enter starboard delta, go green.', r: 'Nighthawk three two five.', n: 'Climbs to 1,000 ft with a right turn. Wrong call for the type: "Nighthawk three two five, unable, request starboard delta" (jets: "…, unable, request climb out").' },
  { s: 'final', t: 'Over the deck, contact Tower', w: 'Full stop, inside half a mile.', c: 'Over the deck … contact Tower', e: 'Over the deck. Lightning two one, contact Tower.', r: 'Lightning two one.' },
@@ -188,8 +196,29 @@ function card(e) {
        : '<div class="row"><b>Pilot reply</b><span class="rb">' + hi(esc(e.r)) + '</span></div>') +
     (e.n ? '<div class="note">' + hi(esc(e.n)) + '</div>' : '') + '</div>';
 }
+var SHP = { marshal: '<i class="red">Marshal</i>', approach: '<i class="slv">Approach</i>', final: '<i class="prp">Final</i>' };
+function shRows() { try { return (window.Shorthand && Shorthand.rows) ? Shorthand.rows() : []; } catch (e) { return []; } }
+var KEYS = [
+ { code: 'T', meaning: 'SPLAT-T: point at an aircraft and press T to start a range/bearing line, T again to hold it (end fixed, still anchored to the aircraft). Marshal, Approach, Instructor scopes.', scopes: ['keys'] },
+ { code: 'C', meaning: 'SPLAT-T: clear the line under the pointer (its aircraft or its end), otherwise clear all lines.', scopes: ['keys'] },
+ { code: 'gsp', meaning: 'Scope command (not a radio call): ground speed on every data block, on/off.', scopes: ['keys'] },
+ { code: '?', meaning: 'Typed alone + Enter in the command box: opens this code list on the scope.', scopes: ['keys'] }
+];
+function shMatch(r) { if (!q) return true; var t = (r.code + ' ' + r.meaning + ' ' + (r.expands || '') + ' ' + r.scopes.join(' ')).toLowerCase(); return q.toLowerCase().split(/\s+/).filter(Boolean).every(function (w) { return t.indexOf(w) >= 0; }); }
+function shRow(r) { return '<div class="shr"><code>' + hi(esc(r.code)) + '</code><span class="m">' + hi(esc(r.meaning)) + '</span><span class="p">' + r.scopes.map(function (x) { return SHP[x] || ''; }).join('') + '</span></div>'; }
+function renderShort() {
+  var rows = shRows().filter(shMatch), keys = KEYS.filter(shMatch);
+  var html = '<section class="sec" id="shSec"><h2>Shorthand commands <span style="font-size:12px;color:var(--dim)">(' + rows.length + ')</span></h2>' +
+    '<p class="shi">Typed in the scope\'s command box only (voice never uses them). Start with a callsign: <b>lt21</b> = Lightning 21, <b>ea48</b>, helos 3 digits <b>vn312</b>, or just the digits <b>21</b>, or an accepted aircraft\'s letter (<b>A h270</b>); leave it off to talk to the selected aircraft. Chain codes with spaces: <b>lt21 l180 ta1.2 du</b> -> "Lightning 21, turn left heading 180, take angels 1.2, dirty up". Codes exist only for calls the aircraft acts on right away; questions, delayed calls and tower calls are typed in full. The list is read live from the trainer\'s shorthand table.</p></section>' +
+    (rows.length ? rows.map(shRow).join('') : '<div class="empty">No codes match “' + esc(q) + '”.</div>') +
+    (keys.length ? '<section class="sec"><h2>Scope keys</h2><p>Keyboard tools on the scopes. T/C only act while the pointer is over the scope and the command box is empty.</p></section>' + keys.map(function (k) { return '<div class="shr"><code>' + hi(esc(k.code)) + '</code><span class="m">' + hi(esc(k.meaning)) + '</span><span class="p"></span></div>'; }).join('') : '');
+  $('out').innerHTML = html;
+  $('count').textContent = rows.length + ' of ' + shRows().length + ' shorthand codes' + (q ? ' matching “' + q + '”' : '');
+  return rows.length;
+}
 function render() {
   var html = '', shown = 0;
+  if (tab === 'shorthand') { renderShort(); tabCounts(); return; }
   SECTIONS.forEach(function (S) {
     if (tab !== 'all' && tab !== S.id) return;
     var list = E.filter(function (e) { return e.s === S.id && match(e); });
@@ -199,8 +228,11 @@ function render() {
   });
   $('out').innerHTML = html || '<div class="empty">No calls match “' + esc(q) + '”. Try fewer words, or the All tab.</div>';
   $('count').textContent = shown + ' of ' + E.length + ' calls' + (q ? ' matching “' + q + '”' : '') + (tab !== 'all' ? ' · ' + POSN[tab] : '');
+  tabCounts();
+}
+function tabCounts() {
   document.querySelectorAll('.tabs button').forEach(function (b) {
-    var n = b.dataset.s === 'all' ? E.filter(match).length : E.filter(function (e) { return e.s === b.dataset.s && match(e); }).length;
+    var n = b.dataset.s === 'shorthand' ? shRows().filter(shMatch).length : b.dataset.s === 'all' ? E.filter(match).length : E.filter(function (e) { return e.s === b.dataset.s && match(e); }).length;
     var sp = b.querySelector('.n'); if (!sp) { sp = document.createElement('span'); sp.className = 'n'; b.appendChild(sp); } sp.textContent = n;
   });
 }
@@ -211,9 +243,10 @@ var prevTab = null;
 $('bPrint').onclick = function () { window.print(); };
 addEventListener('beforeprint', function () { prevTab = tab; tab = 'all'; var pq = q; q = ''; render(); q = pq; });
 addEventListener('afterprint', function () { if (prevTab) tab = prevTab; render(); });
-var h = (location.hash || '').slice(1); if (POSN[h]) { tab = h; document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('on', x.dataset.s === h); }); }
+var h = (location.hash || '').slice(1); if (POSN[h] || h === 'shorthand') { tab = h; document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('on', x.dataset.s === h); }); }
 render();
-window.__playbook = { entries: E, sections: SECTIONS };
+window.__playbook = { entries: E, sections: SECTIONS, shorthand: shRows };
+$('lShort').onclick = function (e) { e.preventDefault(); var b = document.querySelector('.tabs button[data-s=shorthand]'); if (b) b.click(); };
 })();
 </script>
 </body></html>

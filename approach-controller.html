@@ -171,12 +171,6 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
   <div id="scopeWrap"><canvas id="scope"></canvas><div id="infoBlk" class="ib"></div><div id="tbBlk" class="ib"></div><div id="starBlk"><span class="sm"></span><span class="st">*</span><input id="starIn" spellcheck="false" autocomplete="off" autocapitalize="characters"></div><div id="shipBanner"></div></div>
   <button id="mptt" type="button">HOLD<br>TO<br>TALK</button><div id="mStat"></div>
   <div id="panel">
-    <div class="box stats">
-      <div><b id="stScore">0</b><span>Score</span></div>
-      <div><b id="stLanded">0</b><span>Landed</span></div>
-      <div><b id="stMissed">0</b><span>Missed/Fail</span></div>
-      <div><b id="stAcc">--</b><span>Call accuracy</span></div>
-    </div>
     <div class="row">
       <button id="bPause" title="Pause (P)">❚❚ Pause</button>
       <button id="bS1" class="on" title="1x (key 1)">1x</button>
@@ -1171,11 +1165,7 @@ function updatePar(a, dt) {
     }
     // ---- transmission gap
     const gapLim = a.phase === 'descent' ? G.d.gap : G.d.gap * 2;
-    if (G.t - a.lastTx > gapLim) {
-      a.gaps++; a.lastTx = G.t;
-      addPts(a, -5, `Transmission gap: ${Math.round(gapLim)} s without a call to ${a.cs}. On PAR final, keep talking!`, 'warn');
-      Sound.buzz();
-    }
+    // v101: no transmission-gap penalty (removed); only the lost-comms wave-off below remains
     if (G.t - a.lastRealTx > gapLim * 2.6) {
       { const t = ph('lost communications, waving off', 'lost communications, executing missed approach'); pilotSay(a, `${a.tel}, ${t}.`, `${a.telSay}, ${t}.`, true); }
       doMissed(a, 'lost communications (no transmissions)', -30);
@@ -1264,8 +1254,8 @@ function finalize(a, landed, reason, practice) {
   const s = (done ? 40 : 0) + tolPts + a.pts;
   a.result = { cs: a.cs, landed, practice: !!practice, reason, score: s, grade: done ? gradeOf(s) : 'F', tol: Math.round(tolFrac * 100), good: a.accCalls, bad: a.badCalls, gaps: a.gaps, missedRange: a.missedRange };
   G.results.push(a.result); G.score += s;
-  if (landed) { G.landed++; log('good', `${a.cs} ${ph('ON DECK (spot ' + spotOf(a) + ')', 'LANDED')}. Approach grade ${a.result.grade}: ${s} pts (in tolerance ${a.result.tol}%, ${a.accCalls} good calls, ${a.badCalls} inaccurate, ${a.gaps} gaps).`); }
-  else if (practice) { G.practice++; log('good', `${a.cs} practice approach complete. Grade ${a.result.grade}: ${s} pts (in tolerance ${a.result.tol}%, ${a.accCalls} good calls, ${a.badCalls} inaccurate, ${a.gaps} gaps).`); }
+  if (landed) { G.landed++; log('good', `${a.cs} ${ph('ON DECK (spot ' + spotOf(a) + ')', 'LANDED')}. Approach grade ${a.result.grade}: ${s} pts (in tolerance ${a.result.tol}%, ${a.accCalls} good calls, ${a.badCalls} inaccurate).`); }
+  else if (practice) { G.practice++; log('good', `${a.cs} practice approach complete. Grade ${a.result.grade}: ${s} pts (in tolerance ${a.result.tol}%, ${a.accCalls} good calls, ${a.badCalls} inaccurate).`); }
   else G.missed++;
 }
 function doMissed(a, why, pts) {   // wave-offs cost nothing: the approach just ends (no landing bonus); pts is ignored
@@ -2096,13 +2086,13 @@ function refreshPanel(force) {
   const now = performance.now();
   if (!force && now - lastPanel < 200) return;
   lastPanel = now;
-  $('stScore').textContent = G.score + G.ac.filter(a => !a.result).reduce((s, a) => s + 0, 0);
-  $('stLanded').textContent = G.landed + (G.practice ? ` +${G.practice}P` : '');
-  $('stMissed').textContent = G.missed;
+  stSet('stScore', G.score + G.ac.filter(a => !a.result).reduce((s, a) => s + 0, 0));
+  stSet('stLanded', G.landed + (G.practice ? ` +${G.practice}P` : ''));
+  stSet('stMissed', G.missed);
   { const gb = $('gradeBox'); if (gb) { const L = G.ac.filter(a => a.phase === 'app' && a.st !== 'dep').map(a => `${a.cs.padEnd(8)} P${Math.min(a.cycle || 1, APP_MAX_PARS)} ` + GRADE_TASKS.map(([k]) => (a.tasks || {})[k] ? '✓' : '·').join('') + ` +${a.pts10 || 0}`);
     const t = 'GRADING  1 stgr 2 rc 3 alt 4 cca 5 btn 6 pos 7 co 8 slow\n' + (L.length ? L.join('\n') : '(no traffic)') + `\nSCORE ${G.score}`; if (gb.textContent !== t) gb.textContent = t; } }
   const tot = G.callsGood + G.callsBad;
-  $('stAcc').textContent = tot ? Math.round(100 * G.callsGood / tot) + '%' : '--';
+  stSet('stAcc', tot ? Math.round(100 * G.callsGood / tot) + '%' : '--');
   const a = G.selected;
   $('readout').textContent = readoutText(a);
   if (APP) { appPanel(); return; }
@@ -2251,6 +2241,7 @@ $('bAgain').onclick = () => startGame(lastDiff);
 $('bMenu').onclick = () => { endOv.classList.add('hidden'); prepBRC(); startOv.classList.remove('hidden'); };
 /* v99: end-of-sim grading as collapsible sections (all open by default) + Expand/Collapse all. Rows whose label starts
    with two spaces are details of the row above (conflicts, ship turns): each such group becomes its own section. */
+function stSet(id, v) { const e = document.getElementById(id); if (e) e.textContent = v; }   // v101: top stats readout removed; kept null-safe
 function gradeSections() {
   const tb = $('endTable'), lst = $('endList'); if (!tb || !lst) return;
   let box = $('endSecs'); if (!box) { box = document.createElement('div'); box.id = 'endSecs'; tb.parentNode.insertBefore(box, tb); }
@@ -2281,7 +2272,7 @@ function endGame() {
   $('endGrade').innerHTML = G.failMsg ? `<span style="color:var(--red)">${esc(G.failMsg)}</span><br><span style="font-size:14px;color:#cfcce6">Watch the lower safety limit line and call "${ph('wave off', 'go around')}" early.</span>` : (landedRes.length ? `Average landed approach: ${gradeOf(avg)} (${avg} pts)` : 'No landings this time. Keep practicing!');
   const rows = [['Level', G.d.name], ['Total score', G.score], ...(G.appConf != null || G.confPlan ? [[`Conflicts (−${SEP_STANDARDS.penalty} each)`, G.appConf || 0], ...(G.confDetail || []).map((t, i) => [`  ${i + 1}.`, t])] : []), ['Landed', G.landed], ...(G.practice ? [['Practice approaches', G.practice]] : []), ['Missed approaches / failures', G.missed], ['Crashes', G.crashes], ...((G.shipTurns || []).length ? [[`Ship turns (+${SHIP_TURN.bonus} per correct 99 call)`, `${G.shipTurns.length} turn(s), bonus +${G.shipBonus || 0}`], ...G.shipTurns.map((r, i) => [`  turn ${i + 1}: ${r.dir} ${r.deg}° → BRC ${h3z(r.to)}`, `turn call ${r.turnCall || 'missed'}, steady call ${r.steadyCall || 'missed'}`])] : []), ['Separation losses', G.sepLoss], ['Call accuracy', tot ? `${Math.round(100 * G.callsGood / tot)}% (${G.callsGood}/${tot})` : '--']];
   $('endTable').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
-  $('endList').innerHTML = '<table class="st">' + G.results.map(r => `<tr><td>${esc(r.cs)} · ${r.landed ? ph('on deck', 'landed') : r.practice ? 'practice approach' : esc(r.reason)}<br><span style="color:var(--dim);font-size:11px">tolerance ${r.tol}% · ${r.good} good / ${r.bad} bad calls · ${r.gaps} gaps · ${r.missedRange} missed range calls</span></td><td>${r.grade} · ${r.score}</td></tr>`).join('') + '</table>';
+  $('endList').innerHTML = '<table class="st">' + G.results.map(r => `<tr><td>${esc(r.cs)} · ${r.landed ? ph('on deck', 'landed') : r.practice ? 'practice approach' : esc(r.reason)}<br><span style="color:var(--dim);font-size:11px">tolerance ${r.tol}% · ${r.good} good / ${r.bad} bad calls · ${r.missedRange} missed range calls</span></td><td>${r.grade} · ${r.score}</td></tr>`).join('') + '</table>';
   try { gradeSections(); } catch (e) { console.error('grade sections', e); }
   endOv.classList.remove('hidden');
 }
@@ -3354,7 +3345,7 @@ function appPanel() {
   hint.style.display = G.d.hints ? 'block' : 'none';
   if (G.d.hints) hint.innerHTML = `💡 Vector your launches onto the final approach course (FB ${BRC3}, inbound from ${hdg3(norm(BRC + 180))}) and descend them to 3,000 ft or below inside 3 NM to hand them to ${SHIP_NAME} Final. Aircraft launch from ${SHIP_NAME} one at a time (every 4–6 min), fly up to ${APP_MAX_PARS} practice PARs (low approach, then back to you) and recover full stop on the last. After each check-in, your first altitude must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets (−5 if not). Call <b>radar contact</b> within 2 NM of the ship (−5 if later). To slow down: ${G.selected && G.selected.phase === 'app' ? (isHelo(G.selected) ? `${G.selected.tel} (helo): "<b>perform landing checks</b>"` : `${G.selected.tel} (jet): "<b>dirty up</b>"`) : 'helos "<b>perform landing checks</b>", jets "<b>dirty up</b>"'}.`;
   $('scopeStatus').textContent = `APPROACH · ${SHIP_NAME.toUpperCase()} · SILVER · FB ${BRC3} · ${APP_RANGE} NM · WIND ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
-  $('stLanded').textContent = G.landed; $('stLanded').nextElementSibling.textContent = 'Handed off';
+  
   const list = G.ac.filter(appCtl).sort((p, q) => appRng(p) - appRng(q));
   const html = list.map((x, i) => `<div class="strip${x === G.selected ? ' sel' : ''}" data-uid="${x.uid}"><span>${x.ltr || i + 1}</span><span>${x.cs} ${x.type}</span><span>${appRng(x).toFixed(0)}NM ${String(Math.round(x.alt / 100)).padStart(3, '0')}</span><span>${hdg3(Math.round(x.hdg))}${G.gsp ? ' ' + Math.round(x.gs) + 'KT' : ''}</span></div>`).join('');   // speed only after GSP
   if (stripsEl.innerHTML !== html) stripsEl.innerHTML = html;
