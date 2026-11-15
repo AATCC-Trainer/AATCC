@@ -295,6 +295,8 @@ const spotOf = a => 6 + (a.uid % 4);     // landing spot 6..9 (display/phrase on
 
 /* ===================== spoken numbers ===================== */
 const DIGW = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'niner'];
+/* v96: fuel state is spoken "state four, niner" (whole pounds, short pause, tenths), never "four point niner"; the text display keeps 4.9 */
+const fuelSpeech = s => String(s).replace(/\bstate\s+(\d+)\.(\d)\b/gi, (m, w, d) => 'state ' + String(w).split('').map(x => DIGW[+x]).join(' ') + ', ' + DIGW[+d]).replace(/\bstate\s+(\w+(?:\s\w+)?)\s+point\s+(\w+)\b/gi, 'state $1, $2');
 const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
 const TENW = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
 const sayDigits = s => String(s).split('').map(c => /\d/.test(c) ? DIGW[+c] : c).join(' ');
@@ -2014,7 +2016,7 @@ function pilotSay(a, text, say, force, routine, prio) {
   sayLog.push({ t: G ? G.t : 0, cs: a && a.cs, text, routine: !!routine, prio: !!prio });
   if (!S.voiceOut || !TTS || (pttDown && !prio)) return;   // priority calls are queued even while the mic is keyed
   try {
-    const u = new SpeechSynthesisUtterance(say || text);
+    const u = new SpeechSynthesisUtterance(fuelSpeech(say || text));
     const item = { u, routine: !!routine, prio: !!prio, t0: performance.now() };
     u.onend = () => { if (ttsCur === item) ttsNext(); };
     u.onerror = ev => { const c = ev && ev.error; if (c && c !== 'interrupted' && c !== 'canceled') vStatus('Speech output error: ' + c, true); if (ttsCur === item) ttsNext(); };
@@ -2437,7 +2439,7 @@ const TUT_SHIP = {
    <li>Every few seconds: "on course, on glidepath", "slightly above glidepath"… and a <b>range every mile</b>: "four miles", "one and a half miles". At <b>2 miles</b> the pilot reports "<b>Lightning two one, see you</b>" (no reply needed; "roger" is fine).</li>
    <li><b>Sinker:</b> on some approaches the aircraft starts sinking below the glidepath and glidepath calls won't stop it. Only "<b>Low altitude alert, Lightning two one, check your altitude immediately, altimeter two niner niner two</b>" does (pilot: "Lightning two one, climbing.", even after "do not acknowledge"); it then climbs back to the glidepath.</li>
    <li>If you didn't say "wheels should be down" on contact: "<b>check wheels down</b>". No separate landing clearance is needed: the deck call exchange below clears the aircraft to land ("deck is clear, cleared to land spot seven" is still accepted).</li>
-   <li><b>Deck call</b> (required before half a mile): helicopters (CH-53E, AH-1Z, UH-1Y, MH-60S) get "<b>one mile, go green</b>" (pilot: "<b>Nighthawk three two five, going green</b>"). Jets (F-35B, AV-8B) get "<b>three-quarter mile, call the ball</b>" (pilot: "<b>Lightning two one, ball, state four point nine</b>", the fuel state). That reply is the landing clearance: the aircraft may land. "Roger ball" is optional. Pilots make these replies even after "do not acknowledge".</li>
+   <li><b>Deck call</b> (required before half a mile): helicopters (CH-53E, AH-1Z, UH-1Y, MH-60S) get "<b>one mile, go green</b>" (pilot: "<b>Nighthawk three two five, going green</b>"). Jets (F-35B, AV-8B) get "<b>three-quarter mile, call the ball</b>" (pilot: "<b>Lightning two one, ball, state four, niner</b>", the fuel state). That reply is the landing clearance: the aircraft may land. "Roger ball" is optional. Pilots make these replies even after "do not acknowledge".</li>
    <li><b>Practice approaches</b>: at check-in each pilot states an intention: "…for the PAR to the ship, <b>full stop</b>" (FS) or "…<b>request multiple practice PARs</b>" (PRAC; shown in the side panel). A practice aircraft gets no deck call. At <b>one mile</b> instead: jets "<b>one mile, execute climb outs, go silver</b>" (pilot: "Lightning two one"; climbs to 1,200 ft, left turn to ${hdg3(CLIMB_JET.hdg)}); helicopters "<b>one mile, enter starboard delta, go green</b>" (pilot: "Nighthawk three two five"; climbs to 1,000 ft, right turn to ${hdg3(CLIMB_HELO.hdg)}). It then comes back around for another approach; after 1–3 practice approaches it checks in with "<b>this will be a full stop</b>" and lands.</li>
    <li>Full stop, inside half a mile: "<b>over the deck</b>", then "<b>contact Tower</b>" (or "Tower has you").</li></ol>
    <p>If you need to wave it off: "<b>wave off, wave off, climb and maintain two thousand, fly base recovery course ${BRC_SAY}</b>". No deck call (or spot clearance) by half a mile means a <b>fouled deck</b> and the pilot waves off.</p>`],

@@ -295,6 +295,8 @@ const spotOf = a => 6 + (a.uid % 4);     // landing spot 6..9 (display/phrase on
 
 /* ===================== spoken numbers ===================== */
 const DIGW = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'niner'];
+/* v96: fuel state is spoken "state four, niner" (whole pounds, short pause, tenths), never "four point niner"; the text display keeps 4.9 */
+const fuelSpeech = s => String(s).replace(/\bstate\s+(\d+)\.(\d)\b/gi, (m, w, d) => 'state ' + String(w).split('').map(x => DIGW[+x]).join(' ') + ', ' + DIGW[+d]).replace(/\bstate\s+(\w+(?:\s\w+)?)\s+point\s+(\w+)\b/gi, 'state $1, $2');
 const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
 const TENW = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
 const sayDigits = s => String(s).split('').map(c => /\d/.test(c) ? DIGW[+c] : c).join(' ');
@@ -1688,7 +1690,7 @@ function pilotSay(a, text, say, force, routine, prio) {
   sayLog.push({ t: G ? G.t : 0, cs: a && a.cs, text, routine: !!routine, prio: !!prio });
   if (!S.voiceOut || !TTS || (pttDown && !prio)) return;   // priority calls are queued even while the mic is keyed
   try {
-    const u = new SpeechSynthesisUtterance(String(say || text).replace(/\s*\n+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim());
+    const u = new SpeechSynthesisUtterance(fuelSpeech(String(say || text)).replace(/\s*\n+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim());
     const item = { u, routine: !!routine, prio: !!prio, t0: performance.now() };
     u.onend = () => { if (ttsCur === item) ttsNext(); };
     u.onerror = ev => { if (ev && ev.error && !/interrupted|canceled/.test(ev.error) && (MOBILE || ev.error !== 'not-allowed')) mStatus('Pilot voice error: ' + esc(ev.error) + (IOS ? ' (check the ringer/silent switch and volume)' : '')); if (ttsCur === item) ttsNext(); };
