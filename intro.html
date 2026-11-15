@@ -159,7 +159,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const SIM = 2;                 // intro clock runs at 2x so the story keeps moving (rates below are real per-second rates)
-const TURN_RATE = 3;           // deg/s, standard rate turn
+const TURN_RATE = 6;           // deg/s (v99: tactical-jet turn, was standard rate 3)
 const CLIMB_FPM = 2000, SPD_RATE = 3, NM_FT = 6076.12, GP_TAN = Math.tan(3 * Math.PI / 180), SWEEP_MS = 4000;
 const FCOL = { red: '#ff5a6e', silver: '#c9ced6', purple: '#b48cff', copper: '#e0915a', none: '#a8f0b2' };
 const FNAME = { red: 'Marshal · Red', silver: 'Approach · Silver', purple: 'Final · Purple', copper: 'Final · Copper' };
@@ -763,7 +763,7 @@ const STEPS = [
   { ch: 3, id: 'v1', type: 'voice', range: 15, acs: PRACTICE(),
     say: `<p>Lightning 21 is with you on <b class="f-silver">Approach (Silver)</b>, heading north.</p>`,
     task: `🎯 Turn Lightning 21 <b>left</b> to heading <b>270</b>.`, expect: { cs: 'LTNG21', need: [{ k: 'hdg', v: 270, dir: 'L' }] },
-    hint: 'Lightning 21, turn left heading two seven zero', good: 'Watch it roll left toward the west in a standard-rate turn.' },
+    hint: 'Lightning 21, turn left heading two seven zero', good: 'Watch it roll left toward the west in a tight tactical turn.' },
   { ch: 3, id: 'v2', type: 'voice', range: 15, keep: true, acs: [LT21({ x: 4.6, y: -3.5, hdg: 270, alt: 3000, spd: 250, freq: 'silver' })],
     say: `<p>Now bring it lower.</p>`, task: `🎯 Have Lightning 21 descend to <b>angels 2</b> (2,000 feet).`, expect: { cs: 'LTNG21', need: [{ k: 'alt', v: 2000 }] },
     hint: 'Lightning 21, take angels two', good: 'Watch the altitude in the data block count down: 030… 025… 020.' },

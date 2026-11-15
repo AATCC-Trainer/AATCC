@@ -105,7 +105,7 @@ td{padding:3px 4px;border-top:1px solid #241d44;vertical-align:top}tr.act{cursor
    <div id="shipBox"><h3>SHIP TURNS · BRC (all linked scopes)</h3>
     <div id="shipNow">—</div>
     <div class="row" style="align-items:center"><span class="seg"><button id="shAuto" class="on" title="The ship turns on its own at the interval">Auto turns</button><button id="shOff" title="No automatic turns; only when you turn it">Off</button></span>
-     <span class="lbl">every</span><select id="shEvery" title="Time between automatic ship turns (sim time)"><option value="120">2 min</option><option value="180">3 min</option><option value="240">4 min</option><option value="300">5 min</option><option value="360">6 min</option><option value="480">8 min</option><option value="600">10 min</option></select></div>
+     <span class="lbl">every</span><select id="shEvery" title="Time between automatic ship turns (sim time)"><option value="120">2 min</option><option value="180">3 min</option><option value="240">4 min</option><option value="300">5 min</option><option value="360">6 min</option><option value="480">8 min</option><option value="600">10 min</option><option value="720">12 min</option><option value="900">15 min</option><option value="1200">20 min</option></select></div>
     <div class="row" style="align-items:center;margin-top:5px"><select id="shDir" title="Direction"><option value="port">Port (left)</option><option value="starboard">Starboard (right)</option></select>
      <select id="shDeg" title="How much"></select><button id="shGo" class="ciGo" title="Turn the ship now (5 s warning on the scopes; silent)">↻ Turn ship now</button></div>
    </div>
@@ -131,7 +131,7 @@ const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const I = { link: ls('instLink', 'MARSHAL'), scope: +ls('instScope', 30), ring: +ls('instRing', 2), ci: 'auto',
   src: {}, ship: {}, disp: {}, sel: null, trails: {}, db: {}, txOpen: false, solo: null, pend: {} };
 const ch = new BroadcastChannel('stinger-link');
-const SHIPI = { auto: ls('instShipAuto', '1') !== '0', every: +ls('instShipEvery', '240') || 240 };   // v95 ship-turn settings sent to every linked scope
+const SHIPI = { auto: ls('instShipAuto', '1') !== '0', every: (ls('instShipEvery99', '') ? +ls('instShipEvery', '600') : 600) || 600 };   // v99 default 10 min (an interval saved before v99 is reset once)   // v95 ship-turn settings sent to every linked scope
 const links = () => (I.link === 'BOTH' ? ['MARSHAL', 'APPROACH'] : [I.link]).concat('FINAL');
 const live = s => I.src[s] && Date.now() - I.src[s].rx < 3000;
 const mmss = t => { t = Math.max(0, Math.round(t)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
@@ -456,11 +456,11 @@ function renderCi() { const run = CI_SRC.filter(ciRun), n = ciNext(), nm = s => 
    The master scope (Marshal, else Approach, else Final) executes it; the linked scopes follow its BRC. Silent: no radio call. */
 (function () {
   const d = $('shDeg'); d.innerHTML = [5, 10, 15, 20, 25, 30, 35, 40, 45, 60, 90].map(v => `<option value="${v}"${v === 10 ? ' selected' : ''}>${v}°</option>`).join('');
-  $('shEvery').value = String(SHIPI.every); if (!$('shEvery').value) $('shEvery').value = '240';
+  $('shEvery').value = String(SHIPI.every); if (!$('shEvery').value) $('shEvery').value = '600';
   const paint = () => { $('shAuto').classList.toggle('on', SHIPI.auto); $('shOff').classList.toggle('on', !SHIPI.auto); $('shEvery').disabled = !SHIPI.auto; };
   const setAuto = on => { SHIPI.auto = on; lsSet('instShipAuto', on ? '1' : '0'); paint(); hello(); log('i', on ? `INSTRUCTOR: ship turns automatic every ${SHIPI.every / 60} min` : 'INSTRUCTOR: automatic ship turns OFF (turn it yourself)'); };
   $('shAuto').onclick = () => setAuto(true); $('shOff').onclick = () => setAuto(false);
-  $('shEvery').onchange = () => { SHIPI.every = +$('shEvery').value || 240; lsSet('instShipEvery', SHIPI.every); hello(); log('i', `INSTRUCTOR: ship turns every ${SHIPI.every / 60} min`); };
+  $('shEvery').onchange = () => { SHIPI.every = +$('shEvery').value || 600; lsSet('instShipEvery', SHIPI.every); lsSet('instShipEvery99', '1'); hello(); log('i', `INSTRUCTOR: ship turns every ${SHIPI.every / 60} min`); };
   $('shGo').onclick = () => { const run = links().filter(x => live(x) && I.src[x].running); if (!run.length) { log('s', 'No running simulation: start Marshal / Approach / Final first.'); return; }
     const dir = $('shDir').value, deg = +$('shDeg').value;
     try { ch.postMessage({ type: 'ship-cmd', src: 'INSTRUCTOR', id: ++cmdId, dir, deg }); } catch (e) {}

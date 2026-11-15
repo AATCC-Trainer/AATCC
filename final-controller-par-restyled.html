@@ -91,6 +91,18 @@ body:not(.touchdev) #vStatus{bottom:8px}
 .say{color:#fff;background:#122016;border-left:3px solid var(--cyan);padding:6px 8px;margin:6px 0;font-size:13px;line-height:1.5}
 table.st{border-collapse:collapse;width:100%;margin:10px 0;font-size:13px}
 table.st td{padding:4px 6px;border-bottom:1px solid var(--gdd)}
+/* v99 grading: collapsible sections, nothing clipped */
+.gsec{border:1px solid var(--gdd);border-radius:6px;margin:8px 0;padding:0 8px}
+.gsec>summary{cursor:pointer;padding:8px 2px;font-weight:bold;color:var(--cyan);min-height:24px}
+.gsec>summary .gv{font-weight:normal;color:var(--g);margin-left:6px}
+.gsec table.st{margin:2px 0 8px}
+table.st td{overflow-wrap:break-word;word-break:normal;vertical-align:top}
+#gTools{display:flex;justify-content:flex-end;gap:6px;margin:4px 0}
+#gTools button{min-height:30px;font-size:12px}
+#endOv .card{-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+#endOv{z-index:70}   /* grading overlay above the fixed layout bar (z 60), which hid the top of tall cards */
+#gradeSec>summary{cursor:pointer;font-size:11.5px;color:#8fd8ff;padding:3px 0}
+#gradeBox{white-space:pre-wrap!important;overflow-wrap:anywhere;overflow-x:visible!important}
 table.st td:last-child{text-align:right;color:var(--cyan)}
 .tutnav{display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:8px}
 .set{display:grid;grid-template-columns:170px 1fr;gap:10px;align-items:center;margin:8px 0}
@@ -688,6 +700,8 @@ let BRC_OFF = BRC - 270;                    // physics runs in a course-aligned 
 let BRC3 = hdg3(BRC), BRC_SAY = sayDigits(hdg3(BRC));
 let RWY_NUM = String(Math.round(BRC / 10) || 36).padStart(2, '0'), RWY_SAY = sayDigits(RWY_NUM);
 const isHelo = a => !!(a.T && a.T.helo);                       
+/* v99 turn rates (deg/s): tactical jets 6 (was standard rate 3), helicopters 8 (was 3). PAR course corrections on final 3 (was 1.5). No-gyro stays 3 / 1.5 (phraseology). */
+const TURN_JET = 6, TURN_HELO = 8, TURN_PAR = 3, turnRate = a => (a && a.T && a.T.helo) ? TURN_HELO : TURN_JET;
 const GREEN_R = 1.0, BALL_R = 0.75;                            // ship calls: 'one mile, go green' (helo) / 'three-quarter mile, call the ball' (fixed wing)
 // ASR (surveillance) approach: no glidepath; descend to the MDA at the FAF, level off, visual or missed approach at the MAP
 const ASR_MDA = 470, ASR_MAP_R = 0.75, ASR_GATE_R = 0.45, ASR_TOL = 0.3;
@@ -868,7 +882,7 @@ function hoffTyped(text) {   // "<callsign> hndoff" / "handoff" / "hand off": a 
 // BRC is TRUE; the final course (BRC variable) = FB = BRC - MV. Solo has no magvar, so FB = BRC.
 let SHIP_MV = 0, SHIP_BRCT = null;   // last magvar / true BRC from Approach (null = same as course)
 const SHIP_RATE = 1, SHIP_WARN = 5, SHIP_STEADY = 8, SHIP_GRACE = 10, SHIP_DEGS = [5, 10, 15, 20];
-const SHIPCFG = { auto: true, every: 240 };   // v95: a ship turn every 4 min of sim time by default (Instructor: auto on/off, interval, turn now)
+const SHIPCFG = { auto: true, every: 600 };   // v99: a ship turn every 10 min of sim time by default (Instructor: auto on/off, interval, turn now)
 let SHIP_PEER_RX = 0;   // last time a running, linked Marshal / Approach told us about the ship
 const finFollowing = () => !!(G && G.linked && Date.now() - SHIP_PEER_RX < 5000);   // linked behind a running Marshal / Approach: replay their turns ('brc' messages)
 const shipBrcT = () => SHIP_BRCT != null ? SHIP_BRCT : (Math.round(norm(BRC + SHIP_MV)) || 360);
@@ -971,7 +985,7 @@ function shipInstCmd(m) {
   return { ok: true, text: `ship turn ${dir === 'L' ? 'port' : 'starboard'} ${amt}° in ${SHIP_WARN} s (BRC ${hdg3(shipBrcT())} → ${hdg3(norm(shipBrcT() + (dir === 'L' ? -amt : amt)))})` };
 }
 function shipInstCfg(m) {
-  const auto = m.auto !== false, every = Math.max(60, Math.min(1800, Math.round(+m.every || 240)));
+  const auto = m.auto !== false, every = Math.max(60, Math.min(1800, Math.round(+m.every || 600)));
   if (auto === SHIPCFG.auto && every === SHIPCFG.every) return;
   SHIPCFG.auto = auto; SHIPCFG.every = every; if (G && !G.over && G.ship) G.ship.next = G.t + every;
 }
@@ -1276,7 +1290,7 @@ function updatePar(a, dt) {
   else {
     const dir = a.turnDir || (diff < 0 ? 'L' : 'R');
     const remaining = dir === 'L' ? norm(a.hdg - a.tgtHdg) : norm(a.tgtHdg - a.hdg);
-    const rate = (OUT_PHASES.includes(a.phase) ? 3 : 1.5) * dt;
+    const rate = (OUT_PHASES.includes(a.phase) ? turnRate(a) : TURN_PAR) * dt;
     if (remaining <= rate) { a.hdg = a.tgtHdg; a.turnDir = null; } else a.hdg = norm(a.hdg + (dir === 'L' ? -rate : rate));
   }
   // ---- speed
@@ -2369,6 +2383,26 @@ function instRestart(op) {
 $('bTut').onclick = () => openTutorial(0);
 $('bAgain').onclick = () => startGame(lastDiff);
 $('bMenu').onclick = () => { endOv.classList.add('hidden'); startOv.classList.remove('hidden'); };
+/* v99: end-of-sim grading as collapsible sections (all open by default) + Expand/Collapse all. Rows whose label starts
+   with two spaces are details of the row above (conflicts, ship turns): each such group becomes its own section. */
+function gradeSections() {
+  const tb = $('endTable'), lst = $('endList'); if (!tb || !lst) return;
+  let box = $('endSecs'); if (!box) { box = document.createElement('div'); box.id = 'endSecs'; tb.parentNode.insertBefore(box, tb); }
+  const sec = (t, v, inner) => `<details class="gsec" open><summary>${t}${v !== '' && v != null ? `<span class="gv">${v}</span>` : ''}</summary>${inner}</details>`;
+  const main = [], groups = []; let cur = null;
+  for (const tr of tb.querySelectorAll('tr')) { const td = tr.querySelectorAll('td'), l = td[0] ? td[0].innerHTML : '', v = td[1] ? td[1].innerHTML : '';
+    if (/^(\s|&nbsp;){2}/.test(l) && cur) { cur.kids.push([l.trim(), v]); continue; }
+    cur = { l, v, kids: [] }; main.push(cur); }
+  const tbl = rs => '<table class="st">' + rs.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('') + '</table>';
+  let h = sec('Summary', '', tbl(main.map(m => [m.l, m.v])));
+  for (const m of main) if (m.kids.length) h += sec(m.l, m.v, tbl(m.kids));
+  const n = lst.querySelectorAll('tr').length;
+  if (n) { h += sec('Aircraft', `(${n})`, lst.innerHTML); }
+  box.innerHTML = '<div id="gTools"><button type="button" id="gAll">Collapse all</button></div>' + h;
+  tb.style.display = 'none'; lst.style.display = 'none';
+  const btn = $('gAll'); btn.onclick = () => { const ds = box.querySelectorAll('details.gsec'), open = [...ds].some(d => !d.open); ds.forEach(d => d.open = open); btn.textContent = open ? 'Collapse all' : 'Expand all'; };
+  box.addEventListener('toggle', () => { const ds = [...box.querySelectorAll('details.gsec')]; btn.textContent = ds.every(d => d.open) ? 'Collapse all' : 'Expand all'; }, true);
+}
 function endGame() {
   if (!G || G.over) return;
   for (const a of G.ac) if (!a.result && a.phase !== 'queue' && a.phase !== 'landed') finalize(a, false, 'session ended');
@@ -2382,6 +2416,7 @@ function endGame() {
   const rows = [['Level', G.d.name], ['Total score', G.score], ['Landed', G.landed], ...(G.practice ? [['Practice approaches', G.practice]] : []), ['Missed approaches / failures', G.missed], ['Crashes', G.crashes], ...(G.ship && G.ship.n ? [['Ship turn 99 calls', `${G.ship.pts} pts (turn ${G.ship.turnOk}/${G.ship.n}, steady ${G.ship.steadyOk}/${G.ship.n})`]] : []), ['Separation losses', G.sepLoss], ['Call accuracy', tot ? `${Math.round(100 * G.callsGood / tot)}% (${G.callsGood}/${tot})` : '--']];
   $('endTable').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
   $('endList').innerHTML = '<table class="st">' + G.results.map(r => `<tr><td>${esc(r.cs)} · ${r.landed ? ph('on deck', 'landed') : r.practice ? 'practice approach' : esc(r.reason)}<br><span style="color:var(--dim);font-size:11px">tolerance ${r.tol}% · ${r.good} good / ${r.bad} bad calls · ${r.gaps} gaps · ${r.missedRange} missed range calls</span></td><td>${r.grade} · ${r.score}</td></tr>`).join('') + '</table>';
+  try { gradeSections(); } catch (e) { console.error('grade sections', e); }
   endOv.classList.remove('hidden');
 }
 
@@ -2432,7 +2467,7 @@ const TUT_SHIP = {
   1: ['2. Reading the two displays', `<p><b>Top: ELEVATION.</b> Range from the landing <b>spot</b> on deck runs left to right (0 to 10 NM, a line every mile). Height runs up. The dotted sloping line is the <b>3° glidepath</b>. The white tick is the aircraft: <i>above</i> the line when it's high, <i>below</i> when it's low. Glidepath calls follow what you see on the tick: dotted line through the <b>middle</b> of the tick = <b>on glidepath</b>; between the middle and the end = <b>slightly above/below glidepath</b>; touching the <b>end</b> of the tick = <b>above/below glidepath</b>; tick not touching the line = <b>well above/below glidepath</b>.</p>
    <p><b>Bottom: AZIMUTH.</b> Same range axis. The horizontal line is the <b>final bearing</b>, the ship's <b>base recovery course (BRC) ${BRC3}</b>. Aircraft are handed to you on a 20° intercept: from the <b>right</b> (above the line) heading <b>${hdg3(BRC - 20)}</b>, from the <b>left</b> (below) heading <b>${hdg3(BRC + 20)}</b>. Turn them onto the BRC before they cross it. <b>Course calls go by what you see</b>: course line through the <b>middle</b> of the tick = "on course"; between the middle and the end = "slightly left/right of course"; touching the <b>end</b> of the tick = "left/right of course"; tick not touching the line = "well left/right of course".</p>
    <p>The side panel has the exact numbers (range, feet above/below glidepath, feet and degrees left/right, groundspeed, heading) and the status line (level, timer). The surveillance view shows the ship.</p>
-   <p><b>Ship turns</b> (solo: every 4 to 8 minutes, never in the first 2; linked: when Approach turns the ship): the side panel shows <b>SHIP TURN IN 5 · PORT/STARBOARD</b>, then <b>MOTHER IN PORT/STARBOARD TURN</b> while the ship turns at about 1°/s (BRC, FB = BRC − magvar and DWH update live), then <b>MOTHER STEADY — NEW BRC ___</b>. The final course line moves with the ship, so aircraft already on final drift off it: correct them. Broadcast "<b>ninety-nine, mother is in port turn, standby for new BRC</b>" during the turn and "<b>ninety-nine, mother is steady, new BRC is one seven three</b>" once steady (no readback).</p>`],
+   <p><b>Ship turns</b> (solo: about every 10 minutes of sim time; linked: when Approach turns the ship): the side panel shows <b>SHIP TURN IN 5 · PORT/STARBOARD</b>, then <b>MOTHER IN PORT/STARBOARD TURN</b> while the ship turns at about 1°/s (BRC, FB = BRC − magvar and DWH update live), then <b>MOTHER STEADY — NEW BRC ___</b>. The final course line moves with the ship, so aircraft already on final drift off it: correct them. Broadcast "<b>ninety-nine, mother is in port turn, standby for new BRC</b>" during the turn and "<b>ninety-nine, mother is steady, new BRC is one seven three</b>" once steady (no readback).</p>`],
   2: ['3. The talk-down, step by step', `<ol><li><b>Contact</b> (+1 bonus when complete): "Lightning two one, ${SHIP_NAME} final, how do you hear me, wheels should be down, report see me." Pilot: "Lightning two one, loud and clear, wheels down, will report see you."</li>
    <li><b>Line up</b>: say where it is, then a turn: "well right of course, <b>come right heading ${sayDigits(hdg3(BRC - 10))}</b>", then onto the BRC: "come right heading ${BRC_SAY}".</li>
    <li>As the glidepath comes down to the aircraft, <b>10 to 30 seconds before it meets it</b>: "<b>approaching glidepath</b>" (+1 bonus), then, as a separate call when it reaches the glidepath, "<b>begin descent</b>" (the pilot only starts down on this call), then on its own "<b>do not acknowledge further transmissions</b>". Until you say that, the pilot answers every call with just the callsign ("Lightning two one"); it acks that call once more and then stays quiet (except "see you", the deck calls and emergencies).</li>
@@ -2460,7 +2495,7 @@ const TUT_SHIP = {
    <li><b>Stable at half a mile</b> (both within "slightly") +10. Unstable or not cleared (no deck call: fouled deck) at half a mile means the pilot waves off.</li>
    <li><b>Wave-offs cost no points</b> (called by you or by the pilot: fouled deck, unstable, too high, safety limit, lost comms): the approach simply ends, keeping what it earned so far but without the +40 for getting on deck.</li>
    <li><b>Penalties</b>: a gap of more than 5 s without a call on final once you have made your first call (−5 each time), too steep or too shallow, inaccurate calls. Far too low (below the lower limit) it crashes and the session fails, so call the wave-off early if it gets that low.</li>
-   <li><b>Ship turns</b> (about every <b>4 minutes</b> of sim time, 5–20°; linked scopes share one ship and the Instructor can change the interval or turn it): +10 for "ninety-nine, mother is in port/starboard turn, standby for new BRC" during the turn (or up to 10 s after) with the right direction, and +10 for "ninety-nine, mother is steady, new BRC is ___" with the right BRC. Wrong direction/BRC scores nothing; no penalties. 99 calls with no turn are not scored.</li></ul>`],
+   <li><b>Ship turns</b> (about every <b>10 minutes</b> of sim time, 5–20°; linked scopes share one ship and the Instructor can change the interval or turn it): +10 for "ninety-nine, mother is in port/starboard turn, standby for new BRC" during the turn (or up to 10 s after) with the right direction, and +10 for "ninety-nine, mother is steady, new BRC is ___" with the right BRC. Wrong direction/BRC scores nothing; no penalties. 99 calls with no turn are not scored.</li></ul>`],
   6: ['7. Phrases the game understands', `<p>Callsigns are tactical callsigns plus a number, spoken digit by digit: "Lightning two one", "Nighthawk one zero two", "Viper four five two", "Ridge three one two" (Lightning, Nighthawk, Viper, Venom, Knight, Ridge, Gunfighter, Charger). If you leave the callsign out, the call goes to the selected PAR aircraft. Both ship and tower phrasing are always understood.</p>
    <ul><li>come/turn left/right heading ___ · fly base recovery course ___ · heading ___</li><li>on course · slightly left/right of course · left/right of course · well left/right of course · going left/right of course</li>
    <li>approaching glidepath · begin descent · on glidepath · above/below glidepath · slightly/well above/below glidepath · going above/below glidepath</li>
