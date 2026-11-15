@@ -16,7 +16,7 @@
      simKey()          optional: value that changes (or a time that goes backwards) on a new sim -> clear */
 (function () {
   'use strict';
-  const HOVER_PX = 15, END_PX = 12, COL = 'rgba(255,110,230,0.95)', BOX = 'rgba(25,4,22,0.85)';
+  const HOVER_PX = 15, END_PX = 12, COL = 'rgba(255,255,255,0.95)', BOX = 'rgba(10,10,10,0.85)';
   const S = { ad: null, lines: [], draft: null, mx: null, my: null, cx: null, cy: null, over: false, lastKey: undefined };
   const n360 = d => { d = Math.round(((d % 360) + 360) % 360); return d === 0 ? 360 : d; };
   const h3 = d => String(n360(d)).padStart(3, '0');
