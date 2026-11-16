@@ -8,6 +8,7 @@
 <script src="pilot-voice.js"></script>
 <script src="shorthand.js"></script>
 <script src="splat-t.js"></script>
+<script src="rendezvous.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Approach</title>
@@ -179,6 +180,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
       <button id="bS2" title="3x sim speed (key 3)">3x</button>
       <label class="liveCtl" title="Scope range (zoom): how far the radar shows">Scope <input type="range" id="liveScope" min="5" max="80" step="1" value="50"><input type="number" id="liveScopeVal" class="scopeNum" min="5" max="80" step="1" value="50" inputmode="numeric" title="Type a range (5–80 NM) and press Enter">NM</label>
       <label class="liveCtl" title="Range ring spacing">Rings <select id="liveRing"><option value="1">1</option><option value="2" selected>2</option><option value="5">5</option><option value="10">10</option></select>NM</label>
+      <label class="liveCtl" title="Show the rendezvous points (yellow)"><input type="checkbox" id="liveRdv" checked>RDV</label>
       <button id="bSet" title="Voice settings">⚙ Voice</button>
       <button id="bHelp" title="Help (?)">? Help</button><a href="marshal-controller.html" id="xLink" style="align-self:center;color:#8fd8ff;font-size:12px;text-decoration:none;padding:0 6px">Marshal →</a>
       <button id="bEnd" title="End session">End</button>
@@ -3404,7 +3406,7 @@ function drawApp(now) {
   const RS = [1, 2, 5, 10].includes(+S.ringNm) ? +S.ringNm : 2, lblEvery = RS === 1 ? 5 : 1;   // Settings: ring spacing
   for (let r = RS, i = 1; r * sc <= RD; r += RS, i++) {   // circles clipped to the square, out into the corners
     const major = r % 10 === 0 || r === APP_RANGE;   // 10 and the outer ring slightly brighter
-    ctx.strokeStyle = ppiCol(major ? 0.32 : 0.13); ctx.beginPath(); ctx.arc(cx, cy, r * sc, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = ppiCol(major ? 0.5 : 0.28); ctx.lineWidth = major ? 1.3 : 1.1; ctx.setLineDash([2, 6]); ctx.beginPath(); ctx.arc(cx, cy, r * sc, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;   // v108: dashed tick-style rings
     // range labels removed per user
     if (false && i % lblEvery === 0) { const lx = cx + r * sc * 0.7071, ly = cy + r * sc * 0.7071; if (lx < cx + RX - 14 && ly < cy + RY - 8) { ctx.fillStyle = ppiCol(0.4); ctx.fillText(String(r), lx, ly - 3); } }   // range label on the SE diagonal
   }
@@ -3413,6 +3415,7 @@ function drawApp(now) {
   ctx.strokeStyle = ppiCol(0.35); ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(E[0], E[1]); ctx.stroke(); ctx.setLineDash([]);
   for (let m = 2; m < EDGE; m += 2) { const T = P(Math.sin(rec) * m, Math.cos(rec) * m), px = Math.cos(rec) * 4, py = Math.sin(rec) * 4; ctx.beginPath(); ctx.moveTo(T[0] - px, T[1] - py); ctx.lineTo(T[0] + px, T[1] + py); ctx.stroke(); }
   ctx.textAlign = 'left';
+  if (window.RDV) RDV.draw(ctx, P, MV, BRC, FONT(10));   // v108: rendezvous points (rendezvous.js), under the ship, paints and data blocks
   // ship at centre, bow down the BRC
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(BRC * DEG); ctx.fillStyle = ppiCol(0.9);
   ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(3.5, -4); ctx.lineTo(3.5, 7); ctx.lineTo(-3.5, 7); ctx.lineTo(-3.5, -4); ctx.closePath(); ctx.fill(); ctx.restore();
@@ -3432,7 +3435,7 @@ function drawApp(now) {
     ctx.fillStyle = ppiCol(0.95 * al); ctx.beginPath(); ctx.arc(Q[0], Q[1], 1.8, 0, Math.PI * 2); ctx.fill();
   }
   // sweep line
-  { const g = ctx.createLinearGradient(cx, cy, cx + Math.sin(ang * DEG) * RD, cy - Math.cos(ang * DEG) * RD); g.addColorStop(0, ppiCol(0.3)); g.addColorStop(1, ppiCol(0.95));
+  { const g = ctx.createLinearGradient(cx, cy, cx + Math.sin(ang * DEG) * RD, cy - Math.cos(ang * DEG) * RD); g.addColorStop(0, 'rgba(255,214,80,0.28)'); g.addColorStop(1, 'rgba(255,222,100,0.9)');   // v108: yellow-tinted sweep line (real scope look)
     ctx.strokeStyle = g; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.sin(ang * DEG) * RD, cy - Math.cos(ang * DEG) * RD); ctx.stroke(); ctx.lineWidth = 1; }
   // scan lines (cheap cached pattern)
   if (!PPI.scan) { const c2 = document.createElement('canvas'); c2.width = 4; c2.height = 3; const x2 = c2.getContext('2d'); x2.fillStyle = 'rgba(0,0,0,0.28)'; x2.fillRect(0, 0, 4, 1); PPI.scan = ctx.createPattern(c2, 'repeat'); }
@@ -3828,5 +3831,6 @@ document.addEventListener('keydown',e=>{if((e.key==='l'||e.key==='L')&&!e.ctrlKe
 let m='normal';try{m=localStorage.getItem(KEY)||'normal'}catch(e){}setLay(m);})();
 </script>
 <script>(function(){const f=()=>{const p=document.getElementById('panel');if(p)document.documentElement.style.setProperty('--panW',p.getBoundingClientRect().width+'px');};addEventListener('resize',f);addEventListener('orientationchange',f);setTimeout(f,0);setInterval(f,2000);})();</script>
+<script>window.RDV && RDV.bindToggle(document.getElementById('liveRdv'));</script>
 </body>
 </html>
