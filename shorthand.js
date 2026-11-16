@@ -17,7 +17,7 @@ const CS_ALIAS = { lt: 'Lightning', li: 'Lightning', nh: 'Nighthawk', vp: 'Viper
   rd: 'Ridge', ri: 'Ridge', gf: 'Gunfighter', gu: 'Gunfighter', ch: 'Charger', cg: 'Charger', kn: 'Knight', kt: 'Knight' };
 const h3 = v => String(+v).padStart(3, '0');
 const NUM = '(\\d+(?:\\.\\d+)?)';
-const takeOr = (verb, n, sc) => { const v = parseFloat(n); return sc !== 'final' && v < 100 ? `take angels ${n}` : `${verb} and maintain ${angOrFt(n, sc)}`; };   // v95: Marshal / Approach use "take angels"
+const takeOr = (verb, n, sc) => { const v = parseFloat(n); return v < 100 ? `take angels ${n}` : `${verb} and maintain ${angOrFt(n, sc)}`; };   // v95: Marshal / Approach use "take angels"; v107: Final too (wave-off "take angels two")
 const angOrFt = (n, sc) => { n = parseFloat(n); if (sc === 'final') return (n < 100 ? Math.round(n * 1000) : n) + ' feet'; return n < 100 ? 'angels ' + n : n + ' feet'; };
 
 /* code table: [regex (whole token), scopes, (match, state) => phrase, code label, meaning] */
@@ -30,8 +30,8 @@ const CODES = [
   [/^rh$/, A, () => 'fly runway heading', 'rh', 'fly runway heading'],
   [new RegExp('^a' + NUM + '$'), SC, (m, s) => s.sc === 'final' ? `maintain ${angOrFt(m[1], 'final')}` : s.clr ? `angels ${m[1]}` : `maintain angels ${m[1]}`, 'a5', 'maintain angels 5 (angels 5 inside a marshal clearance, Final: feet)'],
   [new RegExp('^ta' + NUM + '$'), MA, m => `take angels ${m[1]}`, 'ta5', 'take angels 5'],
-  [new RegExp('^c' + NUM + '$'), SC, (m, s) => takeOr('climb', m[1], s.sc), 'c3', 'take angels 3 (Final: climb and maintain feet; c1500 = feet)'],
-  [new RegExp('^d' + NUM + '$'), SC, (m, s) => takeOr('descend', m[1], s.sc), 'd1.2', 'take angels 1.2 (Final: descend and maintain feet)'],
+  [new RegExp('^c' + NUM + '$'), SC, (m, s) => takeOr('climb', m[1], s.sc), 'c3', 'take angels 3 (c1500 = climb and maintain 1500 feet)'],
+  [new RegExp('^d' + NUM + '$'), SC, (m, s) => takeOr('descend', m[1], s.sc), 'd1.2', 'take angels 1.2 (d1500 = descend and maintain 1500 feet)'],
   [/^s(\d{2,3})$/, SC, (m, s) => s.sc === 'final' ? `maintain ${m[1]} knots` : `take speed ${m[1]}`, 's250', 'take speed 250 (Final: maintain 250 knots)'],
   [new RegExp('^rl' + NUM + '$'), MA, m => `report level angels ${m[1]}`, 'rl3', 'report level angels 3 (climbs or descends, reports level)'],   // v101
   [/^as(\d{2,3})?$/, MA, m => 'take approach speed' + (m[1] ? ' ' + m[1] : ''), 'as140', 'take approach speed 140 (jets dirty up, helos landing checks)'],

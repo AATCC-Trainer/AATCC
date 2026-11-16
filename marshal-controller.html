@@ -1442,7 +1442,7 @@ function execute(p, src) {
         if (a.phase === 'final') a.levelAlt = c.v;
         if (a.phase === 'missed') a.gaAlt = c.v;
         if (a.phase === 'queue') a.feedAlt = c.v;
-        if (a.phase === 'descent' && !p.cmds.some(x => x.k === 'ga')) { log('sys', `${a.cs} is on the glidepath; to climb it, say "${ph('wave off, wave off, climb and maintain', 'go around, climb and maintain')} ...".`); break; }
+        if (a.phase === 'descent' && !p.cmds.some(x => x.k === 'ga')) { log('sys', `${a.cs} is on the glidepath; to climb it, say "${ph('wave off, wave off, take angels', 'go around, climb and maintain')} ...".`); break; }
         rb.push(`${c.v > a.z ? 'climb' : 'descend'} and maintain ${fmtAlt(c.v)}`); rbSay.push(`${c.v > a.z ? 'climb' : 'descend'} and maintain ${sayAlt(c.v)}`);
         break;
       case 'spd':
