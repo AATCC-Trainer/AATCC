@@ -86,6 +86,21 @@ body:not(.touchdev) #vStatus{bottom:8px}
 .diff b{display:block;font-size:16px;margin-bottom:4px;color:var(--cyan)}
 .diff span{font-size:12px;color:#a8d8ae}
 .diff.on{background:#122016;box-shadow:0 0 0 2px var(--cyan)}
+/* v106 start screen: Guided Intro / Regular Training cards */
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0 4px}
+.mode{border:1px solid var(--gd);border-radius:6px;padding:10px;cursor:pointer}
+.mode b{display:block;font-size:16px;margin-bottom:4px;color:var(--cyan)}
+.mode span{font-size:12px;color:#a8d8ae}
+.mode.on{background:#122016;box-shadow:0 0 0 2px var(--cyan)}
+.introBtns{margin-top:8px;flex-wrap:wrap;gap:6px}
+.introBtns button{min-height:34px;font-size:13px}
+.mode:not(.on) .introBtns{display:none}
+#trainBox.off{display:none}
+.linkbtn{background:none;border:none;color:var(--dim);text-decoration:underline;cursor:pointer;font-size:12px;padding:2px 0;min-height:0}
+.linkbtn:hover{color:var(--cyan);background:none}
+body.introOn #bPause,body.introOn #bS1,body.introOn #bS2,body.introOn #bEnd,body.introOn #bHelp,body.introOn #hint{display:none!important}
+body.aeroWatch #hint{display:none!important}
+@media (max-width:640px){.modes{grid-template-columns:1fr}}
 .note{font-size:11px;color:var(--amber);margin-top:8px}
 .kbd{display:inline-block;border:1px solid var(--gd);border-radius:3px;padding:0 4px;font-size:12px}
 .say{color:#fff;background:#122016;border-left:3px solid var(--cyan);padding:6px 8px;margin:6px 0;font-size:13px;line-height:1.5}
@@ -206,6 +221,11 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
     <h1>FINAL CONTROLLER · PAR</h1>
     <div style="color:var(--dim)" id="subTitle">Precision Approach Radar talk-down simulator · Runway 18</div>
     <p id="introP">You're the <b>final controller</b>. Each aircraft appears on your scope 7 to 9 miles out. Using your <b>voice</b>, talk it down: heading corrections, course and glidepath calls, range calls, the gear check and the landing clearance, all the way to <b id="introDH">decision height</b>. Pilots answer each call with their callsign until you say "do not acknowledge further transmissions"; after that they stay quiet, so keep talking!</p>
+    <div class="modes" id="modeCards">
+      <div class="mode" data-m="intro" id="modeIntro" tabindex="0"><b>Guided Intro with Aero</b><span id="introSub">About 20 minutes. Aero, your training guide, walks you through the PAR scope, the talk-down and the calls, step by step, on this scope.</span><div class="row introBtns" id="introBtns"></div></div>
+      <div class="mode on" data-m="train" id="modeTrain" tabindex="0"><b>Regular Training</b><span>Pick a level below and press Start.</span></div>
+    </div>
+    <div id="trainBox">
     <div class="diffs">
       <div class="diff on" data-d="training"><b>Training</b><span>3 arrivals, and a hint that shows your suggested next call.</span></div>
       <div class="diff" data-d="normal"><b>Normal</b><span>5 arrivals, firmer pilots. No hints.</span></div>
@@ -217,9 +237,10 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
     <div id="iosHint">📱 Voice works best in a Safari tab, not the home-screen app.</div>
     <div class="row" style="margin-top:8px">
       <button id="bStart" class="wide on" style="font-size:16px;min-height:46px">▶ START</button>
-      <button id="bTut" class="wide" style="min-height:46px">How PAR works (tutorial)</button>
       <button id="bSet2" style="min-height:46px">⚙ Voice</button>
     </div>
+    </div>
+    <div style="margin-top:6px"><button id="bTut" class="linkbtn" type="button">Reference: how PAR works</button></div>
     <div class="note">Frequencies: Marshal = Red · Approach = Silver · Final = Purple / Copper. For practice and fun only, not real ATC training.</div>
   </div>
 </div>
@@ -793,6 +814,7 @@ function linkFinalCourse(m) {
   return c == null ? null : (Math.round(norm(c)) || 360);
 }
 function linkHandoff(m) {
+  if (G && G.intro) return;   // v106: the guided intro runs solo
   const fc = linkFinalCourse(m);
   if (fc != null && fc !== BRC) {
     const src = m.brc != null ? ` (ship ${hdg3(+m.brc)}T, var ${(+m.mv || 0) > 0 ? '+' : ''}${+m.mv || 0})` : '';
@@ -1044,14 +1066,16 @@ function newGame(diffKey, opts = {}) {
     results: [], wind, gustNow: { x: 0, y: 0 }, paused: false, scale: 1, selected: null, over: false, conflicts: new Set(),
     spawned: 0, nextSpawn: 0, toSpawn: opts.arrivals != null ? opts.arrivals : d.n, seq: 0, failMsg: null, endAt: null,
     pilotBias: opts.pilotBias, sideToggle: rng() < 0.5 ? 1 : -1,
+    intro: !!opts.intro,   // v106 guided intro (final-intro.js): no own arrivals, no session end, solo
   };
+  if (opts.wind) Object.assign(G.wind, opts.wind);
   G.ship = shipNewState(opts);
-  G.linked = LINK.on; if (G.linked) { const p = LINK.pending.splice(0); setTimeout(() => p.forEach(m => G && linkHandoff(m)), 0); }
+  G.linked = LINK.on && !opts.intro; if (G.linked) { const p = LINK.pending.splice(0); setTimeout(() => p.forEach(m => G && linkHandoff(m)), 0); }
   G.gateAt = rand(FIRST_GAP[0], FIRST_GAP[1]);
   logEl.innerHTML = '';
   setScale(S.simSpeed); setPaused(false);
   log('sys', `${d.name}: ${ph('PAR to ' + SHIP_NAME + ', BRC ' + BRC3, 'PAR runway ' + RWY_NUM)}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${G.toSpawn} arrivals.`);
-  if (d.hints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
+  if (d.hints && !opts.intro && !opts.noHints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
   selectAc(null);
   refreshPanel(true);
 }
@@ -1186,12 +1210,12 @@ function step(dt) {
   for (const a of G.ac) sweepPaint(a);   // radar display: positions only refresh when the scan passes
   // one aircraft on final at a time: when it leaves the controller (on deck, climb-out, wave-off, lost comms...), start the gap
   const onFinal = G.ac.some(a => PAR_PHASES.includes(a.phase));
-  if (G.busy && !onFinal) { G.gateAt = G.t + rand(NEXT_GAP[0], NEXT_GAP[1]); log('sys', `Final scope clear. Next aircraft in ${Math.round(G.gateAt - G.t)} s.`); }
+  if (G.busy && !onFinal) { G.gateAt = G.t + rand(NEXT_GAP[0], NEXT_GAP[1]); if (!G.intro) log('sys', `Final scope clear. Next aircraft in ${Math.round(G.gateAt - G.t)} s.`); }
   G.busy = onFinal;
   G.conflicts = new Set(); G.ac.forEach(a => a.conflict = false);   // single aircraft on final: no separation conflicts
   G.ac = G.ac.filter(a => !(a.removeAt != null && G.t >= a.removeAt));
   if (G.selected && !G.ac.includes(G.selected)) selectAc(null);
-  if (!G.linked && !G.endAt && G.spawned >= G.toSpawn && !G.rejoin.length && !G.ac.some(a => alive(a) && !OUT_PHASES.includes(a.phase))) G.endAt = G.t + 4;
+  if (!G.linked && !G.intro && !G.endAt && G.spawned >= G.toSpawn && !G.rejoin.length && !G.ac.some(a => alive(a) && !OUT_PHASES.includes(a.phase))) G.endAt = G.t + 4;
   if (G.endAt && G.t >= G.endAt) endGame();
 }
 
@@ -2048,6 +2072,7 @@ const startOv = $('startOv'), helpOv = $('helpOv'), setOv = $('setOv'), endOv = 
 let uiPaused = false;
 function log(cls, text) {
   if (!G) return;
+  try { if (window.FinalIntro && FinalIntro.onLog) FinalIntro.onLog(cls, text); } catch (e) {}
   if (window.__INST_SILENT && (cls === 'plt' || cls === 'ctl')) return;
   const d = document.createElement('div'); d.className = cls;
   d.innerHTML = `<span class="t">${mmss(G.t)}</span> ${esc(text)}`;
@@ -2218,6 +2243,7 @@ function handleTranscript0(text, src) {
     $('parsed').textContent = 'Understood → 99 ' + (sc.kind === 'steady' ? 'mother steady, BRC ' + (sc.brc != null ? hdg3(sc.brc) : '?') : 'mother in ' + (sc.dir === 'L' ? 'port' : sc.dir === 'R' ? 'starboard' : '?') + ' turn');
     $('parsed').classList.remove('bad');
     shipCallExec(sc);
+    try { if (window.FinalIntro && FinalIntro.after) FinalIntro.after({ ship: sc, cmds: [] }, text, src); } catch (e) { console.error('intro', e); }
     return { cs: null, cmds: ['99 ' + sc.kind], str: '99 ' + sc.kind, norm: text };
   }
   const known = G ? G.ac.filter(alive).map(a => a.cs) : [];
@@ -2226,7 +2252,10 @@ function handleTranscript0(text, src) {
   const pe = $('parsed');
   pe.textContent = 'Understood → ' + parsedStr(p);
   pe.classList.toggle('bad', (!p.cmds.length && !p.traffic) || p.csUnknown);
+  if (G && G.intro && window.FinalIntro && FinalIntro.gate) { let ok = true; try { ok = FinalIntro.gate(p, text, src) !== false; } catch (e) { console.error('intro', e); }
+    if (!ok) return { cs: p.cs, cmds: p.cmds.map(cmdStr), str: parsedStr(p), norm: p.norm, intro: 'held' }; }   // v106: the guided intro checks the call first
   if (G && !G.over) execute(p, src);
+  try { if (window.FinalIntro && FinalIntro.after) FinalIntro.after(p, text, src); } catch (e) { console.error('intro', e); }
   return { cs: p.cs, cmds: p.cmds.map(cmdStr), str: parsedStr(p), norm: p.norm };
 }
 /* shorthand typing (shorthand.js): live preview + '⌨ Shorthand' cheat sheet under the typed command box; typed codes are expanded before this page's submit handler */
@@ -2330,6 +2359,7 @@ document.addEventListener('keydown', e => {
   if (!setOv.classList.contains('hidden')) { if (e.key === 'Escape') closeSettings(); return; }
   if (e.code === 'Space' || e.key === ' ') { e.preventDefault(); if (!e.repeat && G && !G.over && startOv.classList.contains('hidden')) pttStart(); return; }
   if (!G || G.over || !startOv.classList.contains('hidden')) return;
+  if (G.intro && /^[pP123?]$|^F1$/.test(e.key)) return;   // v106: the guided intro owns pause / speed
   let used = true;
   switch (e.key) {
     case 'p': case 'P': setPaused(!G.paused); break;
@@ -2383,8 +2413,8 @@ document.querySelectorAll('.diff').forEach(el => { el.onclick = () => { chosenDi
 function startGame(diff, opts) {
   servoClear(); SERVO_LAST.E = SERVO_LAST.A = null;
   Sound.ensure(); startOv.classList.add('hidden'); endOv.classList.add('hidden'); helpOv.classList.add('hidden');
-  { const ck = document.getElementById('linkChk'); if (ck && ck.checked !== LINK.on) linkSet(ck.checked); }   // link choice from the start screen applies at run start
-  try { if (LINK.on && SHIP_LAST && Date.now() - SHIP_LAST.rx < 4000) shipStateApply(SHIP_LAST); } catch (e) {}   // linked: same BRC as Marshal / Approach
+  { const ck = document.getElementById('linkChk'); if (!(opts && opts.intro) && ck && ck.checked !== LINK.on) linkSet(ck.checked); }   // link choice from the start screen applies at run start
+  try { if (!(opts && opts.intro) && LINK.on && SHIP_LAST && Date.now() - SHIP_LAST.rx < 4000) shipStateApply(SHIP_LAST); } catch (e) {}   // linked: same BRC as Marshal / Approach
   uiPaused = false; newGame(diff, opts || {}); initVoiceStatus();
   let seen = false; try { seen = localStorage.getItem('fcpar_tut_seen') === '1'; } catch (e) {}
   if (!opts && diff === 'training' && !seen) openTutorial(0);
@@ -2695,7 +2725,7 @@ function drawTarget(a, blink) {
 let hudCache = { st: null, al: null };
 function drawHud(now, blink) {
   const w = G.wind;
-  const st = `${ph('FINAL · ' + SHIP_NAME.toUpperCase() + ' · PURPLE/COPPER · BRC ' + BRC3, 'FINAL RWY ' + RWY_NUM + ' · PURPLE/COPPER')} · WIND ${String(w.dir).padStart(3, '0')}/${w.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
+  const st = `${ph('FINAL · ' + SHIP_NAME.toUpperCase() + ' · PURPLE/COPPER · BRC ' + BRC3, 'FINAL RWY ' + RWY_NUM + ' · PURPLE/COPPER')} · WIND ${String(w.dir).padStart(3, '0')}/${w.spd}KT · ${G.intro ? 'GUIDED INTRO' : G.d.name.toUpperCase()} · ${G.intro ? (G.paused ? 'FROZEN' : 'RUNNING ' + G.scale + 'x') : G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   const waiting = !G.busy && !G.ac.some(a => PAR_PHASES.includes(a.phase)) && (G.rejoin.length || G.ac.some(a => a.phase === 'queue') || G.spawned < G.toSpawn);
   const af = (G.selected && G.selected.link && G.selected.link.freq) ? String(G.selected.link.freq).toUpperCase() : '';
   const st2 = st + (af ? ' · ON ' + af : '') + (G.linked ? (G.ac.some(a => alive(a) && a.removeAt == null) ? '' : ' · LINKED, AWAITING HANDOFF') : (waiting && G.gateAt > G.t ? ` · NEXT AIRCRAFT IN ${Math.ceil(G.gateAt - G.t)}s` : ''));
@@ -2863,6 +2893,22 @@ window.PAR = {
   ship() { const S2 = G && G.ship; return { brc: shipBrcT(), fb: BRC, dwh: norm(shipBrcT() + 180) || 360, mv: SHIP_MV, phase: S2 ? S2.phase : null, dir: S2 ? S2.dir : null, amt: S2 ? S2.amt : 0, next: S2 ? S2.next : null, n: S2 ? S2.n : 0, pts: S2 ? S2.pts : 0, banner: (document.getElementById('shipBanner').dataset || {}).t || '', info: document.getElementById('shipInfo').textContent, wind: G ? G.wind.dir : null, climbJet: CLIMB_JET.hdg }; },
   shipLink(m) { shipLinkBrc(Object.assign({ type: 'brc' }, m)); return this.ship(); },
   link(on) { if (on != null) { document.getElementById('linkChk').checked = !!on; linkSet(on); } return { on: LINK.on, peer: LINK.peer, linked: !!(G && G.linked) }; },
+};
+/* v106: narrow API for the guided intro (final-intro.js); the page script is an IIFE, so it reaches the sim only through this */
+window.__FIN = {
+  get G() { return G; }, get BRC() { return BRC; }, get L() { return L; }, get uiPaused() { return uiPaused; }, set uiPaused(v) { uiPaused = !!v; },
+  setLayout, startGame, spawnFinal, step, sweepPaint, setPaused, setScale, selectAc, refreshPanel, endGame, handleTranscript, openTutorial, initVoiceStatus,
+  courseCat, gpCat, courseAccepts, gpAccepts, gpSide, gpAlt, gateR, actualCourse, actualGp, courseWords, gpWords, ttiGp, asrR, isHelo, isPrac, alive, telephony,
+  sayDigits, hdg3, parsedStr, cmdStr, shipInstCmd, shipBrcT, interceptHdg, isShip, elevDev, azDeg, tickSize,
+  YMAX, NM_FT, FAC, SHIP_NAME, PAR_PHASES, OUT_PHASES, ASR_MDA, APPR_WIN, SEE_YOU_R,
+  ttsBusy: () => !!(ttsCur || ttsQ.length || pttDown), startOv, endOv, helpOv,
+  setPhr,
+  servoOn, servoClear,
+  servoTo(a) {   // intro: park both servo bands on the aircraft's painted target (they slew there at the normal rate)
+    if (!servoOn() || !a) return; const ye = ez(paintE(a).z), ya = ay(clamp(paintA(a).yft, -YMAX, YMAX));
+    for (const [sc, y] of [['E', ye], ['A', ya]]) { const v = SERVO[sc]; if (!v) SERVO[sc] = { y, ty: y, ptr: null, mouse: true }; else if (v.ptr == null) v.ty = y; }
+  },
+  servoSees(a) { if (!a) return { E: false, A: false }; if (!servoOn()) return { E: true, A: true }; return { E: servoShows('E', ez(paintE(a).z)), A: servoShows('A', ay(clamp(paintA(a).yft, -YMAX, YMAX))) }; },
 };
 /* AATCC Instructor link hook (BroadcastChannel 'stinger-link'). Loaded by Marshal, Approach and Final.
    Always listening (independent of the position's own Link toggle). Messages:
@@ -3036,5 +3082,7 @@ window.PAR = {
 })();
 })();
 </script>
+<script src="intro-engine.js"></script>
+<script src="final-intro.js"></script>
 </body>
 </html>
