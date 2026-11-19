@@ -1,12 +1,12 @@
-/* AATCC rendezvous points (v108), shared by Marshal, Approach and Instructor so every scope shows them in the same place.
+/* AATCC rendezvous points (v108; v114: ranges halved, closer to the ship), shared by Marshal, Approach and Instructor so every scope shows them in the same place.
    Fixed geographic positions: TRUE bearing / range (NM) from the ship's position (the scope centre). Each scope turns them into its
    magnetic-up frame with its own magnetic variation (true = magnetic + MV). Display only for now; rendezvous phraseology comes later.
    A point that falls in the final approach corridor (astern of the ship, inside 25 NM and within 3 NM of the course line) is not drawn. */
 (function () {
   'use strict';
   const PTS = [   // [name, true bearing, range NM]
-    ['COKE', 20, 14], ['WATER', 55, 28], ['MILK', 90, 18], ['COFFEE', 125, 35], ['TEA', 160, 12],
-    ['JUICE', 200, 25], ['SODA', 235, 16], ['COCOA', 270, 32], ['PEPSI', 305, 22], ['LEMONADE', 340, 38],
+    ['COKE', 20, 7], ['WATER', 55, 14], ['MILK', 90, 9], ['COFFEE', 125, 17.5], ['TEA', 160, 6],
+    ['JUICE', 200, 12.5], ['SODA', 235, 8], ['COCOA', 270, 16], ['PEPSI', 305, 11], ['LEMONADE', 340, 19],
   ];
   const DEG = Math.PI / 180, KEY = 'aatccRdv';
   const COL = 'rgba(255,214,40,0.95)', LBL = 'rgba(255,214,40,0.9)';

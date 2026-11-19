@@ -36,7 +36,7 @@ h3{margin:2px 0;font-size:12px;color:var(--dim);font-weight:normal;letter-spacin
 table{width:100%;border-collapse:collapse;font-size:12px}th{position:sticky;top:0;background:#1c1636;color:var(--dim);font-weight:normal;text-align:left;padding:3px 4px}
 td{padding:3px 4px;border-top:1px solid #241d44;vertical-align:top}tr.act{cursor:pointer}tr.act:hover{background:var(--hov)}tr.sel td{background:#123f4a;color:var(--cyan)}
 .ft{font-size:10px;padding:0 4px;border-radius:2px;border:1px solid}
-.f-red{color:var(--red);border-color:var(--red)}.f-silver{color:var(--silver);border-color:var(--silver)}.f-purple{color:var(--purple);border-color:var(--purple)}.f-copper{color:var(--copper);border-color:var(--copper)}
+.f-red{color:var(--red);border-color:var(--red)}.f-teal{color:#3fd6c8;border-color:#3fd6c8}.f-silver{color:var(--silver);border-color:var(--silver)}.f-purple{color:var(--purple);border-color:var(--purple)}.f-copper{color:var(--copper);border-color:var(--copper)}
 .st-on{color:var(--green)}.st-in{color:var(--amber)}.st-done{color:var(--dim)}
 #log{border:1px solid #2a2350;border-radius:4px;height:150px;overflow-y:auto;font-size:12px;padding:4px;line-height:1.35}
 #log .i{color:var(--amber)}#log .p{color:var(--cyan)}#log .s{color:var(--dim)}#log .b{color:var(--red)}
@@ -71,7 +71,7 @@ td{padding:3px 4px;border-top:1px solid #241d44;vertical-align:top}tr.act{cursor
   <b style="color:var(--cyan)">AATCC INSTRUCTOR</b>
   <div class="grp"><span class="lbl">Link:</span>
    <button data-l="MARSHAL" class="lk">Marshal</button><button data-l="APPROACH" class="lk">Approach</button><button data-l="BOTH" class="lk">Marshal + Approach</button></div>
-  <span id="stM" class="badge off">RED · MARSHAL</span><span id="stA" class="badge off">SLVR · APPROACH</span><span id="stF" class="badge wait" title="Final Control is always linked automatically">FINAL: AUTO-LINKED · READY</span>
+  <span id="stM" class="badge off">RED · MARSHAL</span><span id="stA" class="badge off">SLVR · APPROACH</span><span id="stD" class="badge wait">TEAL · DEPARTURE · READY</span><span id="stF" class="badge wait" title="Final Control is always linked automatically">FINAL: AUTO-LINKED · READY</span>
   <div class="grp"><span class="lbl">Scope</span><button id="zOut" title="Zoom out">−</button><input type="range" id="zSl" min="5" max="80" step="1"><button id="zIn" title="Zoom in">+</button><input type="number" id="zVal" min="5" max="80" step="1" value="30" inputmode="numeric" title="Type a range (5–80 NM) and press Enter" style="width:4.4em;color:var(--cyan);background:rgba(0,0,0,0.35);border:1px solid rgba(46,230,230,0.45);border-radius:4px;text-align:right;font:inherit;padding:1px 3px"><span style="color:var(--dim)">NM</span></div>
   <div class="grp"><span class="lbl">Rings</span><select id="rgSel"><option value="1">1 NM</option><option value="2">2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option><option value="0">Off</option></select></div>
   <div class="grp"><label class="lbl" title="Show the rendezvous points (yellow)" style="display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="rdvChk" checked>RDV</label></div>
@@ -125,15 +125,15 @@ td{padding:3px 4px;border-top:1px solid #241d44;vertical-align:top}tr.act{cursor
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
 <script>
 const $ = id => document.getElementById(id), DEG = Math.PI / 180;
-const FREQ_TAG = { purple: 'PRPL', copper: 'COPR', red: 'RED', silver: 'SLVR' };
-const SRC_FREQ = { MARSHAL: 'red', APPROACH: 'silver', FINAL: 'purple' };
+const FREQ_TAG = { purple: 'PRPL', copper: 'COPR', red: 'RED', silver: 'SLVR', teal: 'TEAL' };
+const SRC_FREQ = { MARSHAL: 'red', APPROACH: 'silver', FINAL: 'purple', DEPARTURE: 'teal' };
 const ls = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const I = { link: ls('instLink', 'MARSHAL'), scope: +ls('instScope', 30), ring: +ls('instRing', 2), ci: 'auto',
   src: {}, ship: {}, disp: {}, sel: null, trails: {}, db: {}, txOpen: false, solo: null, pend: {} };
 const ch = new BroadcastChannel('stinger-link');
 const SHIPI = { auto: ls('instShipAuto', '1') !== '0', every: (ls('instShipEvery99', '') ? +ls('instShipEvery', '600') : 600) || 600 };   // v99 default 10 min (an interval saved before v99 is reset once)   // v95 ship-turn settings sent to every linked scope
-const links = () => (I.link === 'BOTH' ? ['MARSHAL', 'APPROACH'] : [I.link]).concat('FINAL');
+const links = () => (I.link === 'BOTH' ? ['MARSHAL', 'APPROACH'] : [I.link]).concat('FINAL', 'DEPARTURE');   // v114: Departure (Teal) is always linked, like Final
 const live = s => I.src[s] && Date.now() - I.src[s].rx < 3000;
 const mmss = t => { t = Math.max(0, Math.round(t)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
 const h3 = h => String(Math.round(((h % 360) + 360) % 360) || 360).padStart(3, '0');
@@ -325,7 +325,7 @@ function drawLand(cx, cy, RX, RY, sc, B) {   // same coastline as the master sco
   }
   ctx.drawImage(landCv, cx - RX, cy - RY, 2 * RX, 2 * RY);
 }
-function brc() { for (const s of ['MARSHAL', 'APPROACH', 'FINAL']) if (live(s) && I.src[s].brc != null) return I.src[s].brc; const m = shipMaster(); if (m && m.fb != null) return +m.fb; return 360; }
+function brc() { for (const s of ['MARSHAL', 'APPROACH', 'FINAL', 'DEPARTURE']) if (live(s) && I.src[s].brc != null) return I.src[s].brc; const m = shipMaster(); if (m && m.fb != null) return +m.fb; return 360; }
 /* v93 cone of confusion: only aircraft overflying the ship (within 0.3 NM). The scope says which aircraft may be coned (coneOk: not a
    launch / departure / climb-out, not final / landing, has been outside 1.5 NM, above 500 ft); older scopes: same arm-at-1.5-NM rule here. */
 const CONE_NM = 0.3, CONE_ARM_NM = 1.5, CONE_ARM = {};
@@ -391,7 +391,7 @@ function draw() {
     ctx.strokeStyle = ppi(dg % 10 ? 0.4 : 0.7); ctx.beginPath(); ctx.moveTo(ex - s1 * l, ey + c1 * l); ctx.lineTo(ex, ey); ctx.stroke();   // v105: slanted along heading dg
     if (dg % 30 === 0) { ctx.fillStyle = ppi(0.8); ctx.fillText(String(dg).padStart(3, '0'), Math.max(cx - RX + 22, Math.min(cx + RX - 22, ex - nx * 24)), Math.max(cy - RY + 22, Math.min(cy + RY - 14, ey - ny * 20 + 4))); } }
   if (!links().some(x => live(x) && I.src[x].running)) { ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,191,60,0.9)'; ctx.font = FONT(15); ctx.fillText('Waiting for ' + links().filter(x => x !== 'FINAL').map(x => x[0] + x.slice(1).toLowerCase()).join(' / ') + ' / Final simulation to start in its tab…', cx, cy - 40); }
-  { const st = ['MARSHAL', 'APPROACH', 'FINAL'].map(x => live(x) ? I.src[x] : null).find(Boolean);   // BRC / DWH / weather block (matches Marshal & Approach)
+  { const st = ['MARSHAL', 'APPROACH', 'FINAL', 'DEPARTURE'].map(x => live(x) ? I.src[x] : null).find(Boolean);   // BRC / DWH / weather block (matches Marshal & Approach)
     const sm = shipMaster(), tb = st ? (st.tbrc != null ? st.tbrc : st.brc) : sm ? sm.tbrc : null, dwh = st && st.dwh != null ? st.dwh : sm && !st ? sm.dwh : tb != null ? tb + 180 : null, w = st && st.wind;
     const landTxt = sm ? (sm.land || (sm.landOn ? 'land' : 'open water')) : '---';
     const lines = [`FREQ ${links().filter(x => x !== 'FINAL').map(x => x === 'MARSHAL' ? 'RED' : 'SLVR').join('/')} + PRPL/COPR`, `BRC ${tb != null ? h3(tb) : '---'}  DWH ${dwh != null ? h3(dwh) : '---'}`, `WX ${w ? 'WIND ' + h3(w.dir) + '/' + w.spd + 'KT' : '---'}  T+${curT() != null ? mmss(curT()) : '--:--'}`, `LAND ${landTxt.toUpperCase()}`];
@@ -492,6 +492,7 @@ function badges() {
   const m = links().includes('MARSHAL'), a = links().includes('APPROACH');
   const b = (el, on, name, isLive, st) => { el.className = 'badge ' + (!on ? 'off' : isLive ? 'live' : 'wait'); el.textContent = name + (!on ? ' · NOT LINKED' : isLive ? (st && st.running ? ' · LIVE' : ' · OPEN') : ' · WAITING'); };
   b($('stM'), m, 'RED · MARSHAL', live('MARSHAL'), I.src.MARSHAL); b($('stA'), a, 'SLVR · APPROACH', live('APPROACH'), I.src.APPROACH);
+  { const d = live('DEPARTURE'); $('stD').className = 'badge ' + (d ? 'live' : 'wait'); $('stD').textContent = 'TEAL · DEPARTURE · ' + (d ? (I.src.DEPARTURE.running ? 'LIVE' : 'OPEN') : 'READY'); }
   const f = live('FINAL'); $('stF').className = 'badge ' + (f ? 'live' : 'wait'); $('stF').textContent = 'FINAL: AUTO-LINKED · ' + (f ? 'LIVE' : 'READY / AUTO');
   { const p = anyPaused(), any = links().some(x => live(x) && I.src[x].running); $('bPause').textContent = p ? '▶ Resume (PAUSED)' : '⏸ Pause'; $('bPause').classList.toggle('on', p); $('bPause').disabled = !any;
     const open = simTargets().length, run = anyRunning(); $('bRestartSims').textContent = run ? '⟲ Restart sims' : '▶ Start sims'; $('bRestartSims').disabled = !open || restarting; }

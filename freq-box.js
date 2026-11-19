@@ -1,4 +1,4 @@
-/* freq-box.js (v113): small movable "Frequencies" box for the Marshal, Approach, Final (incl. guided intro) and Instructor scopes.
+/* freq-box.js (v113; v114 adds Teal = Departure; Green is not used because "go green" is the helo deck call): small movable "Frequencies" box for the Marshal, Approach, Final (incl. guided intro) and Instructor scopes.
    Shows the frequency of the position you are working (top, highlighted) and the other permanent color frequencies with their positions.
    Colors / positions come from the scopes' permanent frequencies (FREQ_TAG / FREQ_HELP and the handoff calls "go red / go silver /
    go purple / go copper"); the trainer defines no frequency numbers, so none are shown. Drag the header to move it (position kept in
@@ -6,6 +6,7 @@
 (function () {
   if (window.FreqBox) return;
   const FREQS = [   // color name, tag on the data blocks, swatch, position, self-ID, handoff call
+    { id: 'teal', name: 'Teal', tag: 'TEAL', sw: '#3fd6c8', pos: 'departure', who: 'Departure', self: 'Gator Departure', call: 'go teal' },
     { id: 'red', name: 'Red', tag: 'RED', sw: '#ff5a6e', pos: 'marshal', who: 'Marshal', self: 'Gator Marshal', call: 'go red' },
     { id: 'silver', name: 'Silver', tag: 'SLVR', sw: '#c9ced6', pos: 'approach', who: 'Approach', self: 'Gator Approach', call: 'go silver' },
     { id: 'purple', name: 'Purple', tag: 'PRPL', sw: '#b48cff', pos: 'final', who: 'Final', self: 'Gator Final', call: 'go purple' },
@@ -13,7 +14,7 @@
   ];
   const TOWER = { name: 'Tower', who: 'PriFly · shore only', sw: null };
   const page = (location.pathname.split('/').pop() || '').toLowerCase();
-  const POS = /marshal/.test(page) ? 'marshal' : /approach/.test(page) ? 'approach' : /final/.test(page) ? 'final' : /instructor/.test(page) ? 'instructor' : null;
+  const POS = /marshal/.test(page) ? 'marshal' : /approach/.test(page) ? 'approach' : /departure/.test(page) ? 'departure' : /final/.test(page) ? 'final' : /instructor/.test(page) ? 'instructor' : null;
   if (!POS) return;
   const KEY = 'aatccFreqBox';
   const st = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { return {}; } })();
