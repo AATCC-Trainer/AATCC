@@ -100,6 +100,11 @@ body:not(.touchdev) #vStatus{bottom:8px}
 .linkbtn:hover{color:var(--cyan);background:none}
 body.introOn #bPause,body.introOn #bS1,body.introOn #bS2,body.introOn #bEnd,body.introOn #bHelp,body.introOn #hint{display:none!important}
 body.aeroWatch #hint{display:none!important}
+#bPause2{position:absolute;top:22px;right:22px;z-index:7;min-height:28px;padding:2px 10px;font-size:13px;opacity:.75}
+#bPause2:hover{opacity:1}body.gamePaused #bPause2{display:none}body.introOn #bPause2{display:none!important}
+#pauseOv{position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(0,6,2,.62);color:var(--amber,#ffbf3c);text-align:center}
+#pauseOv.hidden{display:none}#pauseOv b{font-size:30px;letter-spacing:6px}#pauseOv span{font-size:13px;color:#d8ffde}#pauseOv small{font-size:11px;color:var(--dim)}
+#pauseOv button{font-size:16px;padding:8px 22px;border-color:var(--amber,#ffbf3c);color:var(--amber,#ffbf3c)}
 @media (max-width:640px){.modes{grid-template-columns:1fr}}
 .note{font-size:11px;color:var(--amber);margin-top:8px}
 .kbd{display:inline-block;border:1px solid var(--gd);border-radius:3px;padding:0 4px;font-size:12px}
@@ -183,7 +188,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
 <body>
 <div id="layBar" role="group" aria-label="Layout"><button type="button" data-lay="normal" title="Normal layout">▦ Normal</button><button type="button" data-lay="expand" title="Expand the scopes (hide side panel)">⤢ Scope</button><button type="button" data-lay="trans" title="Scopes + narrow transcript log">☰ Log</button></div>
 <div id="app">
-  <div id="scopeWrap"><canvas id="scope"></canvas></div>
+  <div id="scopeWrap"><canvas id="scope"></canvas><button type="button" id="bPause2" title="Pause / Resume (P)">❚❚</button><div id="pauseOv" class="hidden"><b>PAUSED</b><span>Sim, timers and radio are frozen.</span><button type="button" id="bResume">▶ Resume</button><small>or press P</small></div></div>
   <div id="panel">
     <div class="row">
       <button id="bPause" title="Pause (P)">❚❚ Pause</button>
@@ -889,7 +894,7 @@ function hoffInitiate(a) {   // Final hands the aircraft to Approach
   if (a.hoff && a.hoff.from === 'APP') { log('sys', `${a.cs}: accept the APP handoff first (click its strip).`); return; }
   hoffStart(a, 'FIN'); log('sys', `Handoff of ${a.cs} to Approach initiated.`);
   if (G.linked) linkPost({ type: 'handoff', callsign: a.cs, from: 'FIN' });
-  else { const cs = a.cs, g = G; setTimeout(() => { if (G === g) hoffAccepted(cs); }, 3000 / (G.scale || 1)); }   // solo: simulated Approach accepts
+  else { const cs = a.cs, g = G; const acc = () => { if (G !== g) return; if (G.paused) { setTimeout(acc, 300); return; } hoffAccepted(cs); }; setTimeout(acc, 3000 / (G.scale || 1)); }   // v111: waits while paused   // solo: simulated Approach accepts
 }
 const HOFF_RE = /^\s*(.+?)[\s,]+(?:hndoff|handoff|hand\s*off|hand-off)[\s.!]*$/i;
 function hoffTyped(text) {   // "<callsign> hndoff" / "handoff" / "hand off": a controller action, never a pilot command
@@ -2144,6 +2149,7 @@ function recError(code) {
 }
 function pttStart() {
   if (pttDown) return;
+  if (gamePausedNow()) { log('sys', 'Paused: press Resume (or P) to transmit.'); return; }   // v111
   Sound.ensure();
   if (!S.voiceIn || !SR) { $('cmdInput').focus(); return; }
   pttDown = true;
@@ -2245,6 +2251,7 @@ function txFlush() {
   }
 }
 function handleTranscript(text, src) {
+  if (src === 'voice' && gamePausedNow()) { log('sys', 'Paused: radio call ignored. Press Resume (or P) to transmit.'); return null; }   // v111: no voice input while paused
   TXC.depth++; let r;
   try { r = (typeof txCompound === 'function' && txCompound(text, src)) || handleTranscript0(text, src); }
   finally { TXC.depth--; if (!TXC.depth) { try { txFlush(); } catch (e) { console.error('txFlush', e); } } }
@@ -2310,12 +2317,18 @@ pttBig.addEventListener('pointerup', e => { e.preventDefault(); bigEnd(); });
 pttBig.addEventListener('pointercancel', bigEnd);
 pttBig.addEventListener('pointerleave', bigEnd);
 pttBig.addEventListener('contextmenu', e => e.preventDefault());
-$('cmdForm').addEventListener('submit', e => { e.preventDefault(); const v = $('cmdInput').value.trim(); if (!v) return; Sound.ensure(); handleTranscript(v, 'typed'); $('cmdInput').value = ''; });
+$('cmdForm').addEventListener('submit', e => { e.preventDefault(); const v = $('cmdInput').value.trim(); if (!v) return; if (gamePausedNow()) { log('sys', 'Paused: press Resume (or P) to transmit.'); return; } Sound.ensure(); handleTranscript(v, 'typed'); $('cmdInput').value = ''; });
 $('cmdInput').addEventListener('keydown', e => { if (e.key === 'Escape') $('cmdInput').blur(); });
 
 /* ===================== panel ===================== */
 function setScale(s) { s = s === 3 ? 3 : 1; if (S.simSpeed !== s) { S.simSpeed = s; saveSettings(); } $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 3); if (G) G.scale = s; }
-function setPaused(p) { if (!G) return; G.paused = p; $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p); }
+function setPaused(p) { if (!G) return; p = !!p; const was = !!G.paused; G.paused = p; $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p);
+  /* v111: a game pause (not the guided intro's freezes) also freezes radio: open mic dropped, pilot voice held, input blocked until Resume */
+  const game = p && !G.intro; document.body.classList.toggle('gamePaused', game); const pb = $('pauseOv'); if (pb) pb.classList.toggle('hidden', !game);
+  if (game && !was) { if (pttDown) { pttDown = false; $('ptt').classList.remove('live'); try { Sound.unkey(); } catch (e) {} curUtter = null; try { rec && rec.abort(); } catch (e) {} setMic('idle', 'Paused'); }
+    if (TTS) try { speechSynthesis.pause(); } catch (e) {} }
+  else if (!p && was && TTS) try { speechSynthesis.resume(); } catch (e) {} }
+const gamePausedNow = () => !!(G && G.paused && !G.intro && !G.over);
 function selectAc(a) { if (!G) return; G.selected = a; refreshPanel(true); }
 let lastPanel = 0;
 function paintView(a) {   // the aircraft as last painted by the sweep (azimuth scan: range/lateral/gs/hdg; elevation scan: height/vs)
@@ -2369,6 +2382,8 @@ function refreshPanel(force) {
 stripsEl.addEventListener('click', e => { const s = e.target.closest('.strip'); if (!s || !G) return; const a = G.ac.find(x => x.uid === +s.dataset.uid); if (a) { hoffAccept(a); selectAc(a); } });
 
 $('bPause').onclick = () => { setPaused(!G.paused); $('bPause').blur(); };
+$('bPause2').onclick = () => { if (G && !G.over) setPaused(!G.paused); $('bPause2').blur(); };
+$('bResume').onclick = () => { if (G) setPaused(false); $('bResume').blur(); };
 $('bS1').onclick = () => { setScale(1); $('bS1').blur(); };
 $('bS2').onclick = () => { setScale(3); $('bS2').blur(); };
 $('bHelp').onclick = () => openTutorial(0);
@@ -2480,6 +2495,7 @@ function endGame() {
   if (!G || G.over) return;
   for (const a of G.ac) if (!a.result && a.phase !== 'queue' && a.phase !== 'landed') finalize(a, false, 'session ended');
   G.over = true;
+  if (document.body.classList.contains('gamePaused')) { document.body.classList.remove('gamePaused'); $('pauseOv').classList.add('hidden'); if (TTS) try { speechSynthesis.resume(); } catch (e) {} }   // v111
   const tot = G.callsGood + G.callsBad;
   const landedRes = G.results.filter(r => r.landed || r.practice);
   const avg = landedRes.length ? Math.round(landedRes.reduce((s, r) => s + r.score, 0) / landedRes.length) : 0;

@@ -2547,6 +2547,7 @@ inset.addEventListener('pointerdown', e => {
 /* ===================== APPROACH CONTROL (live-zoom plan view) ===================== */
 // Geographic frame: e = NM east of the ship, n = NM north of the ship. Ship (USS Wasp) at the scope centre, BRC 180,
 // so the final approach course runs inbound from the north (aircraft fly 180 down it to the stern).
+const rngTolNm = r => Math.max(1, 0.1 * r);   // v111: a range call is an estimate: within 1 NM, or 10% at long range
 const RID = { rngTol: 2, brgTol: 45, deadline: 90, wrongPen: 5, latePen: 5 };   // radar identification grading
 const APP = true, APP_COUNT = { training: 4, normal: 6, gusty: 8 };
 const appWind = () => { const r = (G.wind.dir + 180) * DEG; return { e: G.wind.spd * Math.sin(r), n: G.wind.spd * Math.cos(r) }; };
@@ -2629,7 +2630,7 @@ function confChase(o) {   // launch an aircraft that will close to inside the la
     if (vb < lo || vb > hi) { G.ac.splice(G.ac.indexOf(d), 1); continue; }
     d.hdg = d.tgtHdg = Math.round(norm(Math.atan2(P[0], P[1]) / DEG)); d.ias = d.tgtSpd = Math.round(vb); d.confChase = o.cs;
     log('sys', `${d.cs} (${d.type}) launched from ${SHIP_NAME}, departure heading ${hdg3(Math.round(d.hdg))}, climbing to ${fmtAlt(d.tgtAlt)}.`);
-    appCheckIn(d, false); d.hdg = d.tgtHdg = Math.round(norm(Math.atan2(P[0], P[1]) / DEG)); d.ias = d.tgtSpd = Math.round(vb);
+    appCheckIn(d, false); d.hdg = d.tgtHdg = Math.round(norm(Math.atan2(P[0], P[1]) / DEG)); d.ias = d.tgtSpd = Math.round(vb); noteSpawn(d, 'conflict');
     G.launches = (G.launches || 0) + 1; G.launchLog = (G.launchLog || []).concat(G.t); schedDelay(G.t + 90);
     return d;
   }
@@ -2641,7 +2642,7 @@ function appConflictScenario() {
   for (const o of cands.sort(() => rand(-1, 1))) { const d = confChase(o); if (d) return { kind: 'chase', cs: [o.cs, d.cs] }; }
   // 2) otherwise launch a lead now and, ~1.5 min later, a second launch that converges on it
   const lead = appLaunch(); lead.hdg = lead.tgtHdg = Math.round(norm(BRC + (rand(0, 1) < 0.5 ? 1 : -1) * rand(15, 45)));
-  G.launches = (G.launches || 0) + 1; G.launchLog = (G.launchLog || []).concat(G.t);
+  G.launches = (G.launches || 0) + 1; G.launchLog = (G.launchLog || []).concat(G.t); noteSpawn(lead, 'conflict');
   G.confPair = { lead, rng: rand(4.2, 5.2), until: G.t + 240 }; schedDelay(G.t + 200);
   return { kind: 'pair', cs: [lead.cs] };
 }
@@ -2653,10 +2654,22 @@ function instLaunchPlan() {   // pre-rolled launch times (Instructor roster): 10
 }
 const schedPending = () => instLaunchPlan().filter(e => !e.done).sort((x, y) => x.at - y.at);
 const schedNext = () => schedPending()[0] || null;
+/* v111: spawn spacing + cap. Every new aircraft on Approach (scheduled launch, conflict launch, Marshal arrival) is logged in G.spawnLog;
+   new launches wait until >= SPAWN_GAP s after the last spawn, no aircraft is arriving near the ship, and fewer than APP_MAX_ON aircraft are on Approach. */
+const SPAWN_GAP = 75, MAR_GAP = 60, APP_MAX_ON = 4;
+const appOnN = () => G ? G.ac.filter(x => alive(x) && (x.phase === 'app' || x.phase === 'withFinal')).length : 0;
+function noteSpawn(a, src) { G.spawnLog = G.spawnLog || []; G.spawnLog.push({ t: G.t, cs: a && a.cs, src }); G.lastSpawnT = G.t; }
+function spawnBlock() {   // why a new launch must wait now (null = clear to launch)
+  if (appOnN() >= APP_MAX_ON) return 'full';
+  if (G.lastSpawnT != null && G.t - G.lastSpawnT < SPAWN_GAP) return 'gap';
+  if (G.ac.some(x => alive(x) && x.phase === 'app' && x.st !== 'dep' && x.st !== 'lowout' && (x.fromMar ? appRng(x) < 4 : appRng(x) < 1.5))) return 'near';   // never launch next to an arriving aircraft
+  return null;
+}
+function schedHold(T) { let t = T; for (const e of schedPending()) { if (e.at < t) e.at = t; t = e.at + SPAWN_GAP; } }   // pending launches wait until T, then stay >= SPAWN_GAP apart
 function schedDelay(T) { schedPending().forEach((e, i) => { if (e.at < T) e.at = T + i * 30; }); }   // a conflict launch went out: the next timed launches wait
 function schedLaunch(e) {   // launch one schedule entry now
   e.done = true; G.launches = (G.launches || 0) + 1;
-  const a = appLaunch(false, e.cs ? { cs: e.cs, type: e.type } : {}); e.out = [{ cs: a.cs, type: a.type, tag: '' }]; G.launchLog = (G.launchLog || []).concat(G.t); return a;
+  const a = appLaunch(false, e.cs ? { cs: e.cs, type: e.type } : {}); e.out = [{ cs: a.cs, type: a.type, tag: '' }]; noteSpawn(a, 'launch'); G.launchLog = (G.launchLog || []).concat(G.t); return a;
 }
 function appShift(d) {   // move every pending launch (and planned conflict launch) by d seconds
   for (const e of schedPending()) e.at += d;
@@ -2724,7 +2737,7 @@ const LINK = { on: localStorage.getItem('stingerLink') === '1', ch: null, lastAc
     const a = G.ac.find(x => x.phase === 'withFinal' && (K(x.linkCs) === mc || K(x.cs) === mc || K(x.tel) === mc)); if (!a) return;
     a.appCount = (a.appCount || 0) + 1;
     if (m.outcome === 'landed') { a.phase = 'gone'; a.removeAt = G.t; log('good', `${a.cs} landed aboard ${SHIP_NAME} (Final Control).`); return; }
-    a.phase = 'app'; a.st = 'lowout'; a.recheckAt = G.t + 20; a.onFinal = false; a.turnDir = null; [a.e, a.n] = fromLoc(0, -0.3); a.hdg = BRC;
+    a.phase = 'app'; a.st = 'lowout'; a.recheckAt = G.t + 20; a.onFinal = false; a.turnDir = null; [a.e, a.n] = fromLoc(0, -0.3); a.hdg = BRC; a.paint = null; a.trail = []; a.trailT = 0;   // v111: fresh track, no stale paint behind it
     a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = isHelo(a) ? 200 : Math.round(rand(250, 300));
     for (const c of (a.climbout || [])) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = c.v; }
     coDefer(a); a.climbout = null;
@@ -2828,6 +2841,7 @@ const MA = { on: localStorage.getItem('stingerMA') !== '0', ch: null, peerT: 0, 
     if (!this.takeFn) return ack(false, 'not supported');
     if (!G || G.over) return ack(false, 'Approach is not running');
     if (G.ac.some(x => alive(x) && x.cs === s.cs)) { this.seen.set(m.id, false); return ack(false, 'callsign ' + s.cs + ' already on Approach'); }
+    if (appOnN() >= APP_MAX_ON) { this.seen.set(m.id, false); log('warn', `${s.cs} from Marshal: Approach is full (${APP_MAX_ON} aircraft). Marshal keeps it on Red until there is room.`); return ack(false, 'APPROACH FULL'); }   // v111: max 4 on Approach
     let ok = false, msg = ''; try { ok = !!this.takeFn(s, m); } catch (e) { msg = 'error: ' + e.message; }
     this.seen.set(m.id, ok); ack(ok, msg);
   }
@@ -2840,8 +2854,12 @@ MA.takeFn = s => {   // a Marshal aircraft handed to Approach: same position / a
   a.trail = []; a.trailT = 0; a.checked = false; a.lastTx = G.t; a.fuel0 = +s.state || 3; a.launchT = G.t; a.souls = +s.souls || 1;
   a.appCount = s.appCount != null ? +s.appCount : APP_MAX_PARS - 1; a.priCounted = true; a.sq = s.sq !== false; a.priStart = !!s.priStart; a.priCut = !!s.priCut;
   a.coneArm = !!s.coneArm || Math.hypot(a.e, a.n) > CONE_ARM_NM; a.fromMar = true; a.hoffFreq = null; a.button = null;
-  G.ac.push(a); const spd = a.ias; appCheckIn(a, false); a.ias = a.tgtSpd = spd;
-  log('sys', `${a.cs} (${a.type}) handed off from Marshal: checking in on Silver, ${appRng(a).toFixed(1)} NM, ${fmtAlt(a.alt)}${a.sq ? '' : ' (primary only)'}.`);
+  const wait = G.lastSpawnT != null ? G.lastSpawnT + MAR_GAP - G.t : 0;   // v111: a launch just checked in: this one comes up on Silver a little later (painted, not yet on frequency)
+  G.ac.push(a); const spd = a.ias;
+  if (wait > 0) { a.st = 'marWait'; a.checkAt = G.t + wait; a.marSpd = spd; a.tasks = {}; } else { appCheckIn(a, false); a.ias = a.tgtSpd = spd; }
+  noteSpawn(a, 'marshal'); if (wait > 0) G.spawnLog[G.spawnLog.length - 1].t = G.lastSpawnT = a.checkAt;
+  schedHold(G.lastSpawnT + SPAWN_GAP); if (G.confPlan && G.confPlan.length && G.confPlan[0] < G.lastSpawnT + SPAWN_GAP) G.confPlan[0] = G.lastSpawnT + SPAWN_GAP;   // v111: own launches stay clear of a Marshal arrival
+  log('sys', `${a.cs} (${a.type}) handed off from Marshal: ${a.st === 'marWait' ? `switching to Silver (checks in about ${Math.round(a.checkAt - G.t)} s after the last check-in)` : 'checking in on Silver'}, ${Math.round(appRng(a))} NM, ${fmtAlt(a.alt)}${a.sq ? '' : ' (primary only)'}.`);
   if (s.tbrc != null && Math.round(+s.tbrc) % 360 !== Math.round(TBRC) % 360) log('warn', `Marshal is on BRC ${h3z(+s.tbrc)}, this run uses BRC ${h3z(TBRC)}: start both runs linked so they match.`);
   try { refreshPanel(true); } catch (e) {} return true;
 };
@@ -2860,7 +2878,7 @@ function appCheckIn(a, again) {
   const fSay = (+whole >= 10 ? sayTwo(+whole) : NUMW[+whole]) + ' point ' + NUMW[+dec];
   const n = a.souls, sw = n === 1 ? 'soul' : 'souls';
   const pre = again ? 'off the low approach, ' : a.fromMar ? '' : 'airborne, ', posAlso = again || a.fromMar;   // v94: handed off from Marshal = position + angels, no 'airborne'
-  const pB = String(Math.round(appBrg(a)) % 360 || 360).padStart(3, '0'), pR0 = appRng(a), pR = pR0 < 1 ? (Math.round(pR0 * 10) / 10).toFixed(1) : String(Math.round(pR0));
+  const pB = String(Math.round(appBrg(a)) % 360 || 360).padStart(3, '0'), pR0 = appRng(a), pR = String(Math.max(1, Math.round(pR0)));   // v111: whole miles
   const pRSay = pR.includes('.') ? pR.split('.').map(d => DIGW[+d]).join(' point ') : (+pR >= 10 ? sayTwo(+pR) : NUMW[+pR]);
   const posit = `${pB} for ${pR} from mother, `, positSay = `${pB.split('').map(d => DIGW[+d]).join(' ')} for ${pRSay} from mother, `;
   a.checkInPosit = { brg: appBrg(a), rng: pR0, text: posit };
@@ -3027,7 +3045,7 @@ function sectorGuide(a) {   // fly to the sector's centre radial at the held ran
   if (!S.est && inSector(appBrg(a), S.n) && d <= SECTOR_EST_NM && appRng(a) >= SECTOR_MIN_NM) {
     S.est = true; S.estT = G.t;
     pilotSay(a, `${a.tel}, established on sector ${S.n}.`, `${a.telSay}, established on sector ${NUMW[S.n]}.`);
-    log('sys', `${a.cs} established on sector ${S.n} (${hdg3(Math.round(appBrg(a)))} for ${appRng(a).toFixed(1)} NM), holding.`);
+    log('sys', `${a.cs} established on sector ${S.n} (${hdg3(Math.round(appBrg(a)))} for ${Math.round(appRng(a))} NM), holding.`);
   }
   a.turnDir = null;
   let h;
@@ -3044,16 +3062,18 @@ function appStep(dt) {
   instHold();
   if (!G.confPlan) { const k = CONF_PLAN[G.d.key || ''] || (G.d.name === 'Training' ? 1 : G.d.name === 'Normal' ? 3 : 5), n = k === 1 ? 1 : Math.max(1, k + Math.round(rand(-1, 1)));
     G.confPlan = Array.from({ length: n }, (_, i) => 70 + (i + rand(0.1, 0.9)) * (k === 1 ? 300 : 900 / n)).sort((x, y) => x - y); G.confLog = []; G.appConfSet = new Set(); }
+  if (G.confPlan.length && G.t >= G.confPlan[0] && spawnBlock()) G.confPlan[0] = G.t + 10;   // v111: conflict launches wait their turn too
   if (G.confPlan.length && G.t >= G.confPlan[0]) { G.confPlan.shift(); const sc = appConflictScenario(); G.confLog.push({ t: Math.round(G.t), ...sc }); }
   appConflicts();
   if (G.confPair && (G.t >= G.confPair.until || !G.ac.includes(G.confPair.lead))) G.confPair = null;
-  if (G.confPair && Math.hypot(G.confPair.lead.e, G.confPair.lead.n) >= G.confPair.rng) { const cp = G.confPair; cp.rng += 0.3; const d = confLeadOk(cp.lead, 1000) || confLeadOk(cp.lead, 1200) ? confChase(cp.lead) : null; if (d) G.confPair = null; const l = G.confLog && G.confLog[G.confLog.length - 1]; if (d && l) l.cs.push(d.cs), l.chaseT = Math.round(G.t); }
-  { const e = schedNext(); if (e && G.t >= e.at) schedLaunch(e); }   // schedule: first at 10 s, then every 4-6 min (Instructor can edit it)
+  if (G.confPair && Math.hypot(G.confPair.lead.e, G.confPair.lead.n) >= G.confPair.rng) { const cp = G.confPair; cp.rng += 0.3; const d = !spawnBlock() && (confLeadOk(cp.lead, 1000) || confLeadOk(cp.lead, 1200)) ? confChase(cp.lead) : null; if (d) G.confPair = null; const l = G.confLog && G.confLog[G.confLog.length - 1]; if (d && l) l.cs.push(d.cs), l.chaseT = Math.round(G.t); }
+  { const e = schedNext(); if (e && G.t >= e.at) { const why = spawnBlock(); if (!why) schedLaunch(e); else schedHold(why === 'gap' ? G.lastSpawnT + SPAWN_GAP : G.t + 10); } }   // v111: spaced, max 4 on Approach. schedule: first at 10 s, then every 4-6 min (Instructor can edit it)
   const w = appWind();
   if (LINK.pendingHandoff) { const h = LINK.pendingHandoff; LINK.pendingHandoff = null; LINK.handoff(h.a, h.freq); }
   for (const a of G.ac) {
     if (a.phase !== 'app') continue;
     coStep(a);
+    if (a.st === 'marWait' && G.t >= a.checkAt) { a.st = 'ctl'; appCheckIn(a, false); a.ias = a.tgtSpd = a.marSpd || a.ias; }   // v111: delayed Marshal arrival checks in now
     const rng0 = appRng(a);
     if (a.st === 'final') {   // flown by Gator Final: straight in, low approach (or full stop), then climb back out
       if (!a.lowDone) {
@@ -3232,8 +3252,8 @@ function appExecute(p, src) {
     }
     if (c.k === 'pos') {
       const legs = appLegs(a), name = { upwind: 'upwind', crosswind: 'crosswind', downwind: 'downwind', abeam: 'abeam', dogleg: 'dog leg', base: 'base' };
-      const rc = p.cmds.find(x => x.k === 'range'), rr = appRng(a), tol = rr < 2 ? 0.5 : 1, mOk = rc && Math.abs(rc.v - rr) <= tol;
-      if (rc && !mOk) { G.score -= 5; log('bad', `−5: ${a.cs} is ${rr.toFixed(1)} NM from ${SHIP_NAME}, not ${rc.v}.`); Sound.buzz(); }
+      const rc = p.cmds.find(x => x.k === 'range'), rr = appRng(a), tol = rngTolNm(rr), mOk = rc && Math.abs(rc.v - rr) <= tol;
+      if (rc && !mOk) { G.score -= 5; log('bad', `−5: ${a.cs} is about ${Math.round(rr)} NM from ${SHIP_NAME}, not ${rc.v}.`); Sound.buzz(); }
       if (legs.includes(c.v)) { log('good', `Position correct: ${a.cs} ${name[c.v]}${rc ? `, ${rc.v} mi` : ''}.`); if (mOk) award(a, 'pos', `position ${rc.v} mi ${name[c.v]}`); }
       else { G.score -= 5; log('bad', `−5: ${a.cs} is on ${legs.length ? legs.filter(l => l !== 'abeam' || legs.length === 1).map(l => name[l]).join(' / ') : 'none of the pattern legs'}, not ${name[c.v]}.`); Sound.buzz(); }
       rb.push('ack'); rbSay.push('ack'); continue;
@@ -3293,7 +3313,7 @@ function appExecute(p, src) {
       rb.push('ack'); rbSay.push('ack'); continue;
     }
     if (c.k === 'markFather') {   // posit from the ship, no scoring
-      const mB = String(Math.round(appBrg(a)) % 360 || 360).padStart(3, '0'), mR0 = appRng(a), mR = mR0 < 1 ? (Math.round(mR0 * 10) / 10).toFixed(1) : String(Math.round(mR0));
+      const mB = String(Math.round(appBrg(a)) % 360 || 360).padStart(3, '0'), mR0 = appRng(a), mR = String(Math.max(1, Math.round(mR0)));   // v111: whole miles
       const mRSay = mR.includes('.') ? mR.split('.').map(x => DIGW[+x]).join(' point ') : (+mR >= 10 ? sayTwo(+mR) : NUMW[+mR]);
       pilotSay(a, `${a.tel}, ${mB} for ${mR}.`, `${a.telSay}, ${mB.split('').map(x => DIGW[+x]).join(' ')} for ${mRSay}.`);
       marked = true; continue;
@@ -3301,10 +3321,10 @@ function appExecute(p, src) {
     if (c.k === 'rid') { rb.push('ack'); rbSay.push('ack'); continue; }   // the heading in the same call does the work; callsign-only readback
     if (c.k === 'radarContact' && c.rng != null) {   // radar identification with a position: graded against the real range/bearing from the ship
       const r = appRng(a), b = appBrg(a), dR = Math.abs(c.rng - r), dB = Math.abs(angDiff(c.brg % 360, b));
-      if (dR <= RID.rngTol && dB <= RID.brgTol) {
+      if (dR <= Math.max(RID.rngTol, rngTolNm(r)) && dB <= RID.brgTol) {
         a.identified = true; a.rcDone = true;
-        log('good', `Radar identified ${a.cs}: ${c.rng} NM ${c.dirTxt} (actual ${r.toFixed(1)} NM, ${hdg3(Math.round(b))}).`); award(a, 'rc', 'radar contact (ID)');
-      } else { G.score -= RID.wrongPen; log('bad', `−${RID.wrongPen}: incorrect radar ID on ${a.cs}: said ${c.rng} NM ${c.dirTxt}, actual ${r.toFixed(1)} NM bearing ${hdg3(Math.round(b))}.`); Sound.buzz(); }
+        log('good', `Radar identified ${a.cs}: ${c.rng} NM ${c.dirTxt} (actual about ${Math.round(r)} NM, ${hdg3(Math.round(b))}).`); award(a, 'rc', 'radar contact (ID)');
+      } else { G.score -= RID.wrongPen; log('bad', `−${RID.wrongPen}: incorrect radar ID on ${a.cs}: said ${c.rng} NM ${c.dirTxt}, actual about ${Math.round(r)} NM bearing ${hdg3(Math.round(b))}.`); Sound.buzz(); }
       if (c.offMom) { a.rcDone = true; rb.push('radar contact'); rbSay.push('radar contact'); continue; }   // v95: "<cs>, off mothers 090 at 12, radar contact" -> "<cs>, radar contact"
       rb.push('roger'); rbSay.push('roger'); continue;
     }
@@ -3353,7 +3373,7 @@ function appReadout(a) {
   if (!a || !appCtl(a)) return 'No aircraft selected. Click a target or a strip.';
   const tgt = (v, t, f) => Math.abs(v - t) > 0.5 ? ` → ${f(t)}` : '';
   return `${a.cs} ${a.type} "${a.tel}"
-RANGE ${appRng(a).toFixed(1)} NM  BRG ${hdg3(Math.round(appBrg(a)))} FROM ${SHIP_NAME.toUpperCase()}
+RANGE ${Math.round(appRng(a))} NM  BRG ${hdg3(Math.round(appBrg(a)))} FROM ${SHIP_NAME.toUpperCase()}
 HDG ${hdg3(Math.round(a.hdg))}${Math.abs(angDiff(a.tgtHdg, a.hdg)) > 0.5 ? ' → ' + hdg3(Math.round(a.tgtHdg)) : ''}   ALT ${fmtAlt(Math.round(a.alt))}${tgt(a.alt, a.tgtAlt, fmtAlt)} FT
 ${G.gsp ? `IAS ${Math.round(a.ias)}${tgt(a.ias, a.tgtSpd, x => Math.round(x))} KT   GS ${Math.round(a.gs)} KT` : 'SPD --- (type GSP)'}`;
 }

@@ -3096,6 +3096,9 @@ const MA = { on: localStorage.getItem('stingerMA') !== '0', ch: null, peerT: 0, 
   acked(m) {
     if (!G) return; const a = G.ac.find(x => x.maPend && x.maPend.id === m.id); if (!a) return; a.maPend = null;
     if (m.ok) { a.phase = 'gone'; a.removeAt = G.t; a.maDone = true; if (G.selected === a) G.selected = null; log('good', `${a.cs} handed off to Approach (Silver): now on the Approach scope.`); try { refreshPanel(true); } catch (e) {} }
+    else if (/APPROACH FULL/.test(m.msg || '')) {   // v111: Approach holds at 4 aircraft: the aircraft stays with Marshal on Red
+      a.phase = 'app'; a.st = 'ctl'; a.hoffFreq = null; a.button = a.button === 'silver' ? null : a.button; a.onFinal = false;
+      log('warn', `Approach is full (4 aircraft): ${a.cs} stays on Red with you. Hand it to Silver again when Approach has room.`); try { refreshPanel(true); } catch (e) {} }
     else log('warn', `Approach page could not take ${a.cs} (${m.msg || 'refused'}): it leaves Marshal frequency.`);
   },
   /* ---- receiver (Approach) ---- */

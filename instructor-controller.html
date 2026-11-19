@@ -359,11 +359,13 @@ function draw() {
   ctx.strokeStyle = ppi(0.95); ctx.save(); ctx.translate(cx, cy); ctx.rotate(fb); ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(4, 6); ctx.lineTo(-4, 6); ctx.closePath(); ctx.stroke(); ctx.restore();
   // aircraft
   const now = performance.now(), acs = allAc(); ctx.font = FONT(11);
+  { const live = new Set(acs.map(a => a.key)); for (const k of Object.keys(I.disp)) if (!live.has(k)) { delete I.disp[k]; delete I.trails[k]; } }   // v111: drop tracks of aircraft that left
   for (const a of acs) {
     if (!a.onScope) continue;
-    const tr = I.trails[a.key] || (I.trails[a.key] = []);
+    let tr = I.trails[a.key] || (I.trails[a.key] = []);
     let D = I.disp[a.key]; const brgA = nrm(Math.atan2(a.e, a.n) / DEG);
-    if (!D || crossed(brgA)) { if (D) { tr.push({ e: D.e, n: D.n }); if (tr.length > 5) tr.shift(); } D = I.disp[a.key] = { e: a.e, n: a.n, alt: a.alt, gs: a.gs || a.ias, hdg: a.hdg }; }   // latch on sweep pass
+    if (D && (D.cs !== a.cs || Math.hypot(a.e - D.e, a.n - D.n) > 3)) { D = null; tr = I.trails[a.key] = []; }   // v111: a reloaded scope reuses uids (src:uid): never hang an old aircraft's track on a new one (looked like flying backwards)
+    if (!D || crossed(brgA)) { if (D) { tr.push({ e: D.e, n: D.n }); if (tr.length > 5) tr.shift(); } D = I.disp[a.key] = { e: a.e, n: a.n, alt: a.alt, gs: a.gs || a.ias, hdg: a.hdg, cs: a.cs }; }   // latch on sweep pass
     a.dispE = D.e; a.dispN = D.n; a.dispAlt = D.alt; a.dispGs = D.gs;
     a.cone = inCone(a);   // quiet flag: over the ship, paints are suppressed (sim / voice still run)
     if (a.cone) { a.hit = null; delete HIT[a.key]; continue; }   // cone of confusion: hide primary, data block, and trail
