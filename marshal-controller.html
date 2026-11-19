@@ -606,6 +606,9 @@ const PATTERNS = [
   [/\broger\b/g, () => ({ k: 'roger' })],
   [/\bsay\s+(?:your\s+|again\s+)?callsign\b|\bverify\s+(?:your\s+)?callsign\b/g, () => ({ k: 'sayCs' })],
   [/\b(?:on\s+(?:the\s+)?|you\s+are\s+|now\s+)?(upwind|up\s+wind|crosswind|cross\s+wind|downwind|down\s+wind|abeam|a\s+beam|dog\s*leg|base(?!\s+recovery)(?:\s+leg)?)\b/g, m => { const w = m[1].replace(/\s+/g, ''); return { k: 'pos', v: w === 'abeam' ? 'abeam' : w.startsWith('dog') ? 'dogleg' : w.startsWith('base') ? 'base' : w }; }],
+  // v112: relative speed change: "increase to 25 knots" / "increase speed by 25 knots" (jets), "increase to 10 knots" (helos): +N kt from the present speed (N <= 50; bigger numbers stay absolute speeds)
+  [/\b(increase|reduce|decrease)(?:\s+(?:your\s+)?speed)?(?:\s+(?:to|by))?\s+(\d{1,2})(?:\s+knots?)\b|\b(increase|reduce|decrease)\s+(?:your\s+)?speed\s+(?:by\s+)?(\d{1,2})\b(?!\s*\d)/g,
+    m => { const n = +(m[2] || m[4]), up = (m[1] || m[3]) === 'increase'; return n >= 1 && n <= 50 ? { k: 'spd', rel: up ? n : -n, v: null } : { k: 'spd', v: n }; }],
   [/\b(?:reduce|increase|maintain|slow)(?:\s+(?:your\s+)?speed)?(?:\s+to)?\s+(\d{2,3})(?:\s+knots)?\b|\bspeed\s+(\d{2,3})(?:\s+knots)?\b|\b(\d{2,3})\s+knots\b/g, m => ({ k: 'spd', v: +(m[1] || m[2] || m[3]) })],
 ];
 
@@ -704,7 +707,7 @@ function cmdStr(c) {
     case 'alt': return `alt ${c.v}`;
     case 'tower': return ph('contact Tower (PriFly)', 'contact tower');
     case 'sayCs': return 'say callsign';
-    case 'spd': return `speed ${c.v}`;
+    case 'spd': return c.rel != null ? `speed ${c.rel > 0 ? '+' : ''}${c.rel} kt` : `speed ${c.v}`;
     case 'hear': return 'radio check';
     case 'goGreen': return 'go green';
     case 'climbOut': return 'climb outs, go silver';
@@ -851,8 +854,10 @@ const FB = () => BRC, DWH = () => norm(TBRC + 180) % 360 || 360;   // opposite o
 const BROT = () => BRC - 180;
 const toLoc = (e, n) => { const r = BROT() * DEG, c = Math.cos(r), s = Math.sin(r); return [e * c - n * s, e * s + n * c]; };
 const fromLoc = (le, ln) => { const r = BROT() * DEG, c = Math.cos(r), s = Math.sin(r); return [le * c + ln * s, -le * s + ln * c]; };
+const spdOf = (a, c) => c.rel != null ? Math.round(((a.ias != null ? a.ias : a.tgtSpd) || 0) + c.rel) : c.v;   // v112: relative speed calls resolve against the present speed
 const isHelo = a => !!(a.T && a.T.helo);                       // helicopters (no tiltrotors in the sim)
 /* v99 turn rates (deg/s): tactical jets 6 (was standard rate 3), helicopters 8 (was 3). PAR course corrections on final 3 (was 1.5). No-gyro stays 3 / 1.5 (phraseology). */
+const descRate = a => isHelo(a) ? (a.alt > 5000 ? 3000 : 1800) : (a.alt > 5000 ? 4000 : 2000);   // v112: Case III descents (fpm): jets 4,000 above 5,000 ft / 2,000 below; helos 3,000 / 1,800
 const TURN_JET = 6, TURN_HELO = 8, TURN_PAR = 3, turnRate = a => (a && a.T && a.T.helo) ? TURN_HELO : TURN_JET;
 const GREEN_R = 1.0, BALL_R = 0.75;                            // ship calls: 'one mile, go green' (helo) / 'three-quarter mile, call the ball' (fixed wing)
 const SEE_YOU_R = 2.0;                                         // pilot transmits "see you" at 2 NM (ship)
@@ -1448,6 +1453,7 @@ function execute(p, src) {
         rb.push(`${c.v > a.z ? 'climb' : 'descend'} and maintain ${fmtAlt(c.v)}`); rbSay.push(`${c.v > a.z ? 'climb' : 'descend'} and maintain ${sayAlt(c.v)}`);
         break;
       case 'spd':
+        if (c.rel != null) c.v = spdOf(a, c);   // v112
         if (c.v < a.T.vmin || c.v > a.T.vmax) { log('sys', `${a.cs} can't fly ${c.v} kt (${a.T.vmin}-${a.T.vmax}); speed unchanged.`); break; }
         a.tgtSpd = c.v; rb.push(`speed ${c.v}`); rbSay.push(`speed ${sayDigits(c.v)}`); break;
       case 'course': {
@@ -2996,7 +3002,7 @@ const LINK = { on: localStorage.getItem('stingerLink') === '1', ch: null, lastAc
     if (m.outcome === 'landed') { a.phase = 'gone'; a.removeAt = G.t; log('good', `${a.cs} landed aboard ${SHIP_NAME} (Final Control).`); return; }
     a.phase = 'app'; a.st = 'lowout'; a.recheckAt = G.t + 20; a.onFinal = false; a.turnDir = null; [a.e, a.n] = fromLoc(0, -0.3); a.hdg = BRC;
     a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = isHelo(a) ? 200 : MC ? 250 : Math.round(rand(250, 300));
-    for (const c of (a.climbout || [])) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = c.v; }
+    for (const c of (a.climbout || [])) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = spdOf(a, c); }
     coDefer(a); a.climbout = null;
     log('sys', `${a.cs} ${m.outcome === 'waveoff' ? 'waved off' : 'low approach'} (Final Control, PAR ${a.appCount}/${APP_MAX_PARS}), flying climbout: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}.`);
   },
@@ -3463,6 +3469,21 @@ const MAR = {
   setH(a, h, dir) { a.tgtHdg = Math.round(norm(h + BROT())) % 360 || 360; a.turnDir = dir || null; },
   cl: (v, m) => Math.max(-m, Math.min(m, v)),
   track(P0, c, p, k = 35) { const r = c * DEG, x = (p[0] - P0[0]) * Math.cos(r) - (p[1] - P0[1]) * Math.sin(r); return c - this.cl(x * k, 45); },
+  // v112: line tracking with a wind-corrected pursuit point (no standing offset in a crosswind): steer the ground track at a point L NM
+  // ahead on the line (intercept angle <= maxI), then crab into the wind so the ground track is the one wanted.
+  tasOf(a, ias) { return (MC && !isHelo(a)) ? ias : ias * (1 + a.alt / 1000 * 0.02); },
+  windL() { const w = appWind(), r = BROT() * DEG, c = Math.cos(r), s = Math.sin(r); return [w.e * c - w.n * s, w.e * s + w.n * c]; },
+  hdgFor(a, trk) {   // local heading that makes good local ground track trk
+    const tas = Math.max(40, this.tasOf(a, a.ias || a.tgtSpd || 150)), [we, wn] = this.windL(), r = trk * DEG;
+    const cross = we * Math.cos(r) - wn * Math.sin(r);   // wind component to the right of the track
+    return norm(trk - Math.asin(this.cl(cross / tas, 0.9)) / DEG);
+  },
+  trackW(a, P0, c, p, maxI = 60) {
+    const r = c * DEG, x = (p[0] - P0[0]) * Math.cos(r) - (p[1] - P0[1]) * Math.sin(r);   // + = right of the course line
+    const L = Math.max(0.35, (a.gs || a.ias || 150) / 3600 * 8), ia = this.cl(Math.atan2(x, L) / DEG, maxI);
+    return this.hdgFor(a, norm(c - ia));
+  },
+  gsAlong(a, c, ias) { const [we, wn] = this.windL(), r = c * DEG; return (this.tasOf(a, ias) + we * Math.sin(r) + wn * Math.cos(r)) * ((MC && !isHelo(a)) ? 0.96 : 1); },
   along(P0, c, p) { const r = c * DEG; return (p[0] - P0[0]) * Math.sin(r) + (p[1] - P0[1]) * Math.cos(r); },
   direct(P, p) { return this.lb(P[0] - p[0], P[1] - p[1]); },
   crossesFinal(P, Q) {   // v103: does the segment P->Q (local e, n) cross the final bearing (e = 0, n > 0) astern of the ship?
@@ -3741,7 +3762,7 @@ const MAR = {
   },
   commence(a, type) {
     const M = a.mar, p = this.loc(a), fR = M.R != null ? M.R : (this.T[type].marR || 30), fD = M.D != null ? M.D : (this.fixD(type, M.alt || 2000) || 2);
-    const F = this.pt(fR, fD), atFix = Math.hypot(F[0] - p[0], F[1] - p[1]) <= 0.6;
+    const F = this.pt(fR, fD), atFix = Math.hypot(F[0] - p[0], F[1] - p[1]) <= 1.0;   // v112: 1 NM (an on-time push a few seconds either side of the fix)
     M.run = type; M.inMar = false; M.cleared = false; M.fafDone = false; M.t0 = G.t;
     M.ph = { LH1: atFix ? 'out1' : 'iaf2', LH2: atFix ? 'out2' : 'iaf2', LH3: 'turnF', LH4: 'h4a', LH5: atFix ? 'out5' : 'h5a', EMER: 'h4a' }[type];
     M.fDir = type === 'LH3' ? null : type === 'LH1' || type === 'LH2' || type === 'LH5' ? 'L' : 'R';
@@ -3791,7 +3812,7 @@ const MAR = {
         if (d <= 0.30) {
           M.inMar = true; M.t0 = G.t;
           const alignedIn = Math.abs(angDiff(this.hdgL(a), cin)) <= 35;
-          const canEatPush = M.eatAt != null && G.t >= M.eatAt - 5 && alignedIn;
+          const canEatPush = M.eatAt != null && G.t >= M.eatAt - 1 && alignedIn;   // v112: never early
           const canCmdPush = !!M.forceCommence && (M.type || M.typeInf) && alignedIn;
           if (canEatPush || canCmdPush) {
             const pushType = M.type || M.typeInf || (isHelo(a) ? 'LH5' : 'LH2');
@@ -3808,16 +3829,24 @@ const MAR = {
       }
       case 'hold': {   // left-hand racetrack on SE (holding) side of the radial: inbound on cin right over F, commence strictly at F
         const F = this.pt(M.R, M.D), cin = M.R, cout = norm(M.R + 180), dF = Math.hypot(F[0] - p[0], F[1] - p[1]);
+        if (M.eatAt != null && !M.eatDone && G.t >= M.eatAt) {   // v112: EAT reached: commence now, to the second (the racetrack is timed to be at the fix)
+          const pushType = M.type || M.typeInf || (isHelo(a) ? 'LH5' : 'LH2');
+          M.rptComm = false; M.forceCommence = false; M.eatDone = true; M.waitPush = false; if (M.spd0) a.tgtSpd = M.spd0;
+          this.commence(a, pushType); this.say(a, 'commencing');
+          log('good', `${a.cs} commencing in marshal ${h3z(BRC + (M.R != null ? M.R : 30))} at ${M.D != null ? M.D : 2} at :${String(M.eat).padStart(2, '0')} (${dF.toFixed(1)} NM from the fix).`);
+          break;
+        }
         const Dt = 2 * (Math.max(110, a.gs || a.ias || 250) / 3600) / (turnRate(a) * DEG);   // exact 180-turn diameter at the sim turn rate
         const Fout = [F[0] + Dt * Math.sin((cin - 90) * DEG), F[1] + Dt * Math.cos((cin - 90) * DEG)];   // SE parallel outbound leg
         a.tgtAlt = M.alt;
         if (!M.est && Math.abs(a.alt - M.alt) <= 100) { M.est = true; log('sys', `${a.cs} established in marshal ${h3z(BRC + M.R)}R ${M.D} NM, angels ${appAngels(M.alt)} (${fmtAlt(Math.round(a.alt))} ft).`); }
         if (M.leg === 'in') {
           const al = this.along(F, cin, p);
-          this.setH(a, (dF <= 0.8 || al > 0) ? this.direct(F, p) : this.track(F, cin, p));
+          this.setH(a, M.waitPush ? this.trackW(a, F, cin, p) : (dF <= 0.8 || al > 0) ? this.direct(F, p) : this.track(F, cin, p));   // v112: waiting a few s for the EAT: straight on through the fix
           if (dF <= 0.35 && al >= -0.25) {
-            const canEatPush = M.eatAt != null && G.t >= M.eatAt - 5;
+            const canEatPush = false;   // v112: the EAT push happens at the EAT itself (above), not up to 5 s early
             const canCmdPush = !!M.forceCommence && (M.type || M.typeInf);
+            if (M.eatAt != null && !M.eatDone && M.eatAt - G.t <= 8) { M.waitPush = true; }   // a few seconds early: hold the inbound course through the fix and push at the EAT
             if (canEatPush || canCmdPush) {
               const pushType = M.type || M.typeInf || (isHelo(a) ? 'LH5' : 'LH2');
               M.rptComm = false; M.forceCommence = false; if (canEatPush) M.eatDone = true;
@@ -3826,7 +3855,13 @@ const MAR = {
               this.say(a, 'commencing'); log('good', `${a.cs} commencing in marshal ${rFix} at ${dFix}${M.eat != null ? ' at :' + String(M.eat).padStart(2, '0') : ''}.`);
               break;
             }
-            M.leg = 'tOut'; M.t0 = G.t;
+            if (!M.waitPush) { M.leg = 'tOut'; M.t0 = G.t; }
+          }
+          if (M.eatAt != null && !M.eatDone && !M.waitPush && al < -0.3) {   // v112: inbound: fine-tune speed so the fix comes up exactly at the EAT
+            const rem = M.eatAt - G.t, lim = isHelo(a) ? [80, 140] : [200, 300];
+            if (rem > 3 && rem < 400) { M.spd0 = M.spd0 || a.tgtSpd; const need = dF / rem * 3600; let ias = M.spd0;
+              for (let k = 0; k < 4; k++) ias += (need - this.gsAlong(a, cin, ias)) * 0.9;
+              a.tgtSpd = Math.round(this.cl(ias - (lim[0] + lim[1]) / 2, (lim[1] - lim[0]) / 2) + (lim[0] + lim[1]) / 2); }
           }
         }
         if (M.leg === 'tOut') { this.setH(a, cout, 'L'); if (Math.abs(angDiff(this.hdgL(a), cout)) < 6) { M.leg = 'out'; M.t0 = G.t; } }
@@ -3834,8 +3869,10 @@ const MAR = {
           this.setH(a, this.track(Fout, cout, p, 25));
           const distOut = Math.max(0, -this.along(F, cin, p)), stdOut = isHelo(a) ? 2.5 : 4.0;
           if (M.eatAt != null) {
-            const vNmS = Math.max(0.025, (a.gs || a.ias || 250) * ((MC && !isHelo(a)) ? 0.96 : 1) / 3600);
-            const tRet = 53 + distOut / vNmS, remAtF = (M.eatAt - G.t) - tRet;
+            // v112: time back to the fix = the 180 turn at the sim turn rate + the inbound leg at the INBOUND ground speed (wind included); was a fixed 53 s turn
+            // at the outbound ground speed, so the bird came back ~30 s early, was not allowed to push early, flew another lap and commenced late
+            const vNmS = Math.max(0.025, this.gsAlong(a, cin, M.spd0 || a.tgtSpd || a.ias || 250) / 3600);
+            const tRet = 180 / turnRate(a) + 4 + (distOut + 0.2) / vNmS, remAtF = (M.eatAt - G.t) - tRet;
             if ((distOut >= 0.25 && remAtF <= 1.5) || (distOut >= stdOut && remAtF >= 135) || distOut >= stdOut + 5.5) M.leg = 'tIn';
           } else if (distOut >= stdOut) M.leg = 'tIn';
         }
@@ -3844,31 +3881,31 @@ const MAR = {
       }
       case 'out1': {   // LH-1: outbound on outbound bearing (210) from marshal fix through mother, descend to 1/3 marshal alt, turn left at 12 NM / 3 min
         const F0 = this.pt(M.R != null ? M.R : 30, M.D != null ? M.D : 4);
-        a.tgtAlt = Math.max(1200, Math.round(M.alt / 3 / 100) * 100); this.setH(a, this.track(F0, obL, p));
+        a.tgtAlt = Math.max(1200, Math.round(M.alt / 3 / 100) * 100); this.setH(a, this.trackW(a, F0, obL, p));
         if (this.along(O, obL, p) >= 12 || dt >= 180) this.go(a, 'turnF');
         break;
       }
       case 'iaf2': { const F = this.pt(M.R != null ? M.R : 30, M.D != null ? M.D : (M.run === 'LH1' ? 4 : 2)); a.tgtAlt = M.alt || (M.run === 'LH1' ? 4000 : 2000); this.setH(a, this.direct(F, p)); if (Math.hypot(F[0] - p[0], F[1] - p[1]) <= 0.35) this.go(a, M.run === 'LH1' ? 'out1' : 'out2'); break; }
       case 'out2': {   // LH-2: outbound bearing (210) from 030/2 through mother at 1,200, level left turn past 5.5 NM inside 8 NM
         const F0 = this.pt(M.R != null ? M.R : 30, M.D != null ? M.D : 2);
-        a.tgtAlt = 1200; this.setH(a, this.track(F0, obL, p));
-        if (this.along(O, obL, p) >= 5.5) this.go(a, 'turnF');
+        a.tgtAlt = 1200; this.setH(a, this.trackW(a, F0, obL, p));
+        if (this.along(O, obL, p) >= 7.5) this.go(a, 'turnF');   // v112: turn inside 8 NM so it is established on the final bearing before the 5 NM FAF
         break;
       }
       case 'h4a': { const F = this.pt(M.run === 'EMER' ? M.R : 90, 5); a.tgtAlt = 1000;   // from the 090/7 marshal to the 5 NM arc on the holding radial
         if (r > 5.4 && Math.hypot(F[0] - p[0], F[1] - p[1]) > 0.6) this.setH(a, this.direct(F, p)); else this.go(a, 'arc'); break; }
       case 'arc': a.tgtAlt = 1000; this.setH(a, this.arcH(p, 5)); if (b >= 346 || b <= 8) this.go(a, 'turnF'); break;
       case 'h5a': { const F = this.pt(M.R != null ? M.R : 30, M.D != null ? M.D : 2); a.tgtAlt = 1000; this.setH(a, this.direct(F, p)); if (Math.hypot(F[0] - p[0], F[1] - p[1]) <= 0.35) this.go(a, 'out5'); break; }
-      case 'out5': { const F0 = this.pt(M.R != null ? M.R : 30, M.D != null ? M.D : 2); a.tgtAlt = 1000; this.setH(a, this.track(F0, obL, p)); if (this.along(O, obL, p) >= 5 || dt >= 180) this.go(a, 'turnF'); break; }
+      case 'out5': { const F0 = this.pt(M.R != null ? M.R : 30, M.D != null ? M.D : 2); a.tgtAlt = 1000; this.setH(a, this.trackW(a, F0, obL, p)); if (this.along(O, obL, p) >= 6 || dt >= 240) this.go(a, 'turnF'); break; }   // v112: turn a little farther out (6 NM) so the helo is on the final bearing before the 3 NM FAF
       case 'turnF': {   // turn onto the final bearing (inbound BRC)
-        const h = this.track(O, 180, p), off = Math.abs(angDiff(this.hdgL(a), h));
+        const h = this.trackW(a, O, 180, p, 90), off = Math.abs(angDiff(this.hdgL(a), h));   // v112: wind-corrected intercept of the final bearing
         this.setH(a, h, off > 15 ? M.fDir : null);
         if (t && t.jet) a.tgtAlt = M.run === 'LH3' ? 1200 : Math.max(1200, Math.min(a.tgtAlt, a.alt)); else a.tgtAlt = 1000;
-        if (off <= 15 && p[1] > 0) this.go(a, 'final');
+        if (p[1] > 0 && ((off <= 15 && Math.abs(p[0]) <= 0.12) || (t && r <= t.faf + 0.5))) this.go(a, 'final');   // v112: 'final' once ON the final bearing line (was: once the heading pointed at an intercept)
         break;
       }
       case 'final': {
-        this.setH(a, this.track(O, 180, p));
+        this.setH(a, this.trackW(a, O, 180, p, 45));   // v112: on the final bearing line itself (was a weak proportional track that sat off to one side)
         if (!t.jet || M.run === 'LH3' || r <= t.faf + 0.3 || a.alt <= 1200) a.tgtAlt = this.finalAlt(a, r, t); else a.tgtAlt = 1200;
         if (!M.fafDone && r <= t.faf && p[1] > 0) { M.fafDone = true; log('sys', `${a.cs} FAF inbound (${t.faf} NM, ${fmtAlt(Math.round(a.alt / 10) * 10)} ft).`); this.say(a, `FAF`, 'final approach fix'); }
         if (r <= t.map || p[1] < 0) { this.say(a, 'missed approach'); this.missed(a); }
@@ -3951,7 +3988,7 @@ function appStep(dt) {
           if (a.pars >= APP_MAX_PARS) { a.phase = 'gone'; a.removeAt = G.t; log('good', `${a.cs} full stop, recovered aboard ${SHIP_NAME}.`); continue; }
           a.lowDone = true; a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = a.T.feed + APP_SPD_BONUS; a.turnDir = null; let coSpd = null;
           if (a.climbout && a.climbout.length) {   // controller-issued climbout instructions replace the default
-            for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = coSpd = c.v; }
+            for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = coSpd = spdOf(a, c); }
             log('sys', `${a.cs} low approach past ${SHIP_NAME}, flying climbout instructions: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}, ${a.tgtSpd} kt.`);
             coDefer(a); a.climbout = null;
           } else log('sys', `${a.cs} low approach past ${SHIP_NAME}, climbing out on ${BRC3} to ${fmtAlt(a.tgtAlt)}.`);
@@ -3983,7 +4020,7 @@ function appStep(dt) {
           a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = isHelo(a) ? 200 : MC ? 250 : Math.round(rand(250, 300));
           let what = `climbing out on ${BRC3} to ${fmtAlt(a.tgtAlt)}`;
           if (a.climbout && a.climbout.length) {
-            for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = a.coSpd = c.v; }
+            for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = a.coSpd = spdOf(a, c); }
             what = `flying climbout instructions: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}, ${a.tgtSpd} kt`;
           }
           coDefer(a); a.climbout = null;
@@ -4005,7 +4042,7 @@ function appStep(dt) {
     else { const dir = a.turnDir || (diff < 0 ? 'L' : 'R'), rem = dir === 'L' ? norm(a.hdg - a.tgtHdg) : norm(a.tgtHdg - a.hdg), tr = turnRate(a) * dt, st = Math.min(tr, rem);
       a.hdg = norm(a.hdg + (dir === 'L' ? -st : st)); if (rem <= tr) { a.hdg = a.tgtHdg; a.turnDir = null; } }
     // altitude 1,500 fpm (initial departure climb 3,000 fpm), speed 2 kt/s
-    if (a.alt !== a.tgtAlt) { const r = (a.st === 'dep' || a.st === 'final' ? (a.T.feed >= 140 ? 6000 : 3000) : 1500) / 60 * dt; a.alt = Math.abs(a.tgtAlt - a.alt) <= r ? a.tgtAlt : a.alt + Math.sign(a.tgtAlt - a.alt) * r; }
+    if (a.alt !== a.tgtAlt) { const r = (a.st === 'dep' || a.st === 'final' ? (a.T.feed >= 140 ? 6000 : 3000) : a.tgtAlt < a.alt ? descRate(a) : 1500) / 60 * dt; a.alt = Math.abs(a.tgtAlt - a.alt) <= r ? a.tgtAlt : a.alt + Math.sign(a.tgtAlt - a.alt) * r; }
     if (a.ias !== a.tgtSpd) { const r = 2 * dt; a.ias = Math.abs(a.tgtSpd - a.ias) <= r ? a.tgtSpd : a.ias + Math.sign(a.tgtSpd - a.ias) * r; }
     const mcJet = MC && !isHelo(a);   // Marshal jets: TAS = IAS, and 250 kt covers 4 NM per minute (ground scale 0.96)
     const tas = mcJet ? a.ias : a.ias * (1 + a.alt / 1000 * 0.02), h = a.hdg * DEG, gk = mcJet ? 0.96 : 1;
@@ -4230,6 +4267,7 @@ function appExecute(p, src) {
       MAR.cancel(a, 'altitude'); const v = c.v > a.alt ? 'climb' : 'descend'; a.tgtAlt = c.v; a.instAltOff = null;
       rb.push(`${v} and maintain ${fmtAlt(c.v)}`); rbSay.push(`${v} and maintain ${sayAlt(c.v)}`);
     } else if (c.k === 'spd') {
+      if (c.rel != null) c.v = spdOf(a, c);   // v112
       const lo = a.dirty ? 130 : a.landChk ? 100 : a.T.vmin, hi = isHelo(a) ? Math.max(a.T.vmax + APP_SPD_BONUS, 200) : 350 + APP_SPD_BONUS;   // helos check in at 200
       if (c.v < lo || c.v > hi) { rb.push(`unable speed ${c.v}`); rbSay.push(`unable speed ${sayDigits(c.v)}`); continue; }
       a.tgtSpd = c.v; a.apPend = null; rb.push(`speed ${c.v}`); rbSay.push(`speed ${sayDigits(c.v)}`);

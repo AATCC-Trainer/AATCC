@@ -32,6 +32,7 @@ const CODES = [
   [new RegExp('^ta' + NUM + '$'), MA, m => `take angels ${m[1]}`, 'ta5', 'take angels 5'],
   [new RegExp('^c' + NUM + '$'), SC, (m, s) => takeOr('climb', m[1], s.sc), 'c3', 'take angels 3 (c1500 = climb and maintain 1500 feet)'],
   [new RegExp('^d' + NUM + '$'), SC, (m, s) => takeOr('descend', m[1], s.sc), 'd1.2', 'take angels 1.2 (d1500 = descend and maintain 1500 feet)'],
+  [/^i(\d{1,2})$/, SC, m => `increase speed by ${m[1]} knots`, 'i25 / i10', 'increase speed by 25 knots (jets) / 10 knots (helos): +N kt from the present speed'],   // v112
   [/^s(\d{2,3})$/, SC, (m, s) => s.sc === 'final' ? `maintain ${m[1]} knots` : `take speed ${m[1]}`, 's250', 'take speed 250 (Final: maintain 250 knots)'],
   [new RegExp('^rl' + NUM + '$'), MA, m => `report level angels ${m[1]}`, 'rl3', 'report level angels 3 (climbs or descends, reports level)'],   // v101
   [/^as(\d{2,3})?$/, MA, m => 'take approach speed' + (m[1] ? ' ' + m[1] : ''), 'as140', 'take approach speed 140 (jets dirty up, helos landing checks)'],

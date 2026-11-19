@@ -598,6 +598,9 @@ const PATTERNS = [
   [/\breport\s+(?:you\s+)?see(?:ing)?\s+(?:me|us|the ship)\b/g, () => ({ k: 'reportSee' })],
   [/\broger\b/g, () => ({ k: 'roger' })],
   [/\bsay\s+(?:your\s+|again\s+)?callsign\b|\bverify\s+(?:your\s+)?callsign\b/g, () => ({ k: 'sayCs' })],
+  // v112: relative speed change: "increase to 25 knots" / "increase speed by 25 knots" (jets), "increase to 10 knots" (helos): +N kt from the present speed (N <= 50; bigger numbers stay absolute speeds)
+  [/\b(increase|reduce|decrease)(?:\s+(?:your\s+)?speed)?(?:\s+(?:to|by))?\s+(\d{1,2})(?:\s+knots?)\b|\b(increase|reduce|decrease)\s+(?:your\s+)?speed\s+(?:by\s+)?(\d{1,2})\b(?!\s*\d)/g,
+    m => { const n = +(m[2] || m[4]), up = (m[1] || m[3]) === 'increase'; return n >= 1 && n <= 50 ? { k: 'spd', rel: up ? n : -n, v: null } : { k: 'spd', v: n }; }],
   [/\b(?:reduce|increase|maintain|slow)(?:\s+(?:your\s+)?speed)?(?:\s+to)?\s+(\d{2,3})(?:\s+knots)?\b|\bspeed\s+(\d{2,3})(?:\s+knots)?\b|\b(\d{2,3})\s+knots\b/g, m => ({ k: 'spd', v: +(m[1] || m[2] || m[3]) })],
 ];
 
@@ -687,7 +690,7 @@ function cmdStr(c) {
     case 'alt': return `alt ${c.v}`;
     case 'tower': return ph('contact Tower (PriFly)', 'contact tower');
     case 'sayCs': return 'say callsign';
-    case 'spd': return `speed ${c.v}`;
+    case 'spd': return c.rel != null ? `speed ${c.rel > 0 ? '+' : ''}${c.rel} kt` : `speed ${c.v}`;
     case 'buster': return 'signal buster (500 kt)';
     case 'hear': return 'radio check';
     case 'goGreen': return 'go green';
@@ -727,6 +730,7 @@ let RWY = BRC;
 let BRC_OFF = BRC - 270;                    // physics runs in a course-aligned frame (inbound = frame west); headings/winds are rotated by this
 let BRC3 = hdg3(BRC), BRC_SAY = sayDigits(hdg3(BRC));
 let RWY_NUM = String(Math.round(BRC / 10) || 36).padStart(2, '0'), RWY_SAY = sayDigits(RWY_NUM);
+const spdOf = (a, c) => c.rel != null ? Math.round(((a.ias != null ? a.ias : a.tgtSpd) || 0) + c.rel) : c.v;   // v112: relative speed calls resolve against the present speed
 const isHelo = a => !!(a.T && a.T.helo);                       
 /* v99 turn rates (deg/s): tactical jets 6 (was standard rate 3), helicopters 8 (was 3). PAR course corrections on final 3 (was 1.5). No-gyro stays 3 / 1.5 (phraseology). */
 const TURN_JET = 6, TURN_HELO = 8, TURN_PAR = 3, turnRate = a => (a && a.T && a.T.helo) ? TURN_HELO : TURN_JET;
@@ -1772,6 +1776,7 @@ function execute(p, src) {
         a.buster = true; a.tgtSpd = 500;   // signal buster: 500 kt, callsign-only readback (like Approach/Marshal)
         break;
       case 'spd':
+        if (c.rel != null) c.v = spdOf(a, c);   // v112
         if (c.v < a.T.vmin || c.v > a.T.vmax) { log('sys', `${a.cs} can't fly ${c.v} kt (${a.T.vmin}-${a.T.vmax}); speed unchanged.`); break; }
         a.buster = false; a.tgtSpd = c.v; rb.push(`speed ${c.v}`); rbSay.push(`speed ${sayDigits(c.v)}`); break;
       case 'course': {

@@ -568,6 +568,9 @@ const PATTERNS = [
   [/\bsay\s+(?:your\s+|again\s+)?callsign\b|\bverify\s+(?:your\s+)?callsign\b/g, () => ({ k: 'sayCs' })],
   [/\b(?:on\s+(?:the\s+)?|you\s+are\s+|now\s+)?(upwind|up\s+wind|crosswind|cross\s+wind|downwind|down\s+wind|abeam|a\s+beam|dog\s*leg|base(?!\s+recovery)(?:\s+leg)?)\b/g, m => { const w = m[1].replace(/\s+/g, ''); return { k: 'pos', v: w === 'abeam' ? 'abeam' : w.startsWith('dog') ? 'dogleg' : w.startsWith('base') ? 'base' : w }; }],
   [/\b(?:(?:signal|signals|single|sigma)\s+)?(?:buster|busters|buster's|busta)\b/g, () => ({ k: 'buster' })],   // 'signal buster': accelerate to 500 kt
+  // v112: relative speed change: "increase to 25 knots" / "increase speed by 25 knots" (jets), "increase to 10 knots" (helos): +N kt from the present speed (N <= 50; bigger numbers stay absolute speeds)
+  [/\b(increase|reduce|decrease)(?:\s+(?:your\s+)?speed)?(?:\s+(?:to|by))?\s+(\d{1,2})(?:\s+knots?)\b|\b(increase|reduce|decrease)\s+(?:your\s+)?speed\s+(?:by\s+)?(\d{1,2})\b(?!\s*\d)/g,
+    m => { const n = +(m[2] || m[4]), up = (m[1] || m[3]) === 'increase'; return n >= 1 && n <= 50 ? { k: 'spd', rel: up ? n : -n, v: null } : { k: 'spd', v: n }; }],
   [/\b(?:reduce|increase|maintain|slow)(?:\s+(?:your\s+)?speed)?(?:\s+to)?\s+(\d{2,3})(?:\s+knots)?\b|\bspeed\s+(\d{2,3})(?:\s+knots)?\b|\b(\d{2,3})\s+knots\b/g, m => ({ k: 'spd', v: +(m[1] || m[2] || m[3]) })],
 ];
 
@@ -666,7 +669,7 @@ function cmdStr(c) {
     case 'alt': return `alt ${c.v}`;
     case 'tower': return ph('contact Tower (PriFly)', 'contact tower');
     case 'sayCs': return 'say callsign';
-    case 'spd': return `speed ${c.v}`;
+    case 'spd': return c.rel != null ? `speed ${c.rel > 0 ? '+' : ''}${c.rel} kt` : `speed ${c.v}`;
     case 'hear': return 'radio check';
     case 'goGreen': return 'go green';
     case 'climbOut': return 'climb outs, go silver';
@@ -813,6 +816,7 @@ const FB = () => BRC, DWH = () => norm(TBRC + 180) % 360 || 360;   // opposite o
 const BROT = () => BRC - 180;
 const toLoc = (e, n) => { const r = BROT() * DEG, c = Math.cos(r), s = Math.sin(r); return [e * c - n * s, e * s + n * c]; };
 const fromLoc = (le, ln) => { const r = BROT() * DEG, c = Math.cos(r), s = Math.sin(r); return [le * c + ln * s, -le * s + ln * c]; };
+const spdOf = (a, c) => c.rel != null ? Math.round(((a.ias != null ? a.ias : a.tgtSpd) || 0) + c.rel) : c.v;   // v112: relative speed calls resolve against the present speed
 const isHelo = a => !!(a.T && a.T.helo);                       // helicopters (no tiltrotors in the sim)
 /* v99 turn rates (deg/s): tactical jets 6 (was standard rate 3), helicopters 8 (was 3). PAR course corrections on final 3 (was 1.5). No-gyro stays 3 / 1.5 (phraseology). */
 const TURN_JET = 6, TURN_HELO = 8, TURN_PAR = 3, turnRate = a => (a && a.T && a.T.helo) ? TURN_HELO : TURN_JET;
@@ -1398,6 +1402,7 @@ function execute(p, src) {
         rb.push(`${c.v > a.z ? 'climb' : 'descend'} and maintain ${fmtAlt(c.v)}`); rbSay.push(`${c.v > a.z ? 'climb' : 'descend'} and maintain ${sayAlt(c.v)}`);
         break;
       case 'spd':
+        if (c.rel != null) c.v = spdOf(a, c);   // v112
         if (c.v < a.T.vmin || c.v > a.T.vmax) { log('sys', `${a.cs} can't fly ${c.v} kt (${a.T.vmin}-${a.T.vmax}); speed unchanged.`); break; }
         a.tgtSpd = c.v; rb.push(`speed ${c.v}`); rbSay.push(`speed ${sayDigits(c.v)}`); break;
       case 'course': {
@@ -2739,7 +2744,7 @@ const LINK = { on: localStorage.getItem('stingerLink') === '1', ch: null, lastAc
     if (m.outcome === 'landed') { a.phase = 'gone'; a.removeAt = G.t; log('good', `${a.cs} landed aboard ${SHIP_NAME} (Final Control).`); return; }
     a.phase = 'app'; a.st = 'lowout'; a.recheckAt = G.t + 20; a.onFinal = false; a.turnDir = null; [a.e, a.n] = fromLoc(0, -0.3); a.hdg = BRC; a.paint = null; a.trail = []; a.trailT = 0;   // v111: fresh track, no stale paint behind it
     a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = isHelo(a) ? 200 : Math.round(rand(250, 300));
-    for (const c of (a.climbout || [])) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = c.v; }
+    for (const c of (a.climbout || [])) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = spdOf(a, c); }
     coDefer(a); a.climbout = null;
     log('sys', `${a.cs} ${m.outcome === 'waveoff' ? 'waved off' : 'low approach'} (Final Control, PAR ${a.appCount}/${APP_MAX_PARS}), flying climbout: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}.`);
   },
@@ -3084,7 +3089,7 @@ function appStep(dt) {
           if (a.pars >= APP_MAX_PARS) { a.phase = 'gone'; a.removeAt = G.t; log('good', `${a.cs} full stop, recovered aboard ${SHIP_NAME}.`); continue; }
           a.lowDone = true; a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = a.T.feed + APP_SPD_BONUS; a.turnDir = null; let coSpd = null;
           if (a.climbout && a.climbout.length) {   // controller-issued climbout instructions replace the default
-            for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = coSpd = c.v; }
+            for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = coSpd = spdOf(a, c); }
             log('sys', `${a.cs} low approach past ${SHIP_NAME}, flying climbout instructions: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}, ${a.tgtSpd} kt.`);
             coDefer(a); a.climbout = null;
           } else log('sys', `${a.cs} low approach past ${SHIP_NAME}, climbing out on ${BRC3} to ${fmtAlt(a.tgtAlt)}.`);
@@ -3116,7 +3121,7 @@ function appStep(dt) {
           a.tgtHdg = BRC; a.tgtAlt = isHelo(a) ? 1000 : 1200; a.tgtSpd = isHelo(a) ? 200 : Math.round(rand(250, 300));
           let what = `climbing out on ${BRC3} to ${fmtAlt(a.tgtAlt)}`;
           if (a.climbout && a.climbout.length) {
-            for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = a.coSpd = c.v; }
+            for (const c of a.climbout) { if (c.k === 'hdg') { a.tgtHdg = norm(c.v); a.turnDir = c.dir || null; if (c.snap) { a.hdg = a.tgtHdg; a.turnDir = null; } } else if (c.k === 'alt') a.tgtAlt = c.v; else if (c.k === 'spd') a.tgtSpd = a.coSpd = spdOf(a, c); }
             what = `flying climbout instructions: heading ${hdg3(Math.round(a.tgtHdg))}, ${fmtAlt(a.tgtAlt)}, ${a.tgtSpd} kt`;
           }
           coDefer(a); a.climbout = null;
@@ -3354,6 +3359,7 @@ function appExecute(p, src) {
       rb.push(`${v} and maintain ${fmtAlt(c.v)}`); rbSay.push(`${v} and maintain ${sayAlt(c.v)}`);
     } else if (c.k === 'buster') { a.tgtSpd = 500; rb.push('ack'); rbSay.push('ack');   // max speed, callsign-only readback
     } else if (c.k === 'spd') {
+      if (c.rel != null) c.v = spdOf(a, c);   // v112
       const lo = a.dirty ? 130 : a.landChk ? 100 : a.T.vmin, hi = isHelo(a) ? Math.max(a.T.vmax + APP_SPD_BONUS, 200) : 350 + APP_SPD_BONUS;   // helos check in at 200
       if (c.v < lo || c.v > hi) { rb.push(`unable speed ${c.v}`); rbSay.push(`unable speed ${sayDigits(c.v)}`); continue; }
       a.tgtSpd = c.v; a.apPend = null; rb.push(`speed ${c.v}`); rbSay.push(`speed ${sayDigits(c.v)}`);
