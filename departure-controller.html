@@ -316,6 +316,10 @@ function isShip() { return S.phr !== 'tower'; }
      "<lead C/S>, Gator Departure, radar contact, proceed to <rendezvous point>, pigeons <bearing> at <miles>"
        -> accepts the whole flight (no click needed), lead flies direct to the point, wingmen follow. Pilot: callsign only.
      "<wing C/S>, squawk standby" | "<wing C/S>, strangle parrot" -> that wingman's transponder off (primary only). Pilot: callsign only.
+     v116 "<C/S>, traffic, <x> o'clock, <x> miles, wave in holding, report joined" (to EACH aircraft of the flight) -> callsign-only
+       readback; at the holding wave the pilot reports "<C/S>, joined", joins the orbit, and the whole wave leaves together.
+   HOLDING WAVE (v116): a pre-existing wave of 2-3 primary-only targets orbits one rendezvous point (labelled WAVE IN HOLDING on the
+   scope, logged when it appears). It is placed when a departure wave launches and leaves with the flight that joins it.
    Grading lives in DEP_PHRASES.controller / depScore (see the table below). */
 const DEP = true;
 const DEP_WAVE = { min: 2, max: 4, gap: [3, 5], ciDelay: 6, trailNm: 0.5, rdvHold: 180, sqGrace: 90, rngTolNm: 1, rngTolPct: 0.10, brgTol: 5 };
@@ -334,6 +338,7 @@ const DEP_PHRASES = {
   controller: [   // expected controller calls on Departure and how they are graded (points)
     { key: 'rdv', call: '<lead C/S>, Gator Departure, radar contact, proceed to <point>, pigeons <bearing> at <miles>', pts: { rc: 10, rcMissing: -5, pigeons: 10, brgWrong: -5, rngWrong: -5, pigeonsMissing: -5, unknownPoint: -5 } },
     { key: 'sqStby', call: '<wing C/S>, squawk standby | strangle parrot', pts: { wing: 5, lead: -5, wingLeftSquawking: -5 } },
+    { key: 'traffic', call: '<C/S>, traffic, <clock> o\'clock, <miles> miles, wave in holding, report joined', pts: { ok: 5, wrong: -5, missing: -5 } },   // v116: to EACH aircraft; clock ±1 h, range ±max(1 NM, 10%)
   ],
 };
 const depPts = (k, x) => DEP_PHRASES.controller.find(c => c.key === k).pts[x];
@@ -356,6 +361,7 @@ function depWaveLaunch(e) {   // schedule entry -> launch the lead now; wingmen 
   }
   const type = e && e.type && al.types.includes(e.type) ? e.type : pick(al.types);
   const L = appLaunch(true, { cs: al.icao + nums[0], type });
+  try { depHoldCreate(); } catch (er) { console.warn('hold', er); }
   L.isLead = true; L.wingIdx = 0; L.launchHdg = L.hdg; L.code = depSquawk(); L.souls = depSouls(L);
   L.wave = { id: 'W' + (G.waveN = (G.waveN || 0) + 1), n, members: [L] };
   G.wave = { lead: L, al, type, nums, idx: 1, nextT: G.t + rand(DEP_WAVE.gap[0], DEP_WAVE.gap[1]), lastT: G.t };
@@ -385,6 +391,7 @@ function departureCheckIn(L) {   // the lead checks in for the flight, then each
   if (!G.selected) selectAc(L);
 }
 function depFly(a) {   // per step: wingmen fly trail on the lead; an aircraft cleared to a rendezvous point flies direct, then orbits
+  if (a.st === 'hold') { depHoldFly(a); return; }
   const L = a.wingOf;
   if (L && (!G.ac.includes(L) || !alive(L))) a.wingOf = null;
   if (a.wingOf) {
@@ -398,9 +405,59 @@ function depFly(a) {   // per step: wingmen fly trail on the lead; an aircraft c
     if (!a.rdv.at && r < 1) { a.rdv.at = G.t; log('sys', `${a.cs}${a.wave && flightOf(a).length > 1 ? ' flight' : ''} at ${a.rdv.name}, orbiting.`); }
     if (a.rdv.at) {
       a.tgtHdg = norm(a.hdg + 45); a.turnDir = 'R';
-      if (G.t - a.rdv.at > DEP_WAVE.rdvHold) { for (const m of flightOf(a)) { m.phase = 'gone'; m.removeAt = G.t; } log('good', `${a.cs}${a.wave ? ' flight' : ''} pushed from ${a.rdv.name}, off frequency.`); }
+      if (!(G.hold && G.hold.name === a.rdv.name) && G.t - a.rdv.at > DEP_WAVE.rdvHold) { for (const m of flightOf(a)) { m.phase = 'gone'; m.removeAt = G.t; } log('good', `${a.cs}${a.wave ? ' flight' : ''} pushed from ${a.rdv.name}, off frequency.`); }
     } else { a.tgtHdg = Math.round(norm(Math.atan2(dx, dy) / DEG)) || 360; a.turnDir = null; }
   }
+}
+const DEP_HOLD = { n: [2, 3], orbitNm: 0.8, joinNm: 1.5, pushAfter: 45, minR: 6 };
+function depHoldCreate() {   // v116: a wave already holding (primary targets orbiting) at a random visible rendezvous point
+  if (G.hold) return G.hold;
+  const pts = RDV.list(MV, BRC).filter(x => !x.hidden && x.r >= DEP_HOLD.minR && Math.abs(x.e) < (G.viewE || 14) - 1 && Math.abs(x.n) < (G.viewN || 14) - 1);
+  const P = pick(pts.length ? pts : RDV.list(MV, BRC).filter(x => !x.hidden)); if (!P) return null;
+  const n = randi(DEP_HOLD.n[0], DEP_HOLD.n[1]), al = pick(AIRLINES.filter(x => !alHelo(x))), H = { name: P.name, e: P.e, n: P.n, members: [], t0: G.t };
+  for (let k = 0; k < n; k++) {
+    const a = makeAc({ cs: al.icao + csNum(al, new Set(G.ac.map(x => x.cs.replace(/^\D+/, '')))), type: al.types[0] }), th = k * 0.35;
+    a.phase = 'app'; a.st = 'hold'; a.sq = false; a.accepted = false; a.holdWave = true; a.checked = true;
+    a.e = P.e + Math.sin(th) * DEP_HOLD.orbitNm; a.n = P.n + Math.cos(th) * DEP_HOLD.orbitNm; a.hdg = a.tgtHdg = norm(th / DEG + 90); a.turnDir = 'R';
+    a.alt = a.tgtAlt = 3000 + k * 500; a.ias = a.tgtSpd = 250; a.trail = []; a.trailT = 0; a.launchT = G.t; a.fuel0 = 8; a.souls = 1;
+    G.ac.push(a); H.members.push(a);
+  }
+  G.hold = H; log('sys', `Wave in holding at ${P.name} (${n} aircraft, primary only, orbiting ${hdg3(Math.round(norm(Math.atan2(P.e, P.n) / DEG)))} at ${Math.round(P.r)} NM from ${SHIP_NAME}).`);
+  return H;
+}
+function depHoldFly(a) { a.tgtHdg = norm(a.hdg + 45); a.turnDir = 'R'; }
+const depClock = (a, H) => { const rel = norm(norm(Math.atan2(H.e - a.e, H.n - a.n) / DEG) - a.hdg); return Math.round(rel / 30) % 12 || 12; };
+const depToHold = a => { const L = a.wingOf || a, H = G.hold; return !!(H && L.rdv && L.rdv.name === H.name); };
+function depJoinTick() {   // each aircraft sent to the holding wave reports joined when it gets there; then the wave leaves together
+  const H = G.hold; if (!H) return;
+  for (const a of G.ac) {
+    if (!alive(a) || a.st !== 'ctl' || a.joined || !depToHold(a)) continue;
+    if (Math.hypot(H.e - a.e, H.n - a.n) > DEP_HOLD.joinNm + (a.wingOf ? DEP_WAVE.trailNm * (a.wingIdx || 1) : 0)) continue;   // wingmen in trail join a little further out
+    a.joined = true; H.joinT = G.t;
+    if (a.tfOk || a.tfTold) pilotSay(a, `${a.tel}, joined.`, `${a.telSay}, joined.`);
+    else { depScore(a, depPts('traffic', 'missing'), `${a.cs} reached the wave in holding at ${H.name} without a traffic call ("traffic, <clock> o'clock, <miles> miles, wave in holding, report joined").`); log('sys', `${a.cs} joined the wave at ${H.name}.`); }
+  }
+  const J = G.ac.filter(a => alive(a) && a.st === 'ctl' && depToHold(a));
+  if (J.length && H.joinT != null && ((J.every(a => a.joined) && G.t - H.joinT >= DEP_HOLD.pushAfter) || G.t - H.joinT >= 300)) {   // all joined (or 5 min after the last join)
+    const go = J.filter(a => a.joined);
+    for (const a of go.concat(H.members)) { a.phase = 'gone'; a.removeAt = G.t; }
+    log('good', `Wave pushed from ${H.name}: ${go.map(a => a.cs).join(', ')} with the ${H.members.length} holding aircraft, off frequency.`);
+    G.hold = null;
+  }
+}
+const DEP_TF_RE = /\btraffic\b[\s,]*(?:is\s+|at\s+|your\s+)?(\d{1,2})\s*(?:o\s*'?\s*clock|oclock|o'clock|a\s*clock|of\s*clock|clock)\b[\s,]*(?:at\s+)?(\d+(?:\.\d+)?)\s*(?:miles?|mi|nm|nautical\s+miles?)?/i;
+function depTraffic(a, m, H0, src) {   // "<C/S>, traffic, 2 o'clock, 5 miles, wave in holding, report joined"
+  const H = G.hold, ck = +m[1], r = +m[2];
+  log('ctl', `${a.cs}: "${H0.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  traffic ${ck} o'clock, ${r} miles${/report\s+joined/i.test(H0) ? ', report joined' : ''}`);
+  $('parsed').textContent = `Understood → ${a.cs}: traffic ${ck} o'clock ${r} mi, wave in holding, report joined`; $('parsed').classList.remove('bad');
+  if (!H) { log('warn', `${a.cs}: no wave is holding right now.`); pilotSay(a, `${a.tel}.`, `${a.telSay}.`); return; }
+  const ac = depClock(a, H), ar = Math.hypot(H.e - a.e, H.n - a.n), rTol = Math.max(1, ar * 0.10);
+  const cOk = ck >= 1 && ck <= 12 && Math.min(Math.abs(ck - ac), 12 - Math.abs(ck - ac)) <= 1, rOk = Math.abs(r - ar) <= rTol;
+  a.tfTold = true;
+  if (cOk && rOk) { if (!a.tfOk) depScore(a, depPts('traffic', 'ok'), `traffic call to ${a.cs} correct (${ck} o'clock ${r} mi; actual ${ac} o'clock ${ar.toFixed(1)} mi).`); else log('good', `traffic call to ${a.cs} correct again.`); a.tfOk = true; }
+  else depScore(a, depPts('traffic', 'wrong'), `${a.cs}: traffic ${!cOk ? `clock ${ck} wrong` : ''}${!cOk && !rOk ? ', ' : ''}${!rOk ? `range ${r} wrong` : ''} (actual ${ac} o'clock, ${ar.toFixed(1)} mi to the wave at ${H.name}; ±1 h, ±${rTol.toFixed(1)} mi).`);
+  if (!depToHold(a)) log('sys', `${a.cs} is not cleared to ${H.name} (the wave in holding) yet.`);
+  pilotSay(a, `${a.tel}.`, `${a.telSay}.`); refreshPanel(true);
 }
 function depSquawkTick() {   // a wingman still squawking DEP_WAVE.sqGrace s after the flight checked in
   for (const L of G.ac) { if (!L.isLead || L.sqDue == null || G.t < L.sqDue) continue; L.sqDue = null;
@@ -420,7 +477,11 @@ function depResolve(pre, known) {
   return (byD.length === 1 ? byD[0] : null) || (pp && pp.cs && live.find(x => x.cs === pp.cs)) || (up && live.find(x => up.includes(x.cs))) || (!pre.trim() && G.selected && appCtl(G.selected) ? G.selected : null);
 }
 function depTranscript(heard, text, src, known) {   // the two Departure calls; anything else goes through the normal Approach parser
-  const H = String(heard), N = (() => { try { return normalizeSpeech(H); } catch (e) { return H.toLowerCase(); } })();
+  const H = String(heard).replace(/\b(?:o|a|of)\s*'?\s*clock\b/gi, 'oclock'), N = (() => { try { return normalizeSpeech(H); } catch (e) { return H.toLowerCase(); } })();   // v116: keep "o'clock" from turning 4 into 40
+  { const tm = DEP_TF_RE.exec(N) || DEP_TF_RE.exec(H); if (tm) { const src0 = DEP_TF_RE.exec(N) ? N : H, ti = /\btraffic\b/i.exec(src0).index, a = depResolve(src0.slice(0, ti).replace(STINGER_RE_G, ' '), known);
+    setHeard(heard, null); if (src === 'voice') renderTranscript(text, '');
+    if (!a) { log('sys', `Traffic: say the callsign first. Heard: "${H}"`); return { cs: null, cmds: [], str: 'callsign?' }; }
+    selectAc(a); a.lastTx = G.t; depTraffic(a, tm, H, src); return { cs: a.cs, cmds: ['traffic'], str: 'traffic' }; } }
   const sb = DEP_SQSTBY_RE.exec(H) || DEP_SQSTBY_RE.exec(N), rm = /\bproceed|\bpigeon/i.exec(H) || /\bproceed|\bpigeon/i.exec(N);
   if (!sb && !rm) return null;
   const pre = (sb ? (DEP_SQSTBY_RE.exec(H) ? H : N) : (/\bproceed|\bpigeon/i.exec(H) ? H : N)).slice(0, (sb || rm).index).replace(STINGER_RE_G, ' ').replace(/\bradar\s+contact\b/ig, ' ');
@@ -2740,7 +2801,7 @@ const SEP_STANDARDS = {
   },
   penalty: 10,                    // points per new loss-of-separation pair
   ignoreBelowFt: 300,             // aircraft on / just off the deck are not checked
-  ignoreStates: ['dep', 'purple', 'lowout'],
+  ignoreStates: ['dep', 'purple', 'lowout', 'hold'],
 };
 window.SEP_STANDARDS = SEP_STANDARDS;
 const sepAng = (x, y) => Math.abs(((x - y) % 360 + 540) % 360 - 180);
@@ -2824,10 +2885,10 @@ const schedNext = () => schedPending()[0] || null;
 /* v111: spawn spacing + cap. Every new aircraft on Approach (scheduled launch, conflict launch, Marshal arrival) is logged in G.spawnLog;
    new launches wait until >= SPAWN_GAP s after the last spawn, no aircraft is arriving near the ship, and fewer than APP_MAX_ON aircraft are on Approach. */
 const SPAWN_GAP = 75, MAR_GAP = 60, APP_MAX_ON = 4;
-const appOnN = () => G ? G.ac.filter(x => alive(x) && (x.phase === 'app' || x.phase === 'withFinal')).length : 0;
+const appOnN = () => G ? G.ac.filter(x => alive(x) && x.st !== 'hold' && (x.phase === 'app' || x.phase === 'withFinal')).length : 0;
 function noteSpawn(a, src) { G.spawnLog = G.spawnLog || []; G.spawnLog.push({ t: G.t, cs: a && a.cs, src }); G.lastSpawnT = G.t; }
 function spawnBlock() {   // why a new launch must wait now (null = clear to launch)
-  if (DEP && (G.wave || G.ac.some(x => alive(x) && x.phase === 'app'))) return 'full';   // v115: one wave at a time (the wave is the 4-aircraft cap)
+  if (DEP && (G.wave || G.ac.some(x => alive(x) && x.phase === 'app' && x.st !== 'hold'))) return 'full';   // v115: one wave at a time (the wave is the 4-aircraft cap)
   if (appOnN() >= APP_MAX_ON) return 'full';
   if (G.lastSpawnT != null && G.t - G.lastSpawnT < SPAWN_GAP) return 'gap';
   if (G.ac.some(x => alive(x) && x.phase === 'app' && x.st !== 'dep' && x.st !== 'lowout' && (x.fromMar ? appRng(x) < 4 : appRng(x) < 1.5))) return 'near';   // never launch next to an arriving aircraft
@@ -3238,7 +3299,7 @@ function appStep(dt) {
   if (G.confPair && (G.t >= G.confPair.until || !G.ac.includes(G.confPair.lead))) G.confPair = null;
   if (G.confPair && Math.hypot(G.confPair.lead.e, G.confPair.lead.n) >= G.confPair.rng) { const cp = G.confPair; cp.rng += 0.3; const d = !spawnBlock() && (confLeadOk(cp.lead, 1000) || confLeadOk(cp.lead, 1200)) ? confChase(cp.lead) : null; if (d) G.confPair = null; const l = G.confLog && G.confLog[G.confLog.length - 1]; if (d && l) l.cs.push(d.cs), l.chaseT = Math.round(G.t); }
   { const e = schedNext(); if (e && G.t >= e.at) { const why = spawnBlock(); if (!why) schedLaunch(e); else schedHold(why === 'gap' ? G.lastSpawnT + SPAWN_GAP : G.t + 10); } }   // v111: spaced, max 4 on Approach. schedule: first at 10 s, then every 4-6 min (Instructor can edit it)
-  if (DEP) { depWaveTick(); depSquawkTick(); }
+  if (DEP) { depWaveTick(); depSquawkTick(); depJoinTick(); }
   const w = appWind();
   if (LINK.pendingHandoff) { const h = LINK.pendingHandoff; LINK.pendingHandoff = null; LINK.handoff(h.a, h.freq); }
   for (const a of G.ac) {
@@ -3562,7 +3623,7 @@ function depReadout(a) {   // v115: state / souls / squawk / flight position
 function appPanel() {
   const hint = $('hint');
   hint.style.display = G.d.hints ? 'block' : 'none';
-  if (G.d.hints && DEP) hint.innerHTML = `💡 Departures launch from ${SHIP_NAME} and fly outbound. Each wave checks in as a flight (lead first, then each wingman with state and souls). Answer the lead: "&lt;C/S&gt;, Gator Departure, radar contact, proceed to &lt;point&gt;, pigeons &lt;bearing&gt; at &lt;miles&gt;" (SPLAT-T: hover the lead and press T), then each wingman: "&lt;C/S&gt;, squawk standby". Shorthand: <b>ea42 rc rvcoke pg045/12</b>, <b>ea43 ss</b>.`;
+  if (G.d.hints && DEP) hint.innerHTML = `💡 Departures launch from ${SHIP_NAME} and fly outbound. Each wave checks in as a flight (lead first, then each wingman with state and souls). Answer the lead: "&lt;C/S&gt;, Gator Departure, radar contact, proceed to &lt;point&gt;, pigeons &lt;bearing&gt; at &lt;miles&gt;" (SPLAT-T: hover the lead and press T), then each wingman: "&lt;C/S&gt;, squawk standby". Send the flight to the point marked WAVE IN HOLDING and call the traffic to each aircraft: "&lt;C/S&gt;, traffic, 2 o'clock, 5 miles, wave in holding, report joined". Shorthand: <b>ea42 rc rvcoke pg045/12</b>, <b>ea43 ss</b>, <b>ea43 tf 2/5</b>.`;
   else if (G.d.hints) hint.innerHTML = `💡 Vector your launches onto the final approach course (FB ${BRC3}, inbound from ${hdg3(norm(BRC + 180))}) and descend them to 3,000 ft or below inside 3 NM to hand them to ${FAC} Final. Aircraft launch from ${SHIP_NAME} one at a time (every 4–6 min), fly up to ${APP_MAX_PARS} practice PARs (low approach, then back to you) and recover full stop on the last. After each check-in, your first altitude must be <b>angels 1</b> (1,000) for helos or <b>angels 1.2</b> (1,200) for jets (−5 if not). Call <b>radar contact</b> within 2 NM of the ship (−5 if later). To slow down: ${G.selected && G.selected.phase === 'app' ? (isHelo(G.selected) ? `${G.selected.tel} (helo): "<b>perform landing checks</b>"` : `${G.selected.tel} (jet): "<b>dirty up</b>"`) : 'helos "<b>perform landing checks</b>", jets "<b>dirty up</b>"'}.`;
   $('scopeStatus').textContent = `DEPARTURE · ${SHIP_NAME.toUpperCase()} · TEAL · FB ${BRC3} · ${APP_RANGE} NM · WIND ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   
@@ -3619,7 +3680,8 @@ function drawApp(now) {
   ctx.strokeStyle = ppiCol(0.35); ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(E[0], E[1]); ctx.stroke(); ctx.setLineDash([]);
   for (let m = 2; m < EDGE; m += 2) { const T = P(Math.sin(rec) * m, Math.cos(rec) * m), px = Math.cos(rec) * 4, py = Math.sin(rec) * 4; ctx.beginPath(); ctx.moveTo(T[0] - px, T[1] - py); ctx.lineTo(T[0] + px, T[1] + py); ctx.stroke(); }
   ctx.textAlign = 'left';
-  if (window.RDV) RDV.draw(ctx, P, MV, BRC, FONT(10));   // v108: rendezvous points (rendezvous.js), under the ship, paints and data blocks
+  if (window.RDV) RDV.draw(ctx, P, MV, BRC, FONT(10));
+  if (typeof DEP !== 'undefined' && DEP && G && G.hold && window.RDV && RDV.on) { const Q = P(G.hold.e, G.hold.n); ctx.save(); ctx.font = FONT(9); ctx.fillStyle = 'rgba(255,214,40,0.75)'; ctx.textAlign = 'left'; ctx.fillText('WAVE IN HOLDING', Q[0] + 4, Q[1] + 9); ctx.restore(); }   // v116   // v108: rendezvous points (rendezvous.js), under the ship, paints and data blocks
   // ship at centre, bow down the BRC
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(BRC * DEG); ctx.fillStyle = ppiCol(0.9);
   ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(3.5, -4); ctx.lineTo(3.5, 7); ctx.lineTo(-3.5, 7); ctx.lineTo(-3.5, -4); ctx.closePath(); ctx.fill(); ctx.restore();
