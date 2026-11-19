@@ -20,15 +20,15 @@ h1{margin:0;font-size:22px;color:var(--g);letter-spacing:1px}
 .tabs button{font:14px monospace;background:#0f1a10;color:rgb(160,255,175);border:1px solid rgba(120,255,140,.45);padding:7px 12px;cursor:pointer}
 .tabs button.on{background:#123a18;color:#eaffee;border-color:var(--g)}
 .tabs button .n{opacity:.6;font-size:12px;margin-left:4px}
-.red{color:#ff5a6e}.slv{color:#c9ced6}.prp{color:#b48cff}.cop{color:#e0915a}
-.tabs button[data-s=marshal].on{border-color:#ff5a6e}.tabs button[data-s=approach].on{border-color:#c9ced6}.tabs button[data-s=final].on{border-color:#b48cff}
+.tel{color:#3fd6c8}.red{color:#ff5a6e}.slv{color:#c9ced6}.prp{color:#b48cff}.cop{color:#e0915a}
+.tabs button[data-s=departure].on{border-color:#3fd6c8}.tabs button[data-s=marshal].on{border-color:#ff5a6e}.tabs button[data-s=approach].on{border-color:#c9ced6}.tabs button[data-s=final].on{border-color:#b48cff}
 main{padding:14px 16px 60px}
 #count{color:var(--dim);font-size:12px;margin:0 0 8px}
 .sec{margin:18px 0 6px}
 .sec h2{margin:0;font-size:17px;color:var(--g);border-bottom:1px solid var(--line);padding-bottom:4px}
 .sec p{margin:6px 0 0;color:var(--dim);font-size:13px}
 .card{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--g);padding:10px 12px;margin:10px 0}
-.card.marshal{border-left-color:#ff5a6e}.card.approach{border-left-color:#c9ced6}.card.final{border-left-color:#b48cff}
+.card.departure{border-left-color:#3fd6c8}.card.marshal{border-left-color:#ff5a6e}.card.approach{border-left-color:#c9ced6}.card.final{border-left-color:#b48cff}
 .card h3{margin:0 0 4px;font-size:15px;color:#eaffee}
 .card .tag{float:right;font-size:11px;color:var(--dim);border:1px solid var(--line);padding:0 6px;margin-left:8px}
 .when{color:var(--dim);margin:0 0 6px}
@@ -70,7 +70,7 @@ mark{background:#3a3a10;color:#fff3a0}
 <div class="sub">The radio calls each trainer position understands, when to use them, and what the sim pilot says back. Spoken calls, plus a <a href="#shorthand" id="lShort">Shorthand</a> tab with every typed code. Trainer guidance, not an official publication. <a href="index.html">← Home</a></div>
 <div class="bar"><input id="q" type="search" placeholder="Search calls, e.g. glidepath, go purple, commencing…" autocomplete="off" aria-label="Search phraseology"><button class="btn" id="bClear" type="button">Clear</button><button class="btn" id="bPrint" type="button">🖨 Print</button></div>
 <div class="tabs" role="tablist">
-<button type="button" data-s="all" class="on">All</button><button type="button" data-s="general">General</button><button type="button" data-s="marshal"><span class="red">Marshal</span></button><button type="button" data-s="approach"><span class="slv">Approach</span></button><button type="button" data-s="final"><span class="prp">Final</span>/<span class="cop">PAR</span></button><button type="button" data-s="shorthand">Shorthand</button>
+<button type="button" data-s="all" class="on">All</button><button type="button" data-s="general">General</button><button type="button" data-s="departure"><span class="tel">Departure</span></button><button type="button" data-s="marshal"><span class="red">Marshal</span></button><button type="button" data-s="approach"><span class="slv">Approach</span></button><button type="button" data-s="final"><span class="prp">Final</span>/<span class="cop">PAR</span></button><button type="button" data-s="shorthand">Shorthand</button>
 </div>
 <div class="legend"><span class="say">Controller says</span><span class="ph">&lt;placeholder&gt;</span><span class="ex">Example</span><span class="rb">Pilot says / replies</span></div>
 </div></header>
@@ -84,6 +84,7 @@ mark{background:#3a3a10;color:#fff3a0}
    Every call below was checked against the scope parsers (marshal-controller, approach-controller, final-controller-par-restyled) and the pilot replies they produce. */
 var SECTIONS = [
  { id: 'general', name: 'General / All positions', cls: '', intro: 'Calls every position uses. Callsigns are the tactical name plus the number spoken digit by digit: two digits for jets and fixed wing ("Lightning two one"), three for helicopters ("Ridge three one one"). Numbers use "niner" for 9 ("heading zero niner zero"); the sim understands "nine" too. On every position pilots answer an instruction with their callsign only. Replies that carry information (unable, loud and clear, tally-ho, position reports, deck-call replies) start with the callsign.' },
+ { id: 'departure', name: 'Departure (Teal)', cls: 'tel', intro: 'Launches from the ship as a wave: a flight of 2–4 of the same squadron checks in (lead, then each wingman), you take radar contact and send it to a rendezvous point with pigeons, and the wingmen squawk standby.' },
  { id: 'marshal', name: 'Marshal (Red)', cls: 'red', intro: 'Case III arrivals: check-in, marshal assignment, expected approach times, commencing the LH approaches, and the handoff to Final or Approach.' },
  { id: 'approach', name: 'Approach (Silver)', cls: 'slv', intro: 'Launches and the CCA pattern: radar contact, first altitude, vectors, pattern position, slowing down, climbout instructions and the handoff to Final.' },
  { id: 'final', name: 'Final / PAR (Purple · Copper)', cls: 'prp', intro: 'The precision talk-down to the ship: contact call, course and glidepath calls, range every mile, deck calls, wave-off, and the no-gyro and surveillance variants.' }
@@ -128,6 +129,11 @@ var E = [
  { s: 'marshal', t: 'Handoff to Final', w: 'A commenced aircraft is inbound: switch it to Final.', c: '<callsign>, go <purple|copper>', e: 'Gunfighter two one, go purple.', r: 'Gunfighter two one.', n: 'Only after commencing (otherwise "unable, not on the approach"). A flight of two goes together.' },
  { s: 'marshal', t: 'Handoff to Approach', w: 'Send an aircraft to Approach (Silver).', c: '<callsign>, go silver', e: 'Eagle one six, go silver.', r: 'Eagle one six.', n: 'Cancels any LH procedure in progress. With Link Marshal ↔ Approach ON, the Approach page takes it and it checks in on Silver; otherwise it just leaves Marshal frequency.' },
  { s: 'marshal', t: 'Radar vectors (cancels the procedure)', w: 'You need to take an aircraft off its LH procedure.', c: '<callsign>, turn <left|right> heading <heading>', e: 'Eagle one six, turn right heading one two zero.', r: 'Eagle one six.', n: 'Any heading, altitude, sector or go-purple call cancels the LH procedure and the aircraft is on radar vectors.' },
+ /* ---------------- Departure (v115) ---------------- */
+ { s: 'departure', t: 'Flight check-in: lead (pilot calls you)', w: 'A wave of 2–4 launches from the ship (same squadron and type, a few seconds apart, in trail). Once the last one is airborne the lead checks in for the whole flight.', c: '(pilot) Gator Departure, <lead callsign>, checking in, flight of <2-4>, angels <altitude>, state <X plus XX>, <souls> souls, squawking <code>', e: 'Gator Departure, Eagle four two, checking in, flight of three, angels one point two, state one zero plus five zero, one soul, squawking four three one six.', cr: 'Let each wingman check in, then answer the lead (radar contact, proceed to …, pigeons …).', n: 'State is fuel in thousands of pounds: "four plus five zero" = 4,500 lb. The squawk is the lead\'s code, digit by digit. The data block shows state, souls and flight size (e.g. 10+50 1S F3); the info panel shows them for any aircraft you click.' },
+ { s: 'departure', t: 'Flight check-in: each wingman (pilot calls you)', w: 'Right after the lead, every other aircraft in the flight checks in, in order.', c: '(pilot) <wingman callsign>, state <X plus XX>, <souls> souls', e: 'Eagle four three, state one zero plus three zero, one soul.', cr: 'No reply needed until the flight has checked in.', n: 'Wingmen are the lead\'s number plus one, two, three (Eagle 42 lead: Eagle 43, 44, 45; helos: Venom 412 lead: Venom 413 …). Wingmen fly trail on the lead until you give one its own heading, altitude or speed.' },
+ { s: 'departure', t: 'Radar contact, proceed to a rendezvous point, pigeons', w: 'Answer the lead after the flight check-in. This accepts the whole flight (no click needed). Pigeons are the magnetic bearing and range in NM from the flight to the point (hover the lead and press T for SPLAT-T).', c: '<lead callsign>, Gator Departure, radar contact, proceed to <rendezvous point>, pigeons <bearing> at <miles>', e: 'Eagle four two, Gator Departure, radar contact, proceed to Coke, pigeons zero four five at one two.', r: 'Eagle four two.', n: 'Points: Coke, Water, Milk, Coffee, Tea, Juice, Soda, Cocoa, Pepsi, Lemonade. Graded: radar contact +10 (missing −5); pigeons within 5° and 1 NM / 10% +10, wrong bearing −5, wrong range −5, no pigeons −5; a name that is not a point −5 and the pilot says "unable". The lead flies direct, the wingmen follow; the flight orbits there for 3 minutes, then leaves the frequency.' },
+ { s: 'departure', t: 'Squawk standby / strangle parrot (wingmen)', w: 'After radar contact: every wingman turns its transponder off so only the lead squawks.', c: '<wingman callsign>, squawk standby  |  <wingman callsign>, strangle parrot', e: 'Eagle four three, squawk standby.', r: 'Eagle four three.', n: 'The wingman goes primary only (no data block). +5 per wingman. Telling the lead is an error (−5) and the lead says "unable" and keeps squawking. A wingman still squawking 90 s after the flight check-in costs −5.' },
  /* ---------------- Approach ---------------- */
  { s: 'approach', t: 'Check-in (pilot calls you)', w: 'A launch from the ship checks in. Click its target to accept it.', c: '(pilot) Gator Approach, <callsign>, airborne, state <fuel>, <souls> souls on board, request practice PAR approach', e: 'Gator Approach, Lightning two one, airborne, state four, five, two souls on board, request practice PAR approach.', r: '—', cr: '<callsign>, Gator Approach, radar contact', n: 'After a low approach it checks in again "off the low approach" with its position from mother.' },
  { s: 'approach', t: 'Radar contact', w: 'First call after check-in, within 2 NM of the ship (later costs points). Saying "Gator Approach" in the first call scores too.', c: '<callsign>, Gator Approach, radar contact', e: 'Lightning two one, Gator Approach, radar contact.', r: 'Lightning two one.' },
@@ -182,7 +188,7 @@ function hi(html) {   // highlight search words in already-escaped text (outside
 function tpl(s) { return hi(esc(s).replace(/&lt;([^&]+?)&gt;/g, '<span class="ph">&lt;$1&gt;</span>')); }
 function txt(e) { return [e.t, e.w, e.c, e.e, e.r, e.cr || '', e.n || '', e.s].join(' ').toLowerCase(); }
 function match(e) { if (!q) return true; var t = txt(e); return q.toLowerCase().split(/\s+/).filter(Boolean).every(function (w) { return t.indexOf(w) >= 0; }); }
-var POSN = { general: 'All positions', marshal: 'Marshal', approach: 'Approach', final: 'Final' };
+var POSN = { general: 'All positions', departure: 'Departure', marshal: 'Marshal', approach: 'Approach', final: 'Final' };
 function isPilot(e) { return /^\(pilot\)/.test(e.c); }   // pilot-initiated: the pilot talks first, the controller answers
 function card(e) {
   var p = isPilot(e);
@@ -195,7 +201,7 @@ function card(e) {
        : '<div class="row"><b>Pilot reply</b><span class="rb">' + hi(esc(e.r)) + '</span></div>') +
     (e.n ? '<div class="note">' + hi(esc(e.n)) + '</div>' : '') + '</div>';
 }
-var SHP = { marshal: '<i class="red">Marshal</i>', approach: '<i class="slv">Approach</i>', final: '<i class="prp">Final</i>' };
+var SHP = { departure: '<i class="tel">Departure</i>', marshal: '<i class="red">Marshal</i>', approach: '<i class="slv">Approach</i>', final: '<i class="prp">Final</i>' };
 function shRows() { try { return (window.Shorthand && Shorthand.rows) ? Shorthand.rows() : []; } catch (e) { return []; } }
 var KEYS = [
  { code: 'T', meaning: 'SPLAT-T: point at an aircraft and press T to start a range/bearing line, T again to hold it (end fixed, still anchored to the aircraft). Marshal, Approach, Instructor scopes.', scopes: ['keys'] },

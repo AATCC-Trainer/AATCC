@@ -11,7 +11,9 @@
 (function () {
 'use strict';
 const SC = ['marshal', 'approach', 'final'];
-const MA = ['marshal', 'approach'], M = ['marshal'], A = ['approach'], F = ['final'];
+const MA = ['marshal', 'approach'], M = ['marshal'], A = ['approach'], F = ['final'], D = ['departure'];
+const SCOPES = SC.concat('departure');   // v115: Departure uses every Approach code plus its own (D)
+const RDV_NAMES = ['coke', 'water', 'milk', 'coffee', 'tea', 'juice', 'soda', 'cocoa', 'pepsi', 'lemonade'];
 // two-letter callsign prefixes (plus any unique start of a callsign name, and the ICAO codes the parser knows)
 const CS_ALIAS = { lt: 'Lightning', li: 'Lightning', nh: 'Nighthawk', vp: 'Viper', vi: 'Viper', vn: 'Venom', ve: 'Venom', ea: 'Eagle', eg: 'Eagle',
   rd: 'Ridge', ri: 'Ridge', gf: 'Gunfighter', gu: 'Gunfighter', ch: 'Charger', cg: 'Charger', kn: 'Knight', kt: 'Knight' };
@@ -75,10 +77,16 @@ const CODES = [
   [/^srt$/, F, () => 'make standard rate turns', 'srt', 'make standard rate turns'],
   [/^hsr$/, F, () => 'make half standard rate turns', 'hsr', 'make half standard rate turns'],
   [/^mda(\d{3,4})?$/, F, m => m[1] ? `descend to your minimum descent altitude, minimum descent altitude ${m[1]}` : 'descend to your minimum descent altitude', 'mda470', 'descend to your minimum descent altitude, MDA 470'],
+  // ---- Departure (v115) ----
+  [/^rc$/, D, () => 'Gator Departure, radar contact', 'rc', 'Gator Departure, radar contact'],
+  [new RegExp('^rv(' + RDV_NAMES.join('|') + ')$'), D, m => `proceed to ${m[1]}`, 'rvcoke', 'proceed to COKE (rendezvous point: coke water milk coffee tea juice soda cocoa pepsi lemonade)'],
+  [/^pg(\d{3})\/(\d{1,3}(?:\.\d)?)$/, D, m => `pigeons ${m[1]} at ${m[2]}`, 'pg045/12', 'pigeons 045 at 12 (magnetic bearing / NM to the point)'],
+  [/^ss$/, D, () => 'squawk standby', 'ss', 'squawk standby (wingmen: transponder off)'],
+  [/^sp$/, D, () => 'strangle parrot', 'sp', 'strangle parrot (same as squawk standby)'],
   [/^sm$/, F, () => 'surveillance minimums, on course, if mother not in sight, execute missed approach', 'sm', 'surveillance minimums, on course, if mother not in sight, execute missed approach'],
 ];
 
-function tableFor(sc) { return CODES.filter(c => c[1].includes(sc)); }
+function tableFor(sc) { return CODES.filter(c => c[1].includes(sc) || (sc === 'departure' && c[1].includes('approach'))); }
 
 /* ---- short callsigns + accept letters (data blocks on Marshal / Approach) ---- */
 const SHORT = { LTNG: 'LT', NHWK: 'NH', VIPR: 'VP', VENM: 'VN', EGLE: 'EA', RDGE: 'RD', GUNF: 'GF', CHGR: 'CH' };   // same prefixes the typed shorthand accepts (lt21, vp12 ...)
@@ -102,7 +110,7 @@ const ltrOf = (tok, ctx) => { if (!/^[a-z]{1,2}$/.test(tok)) return null; const 
    Only a token that is exactly a letter some aircraft holds, followed by more text, and never a code of this scope. */
 function letterSub(src, ctx) {
   const m = /^\s*([a-z]{1,2})[\s,]+(\S[\s\S]*)$/i.exec(src); if (!m) return null;
-  const t = m[1].toLowerCase(), sc = SC.includes(ctx.scope) ? ctx.scope : 'approach';
+  const t = m[1].toLowerCase(), sc = SCOPES.includes(ctx.scope) ? ctx.scope : 'approach';
   if (tableFor(sc).some(c => c[0].test(t))) return null;
   const hit = ltrOf(t, ctx); return hit ? hit.tel + ', ' + m[2] : null;
 }
@@ -143,7 +151,7 @@ function byDigits(d, ctx) {   // bare '21' -> 'Lightning 21' when exactly one li
 
 /* returns { shorthand: bool, text, codes: n } */
 function expand(input, ctx) {
-  ctx = ctx || {}; const sc = SC.includes(ctx.scope) ? ctx.scope : 'approach';
+  ctx = ctx || {}; const sc = SCOPES.includes(ctx.scope) ? ctx.scope : 'approach';
   let src = String(input || '').trim();
   if (!src) return { shorthand: false, text: src, codes: 0 };
   const lsub = letterSub(src, Object.assign({}, ctx, { scope: sc })); if (lsub) src = lsub;   // 'A h270' -> 'Lightning 21, h270'
@@ -213,7 +221,7 @@ function attach(opt) {
   form.appendChild(bar);
   const help = document.createElement('div'); help.id = 'shHelp';
   const rows = tableFor(sc).map(c => `<tr><td>${esc(c[3])}</td><td>${esc(c[4])}</td></tr>`).join('');
-  const ex = { marshal: 'ea16 030/2 a2 brc360 ob210 eat15', approach: 'lt21 l180 d1.2 du', final: 'lt21 r090 bd' }[sc];
+  const ex = { marshal: 'ea16 030/2 a2 brc360 ob210 eat15', approach: 'lt21 l180 d1.2 du', final: 'lt21 r090 bd', departure: 'ea42 rc rvcoke pg045/12' }[sc];
   help.innerHTML = `<span class="x" title="Close">✕</span><h3>⌨ Shorthand: ${esc(sc[0].toUpperCase() + sc.slice(1))}</h3>
 <p>Start with a callsign (<b>lt21</b> = Lightning 21, <b>ea16</b>, <b>vn312</b> (helos have 3 digits), <b>nh341</b>, or just the digits <b>21</b>, or an accepted aircraft's letter: <b>A h270</b>); leave it off to talk to the selected aircraft. Chain codes with spaces, e.g. <b>${esc(ex)}</b>. The full phrase is shown under the box and goes into the log. Full sentences still work as before. Type <b>?</b> + Enter to open this.</p>${sc === 'final' ? '' : '<p><b>GSP</b>: type <b>gsp</b> once to show ground speed on ALL data blocks (later arrivals too); type it again to hide it. Scope only, not a radio call; resets to off on every new sim.</p>'}
 <table>${rows}</table>`;
