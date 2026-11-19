@@ -1431,10 +1431,8 @@ function execute(p, src) {
         a.phase = 'descent'; a.vs = vsNominal(a) * 0.3;
         if (a.sinkR == null) a.sinkR = (G.forceSink != null ? G.forceSink : rng() < SINK_P) ? Math.min(a.r - 0.3, 1.5 + rng() * 2.5) : 0;
         break; }
-      case 'adjDescent':
-        if (a.phase !== 'descent') break;
-        if (c.v === 'adjust') a.corr += (dev > 0 ? 120 : -120);
-        else a.corr += c.v === 'increase' ? 120 : -120;
+      case 'adjDescent':   // v110: no rate-of-descent directives; glidepath calls are position-only (no points either way, no pilot action)
+        if (PAR_PHASES.includes(a.phase)) log('warn', `Unneeded call to ${a.cs}: "${c.v} rate of descent". Only tell the pilot where it is (course, glidepath, range); the pilot corrects on its own.`);
         break;
       case 'range': {
         const tol = a.r < 1.5 ? 0.3 : 0.5, ok = Math.abs(c.v - a.r) <= tol;
@@ -1451,8 +1449,10 @@ function execute(p, src) {
         { const t = ph(`cleared to land spot ${spotOf(a)}`, 'cleared to land'), ts = ph(`cleared to land spot ${ONES[spotOf(a)]}`, 'cleared to land'); rb.push(t); rbSay.push(ts); } break;
       case 'dh': { if (isShip()) break;   // ship: no DH call; accepted, no points
         const ok = Math.abs(a.r - DH_R) <= 0.22; if (!a.dhCalled) { a.dhCalled = true; if (ok) a.pts += 3; } judge(a, ok, ph('at minimums', 'at decision height'), `${a.r.toFixed(2)} NM (${ph('minimums', 'DH')} is ${DH_R.toFixed(2)} NM)`); break; }
-      case 'thr': { const ok = a.r >= -0.05 && a.r <= 0.4; if (!a.thrCalled) { a.thrCalled = true; if (ok) a.pts += 3; } judge(a, ok, ph('over the deck', 'over landing threshold'), `${a.r.toFixed(2)} NM from ${ph('the landing spot', 'touchdown')}`); break; }
+      case 'thr': { if (isShip()) { log('sys', `No call needed: after the ball call there is no more talking; ${a.cs} lands on its own.`); break; }   // v110
+        const ok = a.r >= -0.05 && a.r <= 0.4; if (!a.thrCalled) { a.thrCalled = true; if (ok) a.pts += 3; } judge(a, ok, ph('over the deck', 'over landing threshold'), `${a.r.toFixed(2)} NM from ${ph('the landing spot', 'touchdown')}`); break; }
       case 'tower':
+        if (isShip() && a.phase !== 'missed') { log('sys', `No call needed: after the ball call there is no more talking; ${a.cs} lands on its own.`); break; }   // v110
         if (a.phase === 'visual' || a.phase === 'landed' || a.phase === 'missed' || a.r < gateR()) {
           a.pts += 2; { const t = ph('switching Tower', 'contact tower, good day'); rb.push(t); rbSay.push(t); } speakAnyway = true;
           if (a.phase === 'missed') a.removeAt = G.t + 3;
@@ -1544,6 +1544,7 @@ function suggestCall(a) {
   if (G.d.hints && a.sinkOn && gpSide(a) === 'below' && gpCat(a) !== 'on')
     return { text: `Low altitude alert, ${a.tel}, ${LAA_SAY}`, say: `Low altitude alert, ${a.telSay}, ${LAA_SAY}`, laa: true };
   if (a.phase === 'visual') {   // (no safety-limit wave-off hint)
+    if (isShip()) return { text: '(Ball call made. No more calls: it lands on its own.)', say: '' };   // v110: no talking after the ball
     if (!a.thrCalled && a.r <= 0.4) add(ph('over the deck', 'over landing threshold'));
     else if (a.r <= 0.1) add(ph('contact Tower', 'contact tower'));
     else if (!parts.length) return isShip() ? { text: '(Ship in sight. Next: "over the deck" near 0.2 NM, then "contact Tower".)', say: '' } : { text: '(Runway in sight. Next: "over landing threshold" near 0.2 NM.)', say: '' };
