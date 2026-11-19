@@ -1,4 +1,4 @@
-/* AATCC Final Controller guided intro (v106): "Guided Intro with Aero" on the real PAR scope.
+/* AATCC Final Controller guided intro (v106; v109: speed 1x/2x/3x, markers, Next cue, drift-correction step, no rate-of-descent directives, no roger ball): "Guided Intro with Aero" on the real PAR scope.
    Loaded after the Final page script; reaches the sim only through window.__FIN. The mentor panel is intro-engine.js.
    Flow: the scope is frozen while Aero talks or waits for a call; "watch" segments run it until a condition. Each step
    builds its own scene, so Back, Resume after a reload and Restart all work from any step. A call is checked before
@@ -23,12 +23,22 @@ const ac = cs => G() && G().ac.find(x => x.cs === cs && F.alive(x));
 const pa = a => a.pA || a;
 const tel = cs => F.telephony(cs).text;
 const say3 = h => F.hdg3(h);
-let runT = null, keepT = null, eng = null, sec = null, sub = 0, held = null, ready = true;
+let runT = null, keepT = null, eng = null, sec = null, sub = 0, held = null, ready = true, runBase = 1, windHdg = null;
+/* v109: sim speed for the guided intro (1x / 2x / 3x), multiplies every run segment; remembered */
+let SPD = (() => { try { const v = +localStorage.getItem('aatccFinalIntro.spd'); return [1, 2, 3].includes(v) ? v : 1; } catch (e) { return 1; } })();
+function setSpd(v) { SPD = [1, 2, 3].includes(v) ? v : 1; try { localStorage.setItem('aatccFinalIntro.spd', String(SPD)); } catch (e) {} const g = G(); if (g && runT) g.scale = runBase * SPD;
+  document.querySelectorAll('#fiSpd button').forEach(b => b.classList.toggle('on', +b.dataset.s === SPD)); }
+function speedBar() {
+  if (!eng) return; const d = document.createElement('div'); d.className = 'fiSpd'; d.id = 'fiSpd';
+  d.innerHTML = '<span>Sim speed</span>' + [1, 2, 3].map(v => `<button type="button" data-s="${v}" title="Run the scope at ${v}x">${v}x</button>`).join('');
+  d.querySelectorAll('button').forEach(b => b.onclick = () => setSpd(+b.dataset.s));
+  eng.root.insertBefore(d, eng.root.querySelector('.nav')); setSpd(SPD);
+}
 function stopRun() { clearInterval(runT); runT = null; }
 function freeze() { stopRun(); if (G()) { F.setPaused(true); G().scale = 1; } }
 function run(cond, opt, done) {   // run the sim until cond() (or timeout), then freeze
   stopRun(); const g = G(); if (!g) return;
-  g.scale = (opt && opt.scale) || 1; F.setPaused(false);
+  runBase = (opt && opt.scale) || 1; g.scale = runBase * SPD; F.setPaused(false);
   const t0 = g.t, lim = (opt && opt.simTimeout) || 400;
   runT = setInterval(() => {
     if (G() !== g || g.over) return stopRun();
@@ -64,6 +74,7 @@ function put(cs, s, keep) {
   repaint(a); F.selectAc(a); keepAlive(); F.refreshPanel(true);
   return a;
 }
+function forceCourse(cs, cat, side) { const a = ac(cs); if (!a) return; a.yft = F.demoYft(cat, side); repaint(a); }
 const cur = () => { const st = eng && eng.step; return st && st.cs ? ac(st.cs) : null; };
 
 /* ---------------- call checks ---------------- */
@@ -93,7 +104,33 @@ const need = (p, k, what) => has(p, k) ? null : what;
 
 /* ---------------- highlights over the scope / panel ---------------- */
 let hlEls = [];
-function clearHL() { hlEls.forEach(e => e.remove()); hlEls = []; document.querySelectorAll('.fiHL').forEach(e => e.classList.remove('fiHL')); }
+function clearHL() { hlEls.forEach(e => e.remove()); hlEls = []; document.querySelectorAll('.fiHL').forEach(e => e.classList.remove('fiHL')); clearMk(); }
+/* v109 markers: a pulsing ring + labelled arrow on whatever Aero is talking about. Scope markers follow the painted target
+   (or a point on the glidepath / course line / a range); page markers sit over a button or panel. Repositioned every frame. */
+let mks = [], mkRAF = null;
+function mkLoop() { mkRAF = requestAnimationFrame(mkLoop); for (const m of mks) { try { m.upd(); } catch (e) {} } }
+function addMk(m) { mks.push(m); try { m.upd(); } catch (e) {} if (!mkRAF) mkLoop(); }
+function clearMk() { mks.forEach(m => m.el.remove()); mks = []; if (mkRAF) cancelAnimationFrame(mkRAF); mkRAF = null; if (F.setDemo) F.setDemo([]); }
+function markPt(fn, label, ring) {
+  const w = $('scopeWrap'); if (!w) return;
+  const el = document.createElement('div'); el.className = 'fiMk' + (ring === false ? ' nr' : ''); el.innerHTML = `<div class="ring"></div><div class="tag">${label}</div>`; w.appendChild(el);
+  addMk({ el, upd() { const pt = fn(); if (!pt || !isFinite(pt.x) || !isFinite(pt.y)) { el.style.display = 'none'; return; } el.style.display = ''; el.style.left = pt.x + 'px'; el.style.top = pt.y + 'px'; el.classList.toggle('below', pt.y - (pt.top || 0) < 52); } });
+}
+const ringE = (cs, label) => markPt(() => { const a = ac(cs); return a && a.hitE ? { x: a.hitE.x, y: a.hitE.y, top: F.L.eTop } : null; }, label || tel(cs));
+const ringA = (cs, label) => markPt(() => { const a = ac(cs); return a && a.hitA ? { x: a.hitA.x, y: a.hitA.y, top: F.L.aTop } : null; }, label || tel(cs));
+const markGp = (r, label) => markPt(() => ({ x: F.xr(r), y: F.ez(F.gpAlt(r)), top: F.L.eTop }), label || 'Glidepath', false);
+const markCourse = (r, label) => markPt(() => ({ x: F.xr(r), y: F.ay(0), top: F.L.aTop }), label || 'Course line', false);
+function markRange(r, label) {
+  const w = $('scopeWrap'); if (!w) return;
+  const el = document.createElement('div'); el.className = 'fiRng'; el.innerHTML = `<span>${label}</span>`; w.appendChild(el);
+  addMk({ el, upd() { const L = F.L; el.style.left = F.xr(r) + 'px'; el.style.top = L.eTop + 'px'; el.style.height = (L.aBot - L.eTop) + 'px'; } });
+}
+function markEl(id, label) {
+  const t = $(id); if (!t) return; t.classList.add('fiHL'); if (!label) return;
+  const el = document.createElement('div'); el.className = 'fiTag'; el.innerHTML = label; document.body.appendChild(el);
+  addMk({ el, upd() { const r = t.getBoundingClientRect(); if (!r.width || !r.height) { el.style.display = 'none'; return; } el.style.display = '';
+    const below = r.top < 44; el.classList.toggle('below', below); el.style.left = (r.left + Math.min(r.width / 2, 90) + scrollX) + 'px'; el.style.top = ((below ? r.bottom : r.top) + scrollY) + 'px'; } });
+}
 function hlScope(which) {
   const L = F.L, w = $('scopeWrap'); if (!L || !w) return;
   const top = which === 'elev' ? L.eTop : L.aTop, bot = which === 'elev' ? L.eBot : L.aBot;
@@ -108,6 +145,23 @@ function hlEl(...ids) { ids.forEach(id => { const e = $(id); if (e) e.classList.
 .fiHL{outline:2px solid var(--amber,#ffbf3c)!important;outline-offset:2px;box-shadow:0 0 12px rgba(255,191,60,.4)}
 @keyframes fiPulse{50%{box-shadow:0 0 2px rgba(255,191,60,.15)}}
 body.introOn #layBar{display:none}
+.fiMk{position:absolute;width:0;height:0;pointer-events:none;z-index:6}
+.fiMk .ring{position:absolute;left:-17px;top:-23px;width:30px;height:42px;border:2px solid #ffbf3c;border-radius:50%;box-shadow:0 0 10px rgba(255,191,60,.55);animation:fiRing 1.1s ease-in-out infinite}
+.fiMk.nr .ring{left:-7px;top:-7px;width:10px;height:10px;background:rgba(255,191,60,.35)}
+@keyframes fiRing{50%{transform:scale(1.22);opacity:.55}}
+.fiMk .tag,.fiTag{position:absolute;white-space:nowrap;font:bold 11px/1.2 inherit;color:#1a1200;background:#ffbf3c;border-radius:4px;padding:2px 6px;box-shadow:0 0 8px rgba(255,191,60,.5)}
+.fiMk .tag{left:0;bottom:30px;transform:translateX(-50%)}
+.fiMk .tag::after,.fiTag::after{content:'';position:absolute;left:50%;margin-left:-5px;top:100%;border:5px solid transparent;border-top-color:#ffbf3c}
+.fiMk.below .tag{bottom:auto;top:30px}.fiMk.below .tag::after,.fiTag.below::after{top:auto;bottom:100%;border-top-color:transparent;border-bottom-color:#ffbf3c}
+.fiMk.nr .tag{bottom:12px}.fiMk.nr.below .tag{top:12px}
+.fiTag{z-index:60;pointer-events:none;transform:translate(-50%,calc(-100% - 7px));animation:fiBob 1.1s ease-in-out infinite}
+.fiTag.below{transform:translate(-50%,7px)}
+@keyframes fiBob{50%{margin-top:-3px}}
+.fiRng{position:absolute;width:0;border-left:2px dashed rgba(255,191,60,.8);pointer-events:none;z-index:5}
+.fiRng span{position:absolute;top:2px;left:4px;white-space:nowrap;font:bold 11px/1.2 inherit;color:#1a1200;background:#ffbf3c;border-radius:4px;padding:1px 5px}
+.fiSpd{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--dim,#7d9a80)}
+.fiSpd span{flex:1}.fiSpd button{min-height:24px;padding:1px 9px;font-size:12px}
+.fiSpd button.on{border-color:#ffbf3c;color:#ffbf3c;background:#2a2410}
 #aeroBox{flex:none}`;
   document.head.appendChild(st);
 })();
@@ -123,13 +177,17 @@ const CORE = [
   { id: 'welcome', sec: 'brief', type: 'info',
     say: `<p>Hi, I'm <span class="k">Aero</span>. I'll walk you through Final Controller on the real PAR scope, one step at a time.</p>
       <p>You talk an aircraft down to the USS Wasp: you watch its position on the scope and tell the pilot where it is and how to fix it. Each call you make, I check first. If it's right, the pilot hears it. If not, I'll tell you what to change.</p>
-      <p>Type your calls in the box on the right and press Enter, or hold the talk button or the Space bar and speak. The scope stays frozen while we talk. Press Next when you're ready.</p>`,
+      <p>Type your calls in the box on the right and press Enter, or hold the talk button or the Space bar and speak. The scope stays frozen while we talk.</p>
+      <p>Use <span class="k">Sim speed</span> to run the scope at 1x, 2x or 3x. The amber markers show what I'm talking about, and I'll tell you when to click Next.</p>`,
     enter() { const g = G(); g.ac = []; F.refreshPanel(true); } },
   { id: 'arrive', sec: 'brief', type: 'watch', cs: L21,
-    say: `<p>Here comes your first aircraft. Listen to its check-in: callsign, range, altitude, heading, and what it wants.</p>`,
+    say: `<p>In a moment your first aircraft checks in. Listen for its callsign, range, altitude, heading, and what it wants. I'll stop talking so you can hear it.</p>`,
     task: 'Listen to the check-in.',
-    enter(api) { const g = G(); g.ac = []; put(L21, { r: 8.6, yft: 760, hdg: rel(-20), talk: true, contacted: false });
-      let n = 0; const t = setInterval(() => { if (++n > 50 || (n > 12 && !F.ttsBusy())) { clearInterval(t); api.succeed(`That was <span class="k">${tel(L21)}</span>: eight miles, level two thousand, heading ${say3(rel(-20))}, for the PAR to the ship, full stop. Its data block shows the same.`); } }, 100);
+    enter(api) { const g = G(); g.ac = []; F.refreshPanel(true);
+      let n = 0, m = 0, on = false;   // v109: Aero speaks first; the aircraft checks in once Aero has finished
+      const t = setInterval(() => { n++;
+        if (!on) { if ((n > 8 && !api.talking) || n > 400) { on = true; put(L21, { r: 8.6, yft: 760, hdg: rel(-20), talk: true, contacted: false }); ringA(L21, tel(L21)); ringE(L21, tel(L21)); markEl('readout', 'Its data'); } return; }
+        if (++m > 50 || (m > 12 && !F.ttsBusy())) { clearInterval(t); api.succeed(`That was <span class="k">${tel(L21)}</span>: eight miles, level two thousand, heading ${say3(rel(-20))}, for the PAR to the ship, full stop. Its data block shows the same.`); } }, 100);
       return () => clearInterval(t); } },
   { id: 'elev', sec: 'scope', type: 'info', cs: L21,
     say: `<p>The top panel is the <span class="k">elevation</span> display: height against range. The sloping line is the <span class="k">glidepath</span>, coming down to the ship at the left.</p>
@@ -137,8 +195,11 @@ const CORE = [
     enter() { put(L21, { r: 8.4, yft: 720, hdg: rel(-20) }); hlScope('elev'); } },
   { id: 'az', sec: 'scope', type: 'info', cs: L21,
     say: `<p>The bottom panel is the <span class="k">azimuth</span> display: left and right of the final course. The centre line is the course to the ship.</p>
-      <p>Each target has a short tick. Course line through the middle of the tick means <span class="k">on course</span>. Between the middle and the end means <span class="k">slightly</span> left or right. Touching the end means left or right of course. Not touching at all means <span class="k">well</span> left or right.</p>`,
-    enter() { put(L21, { r: 8.4, yft: 720, hdg: rel(-20) }); hlScope('az'); } },
+      <p>Each target has a short tick. Course line through the middle of the tick means <span class="k">on course</span>. Between the middle and the end means <span class="k">slightly</span> left or right. Touching the end means left or right of course. Not touching at all means <span class="k">well</span> left or right.</p>
+      <p>The amber ticks are examples. From the left: well left, left, slightly left, on course, slightly right, right, and well right of course. Above the line is right of course, below it is left.</p>`,
+    enter() { put(L21, { r: 8.4, yft: 720, hdg: rel(-20) }); hlScope('az');
+      F.setDemo([['well', 'L', 'well\nleft'], ['plain', 'L', 'left'], ['slightly', 'L', 'slightly\nleft'], ['on', 'R', 'on\ncourse'], ['slightly', 'R', 'slightly\nright'], ['plain', 'R', 'right'], ['well', 'R', 'well\nright']]
+        .map(([cat, side, label], i) => ({ r: 0.8 + i * 1.1, cat, side, label }))); } },
   { id: 'servo', sec: 'scope', type: 'watch', cs: L21, skip: true, noServo: true,
     say: `<p>So far I have been moving the <span class="k">servo</span> for you. On the real scope a target only shows inside the servo band, the brighter strip you move with the mouse or your finger.</p>
       <p>I've cleared the bands, so the target is hidden now.</p>`,
@@ -247,21 +308,37 @@ const CORE = [
     good: 'The same works sideways: "going left of course".',
     enter() { const a = ac(L21); if (!a || a.phase !== 'descent') put(L21, { r: 4.7, phase: 'descent', dna: true }); } },
   { id: 'adjust', sec: 'talk', type: 'call', cs: L21,
-    say: `<p>Now it has drifted high. When it is off the glidepath, give the glidepath call and the fix.</p>`,
-    task: () => `It is ${liveGp(ac(L21))}. Call it and tell it to <b>increase rate of descent</b>.`,
-    hint: () => `${cap(liveCourse(ac(L21)))}, ${liveGp(ac(L21))}, increase rate of descent.`,
-    check(p, a) { return [gpChk(p, a), need(p, 'adjDescent', '"increase rate of descent"'), (has(p, 'adjDescent') || {}).v === 'reduce' ? 'the right fix: it is high, so increase (not reduce) the rate of descent' : null]; },
+    say: `<p>Now it has drifted high. When it is off the glidepath, you tell the pilot where it is, and the pilot fixes it. You never give rate of descent directions: only its position.</p>`,
+    task: () => `It is ${liveGp(ac(L21))}. Give the <b>course and glidepath</b> call.`,
+    hint: () => `${cap(liveCourse(ac(L21)))}, ${liveGp(ac(L21))}.`,
+    check(p, a) { return [courseChk(p, a), gpChk(p, a)]; },
     then(done) { run(() => false, { scale: 3, simTimeout: 9 }, () => done()); },
-    good: 'Watch it settle back toward the line. Below the glidepath it is the opposite: reduce rate of descent.',
+    good: 'Watch it settle back toward the line: your position call is all the pilot needs. Below the glidepath works the same way.',
     enter() { const r = 4.5; let dz = 60; for (let d = 30; d <= 220; d += 5) { const t = { r, z: F.gpAlt(r) + d }; if (F.gpCat(t) === 'slightly' && F.gpAccepts(t, 'slightly') && !F.gpAccepts(t, 'on') && !F.gpAccepts(t, 'plain')) { dz = d; break; } }
       put(L21, { r, phase: 'descent', dna: true, dz }); hlScope('elev'); } },
-  { id: 'wind', sec: 'talk', type: 'watch', cs: L21,
-    say: `<p>Wind pushes the aircraft sideways. I'll add a crosswind from the right. Watch the azimuth display: it slowly drifts left of course.</p>
-      <p>You fix drift the same way: a course call plus a small heading change into the wind.</p>`,
-    task: 'Watch the drift on the azimuth display.',
-    enter(api) { const a = ac(L21) && ac(L21).phase === 'descent' && ac(L21).r > 3.2 ? ac(L21) : put(L21, { r: 3.9, phase: 'descent', dna: true });
-      G().wind.dir = rel(90); G().wind.spd = 18; G().wind.gust = 0; hlScope('az');
-      run(() => false, { scale: 3, simTimeout: 14 }, () => { api.succeed(`See it drift? It is now ${liveCourse(ac(L21))}. A few degrees right would hold it on the line.`); }); },
+  { id: 'wind', sec: 'talk', type: 'call', cs: L21, wait: true,
+    say: `<p>Wind pushes the aircraft sideways. I've added a crosswind from the right, and I'll run the scope so you can watch it drift left of course on the azimuth display.</p>
+      <p>You fix drift with a course call plus a small turn into the wind: five degrees or less this close in. When I stop the scope, I'll ask you what heading to give.</p>`,
+    tasks: [
+      { task: () => `What heading do you give it? Call its position, then a heading a few degrees <b>right</b> of ${say3(F.BRC)}, into the wind.`,
+        hint: () => `${cap(liveCourse(ac(L21)))}, turn right heading ${say3(rel(5))}.`,
+        check(p, a) { const h = has(p, 'hdg'), d = h ? ((h.v - F.BRC + 540) % 360) - 180 : null;
+          const ok = h && d >= 2 && d <= 10 && h.dir !== 'L'; if (ok) windHdg = h.v;
+          return [courseChk(p, a), !h ? `a heading a few degrees right of ${say3(F.BRC)} (for example, turn right heading ${say3(rel(5))})` : ok ? null : `a small turn into the wind: 2 to 10 degrees right of ${say3(F.BRC)}, like turn right heading ${say3(rel(5))}`]; },
+        then(next) { const g = G(); g.wind.spd = 4;
+          eng.feedback('info', `It turns to ${say3(windHdg || rel(5))}. Now watch: the wind is easing, so that heading will carry it right of course. I'll stop the scope when it needs your corrective turn.`);
+          run(() => { const a = ac(L21); return a.yft > 0 && F.courseAccepts(a, 'slightly') && !F.courseAccepts(a, 'on'); }, { scale: 3, simTimeout: 45 }, ok => { if (!ok) forceCourse(L21, 'slightly', 'R'); next(); }); } },
+      { task: () => `The wind eased and it is now ${liveCourse(ac(L21))}. Make the <b>corrective turn</b>: call its position and turn it back left a few degrees.`,
+        hint: () => `${cap(liveCourse(ac(L21)))}, turn left heading ${say3(rel(-2))}.`,
+        check(p, a) { const h = has(p, 'hdg'), d = h ? ((h.v - F.BRC + 540) % 360) - 180 : null, d0 = windHdg != null ? ((windHdg - F.BRC + 540) % 360) - 180 : 5;
+          return [courseChk(p, a), !h ? `the corrective turn (for example, turn left heading ${say3(rel(-2))})` : (d < d0 && d >= -6 && h.dir !== 'R') ? null : `a small turn back left of ${say3(windHdg || rel(5))}, within a few degrees of ${say3(F.BRC)}, like turn left heading ${say3(rel(-2))}`]; },
+        then(next) { run(() => false, { scale: 3, simTimeout: 6 }, () => next()); } }],
+    good: 'That is drift correction: turn into the wind, watch the result, and when the wind changes, correct again. Small turns close in.',
+    enter(api) { let a = ac(L21); if (!a || a.phase !== 'descent' || a.r < 4.0) a = put(L21, { r: 4.6, phase: 'descent', dna: true }); windHdg = null;
+      a.yft = 0; a.hdg = a.tgtHdg = F.BRC; repaint(a);
+      const g = G(); g.wind.dir = rel(90); g.wind.spd = 22; g.wind.gust = 0; hlScope('az');
+      ready = false; run(() => { const b = ac(L21); return b.yft < 0 && F.courseAccepts(b, 'slightly') && !F.courseAccepts(b, 'on'); }, { scale: 3, simTimeout: 40 }, ok => {
+        if (!ok) forceCourse(L21, 'slightly', 'L'); goNow(`It has drifted ${liveCourse(ac(L21))}.`); }); },
     leave() { const g = G(); if (g) { g.wind.spd = 0; g.wind.dir = 360; } } },
   { id: 'deckQ', sec: 'deck', type: 'choice', cs: L21,
     say: `<p>Close in, you give the deck call. It is the landing clearance on the ship.</p>`,
@@ -272,27 +349,22 @@ const CORE = [
     good: 'Without a deck call by half a mile the pilot waves off: the deck is fouled.',
     enter() { const a = ac(L21); if (!a || a.phase !== 'descent' || a.r < 1.3) put(L21, { r: 2.6, phase: 'descent', dna: true }); } },
   { id: 'ball', sec: 'deck', type: 'call', cs: L21, wait: true,
-    say: `<p>I'll run it in to three-quarter mile. At two miles the pilot reports "see you": that is normal, keep talking.</p>`,
-    task: 'Three-quarter mile. Give the jet deck call.', hint: 'Three-quarter mile, call the ball.',
-    check(p) { return [need(p, 'callBall', '"three-quarter mile, call the ball"')]; },
-    good: '"Ball" means the pilot has the landing aid in sight, and it is cleared. You can say "roger ball".',
+    say: `<p>I'll run it in to three-quarter mile. At two miles the pilot reports "see you": that is normal, keep talking.</p>
+      <p>At three-quarter mile the deck call goes with the course and the glidepath, all in one call.</p>`,
+    task: () => 'Three-quarter mile. Give the <b>course</b>, the <b>glidepath</b>, and the jet deck call: <b>three-quarter mile, call the ball</b>.',
+    hint: () => { const a = ac(L21); return a ? `${cap(liveCourse(a))}, ${liveGp(a)}, three-quarter mile, call the ball.` : 'On course, on glidepath, three-quarter mile, call the ball.'; },
+    check(p, a) { return [courseChk(p, a), gpChk(p, a), need(p, 'callBall', '"three-quarter mile, call the ball"')]; },
+    then(done) { eng.feedback('info', 'Ball. From here you say nothing more. Watch it land.'); run(() => !ac(L21) || ac(L21).phase === 'landed', { scale: 2, simTimeout: 60 }, () => done()); },
+    good: () => `"Ball" means the pilot has the landing aid in sight, and it is cleared to land. After the ball call there is no more talking from you. ${tel(L21)} is on deck. Nice talk-down.`,
     enter(api) { let a = ac(L21); if (!a || a.phase !== 'descent' || a.r < 0.8 || a.r > 2.2) a = put(L21, { r: 2.15, phase: 'descent', dna: true }); G().wind.spd = 0;
       a.yft = Math.max(-60, Math.min(60, a.yft)); a.tgtHdg = F.BRC; a.hdg = F.BRC;
       ready = false; run(() => ac(L21).r <= 0.78, { scale: 3 }, () => { goNow('Three-quarter mile.'); }); } },
-  { id: 'deck', sec: 'deck', type: 'call', cs: L21, wait: true,
-    say: `<p>Keep it coming. Over the landing spot you tell it, then send it to Tower.</p>`,
-    task: () => `Say <b>over the deck</b>, then <b>${tel(L21)}, contact Tower</b>.`, hint: () => `Over the deck. ${tel(L21)}, contact Tower.`,
-    check(p, a) { return [need(p, 'thr', '"over the deck"'), need(p, 'tower', '"contact Tower"'), has(p, 'tower') ? csChk(p, a) : null]; },
-    then(done) { run(() => !ac(L21) || ac(L21).phase === 'landed', { scale: 1, simTimeout: 40 }, () => done()); },
-    good: () => `${tel(L21)} is on deck. Nice talk-down.`,
-    enter(api) { let a = ac(L21); if (!a || a.phase !== 'visual') { a = put(L21, { r: 0.75, phase: 'descent', dna: true }); a.ballAsked = a.ballCalled = true; a.cleared = true; a.phase = 'visual'; }
-      ready = false; run(() => !ac(L21) || ac(L21).r <= 0.3, { scale: 2 }, () => { goNow('Over the deck now.'); }); } },
   { id: 'sinker', sec: 'wrong', type: 'call', cs: 'LTNG22', wait: true,
     say: () => `<p>A new jet, ${tel('LTNG22')}, is on the glidepath at three miles. Some aircraft keep sinking even after your glidepath calls. Watch the elevation display.</p>`,
     task: () => `It is sinking below the glidepath. Give the full <b>low altitude alert</b>: the alert, the callsign, check your altitude immediately, and the altimeter.`,
     hint: () => `Low altitude alert, ${tel('LTNG22')}, check your altitude immediately, altimeter two niner niner two.`,
     check(p, a, text) { const t = ' ' + String(text).toLowerCase() + ' ';
-      return [need(p, 'laa', '"low altitude alert"'), csChk(p, a), /check (?:your )?altitude immediately/.test(t) ? null : '"check your altitude immediately"', /altimeter\s+(?:two|2)\s*(?:niner|nine|9)\s*(?:niner|nine|9)\s*(?:two|2)\b|altimeter\s+2992/.test(t) ? null : '"altimeter two niner niner two"']; },
+      return [need(p, 'laa', '"low altitude alert"'), csChk(p, a), /check (?:your )?altitude immediately/.test(t) ? null : '"check your altitude immediately"', (F.altimeterOk(text) || F.altimeterOk(p.raw || '')) ? null : '"altimeter two niner niner two"']; },
     post(a) { return a.sinkOn ? 'the full alert: all four parts' : null; },
     then(done) { run(() => false, { scale: 3, simTimeout: 8 }, () => done()); },
     good: 'The pilot climbs back to the glidepath on its own. A low altitude alert always goes out in full, even after "do not acknowledge".',
@@ -406,6 +478,44 @@ const ADV = [
   { id: 'advDone', sec: 'asr', type: 'done', say: '<p>That completes the Advanced section: practice approaches, no-gyro and surveillance approaches.</p><p>What next?</p>' },
 ];
 
+/* v109: what Aero points at in each step */
+const MARKS = {
+  welcome: () => { markEl('cmdForm', 'Type your calls here'); markEl('micBox', 'Or hold to talk'); markEl('fiSpd', 'Sim speed'); },
+  elev: () => { markGp(6.6, 'Glidepath'); ringE(L21); },
+  az: () => { markCourse(9.4, 'Course line'); ringA(L21); },
+  courseQ: () => ringA(L21, 'Read this tick'),
+  gpQ: () => { ringE(L21, 'Read this tick'); markGp(5.5, 'Glidepath'); },
+  side: () => { markEl('readout', 'Readout'); markEl('log', 'Log'); markEl('micBox', 'Talk button'); markEl('cmdForm', 'Type box'); },
+  intent: () => { ringA(L21); markEl('log', 'The check-in is in the log'); },
+  contactCall: () => { ringA(L21); markEl('cmdForm', 'Your call'); },
+  turnQ: () => { ringA(L21, 'Cutting in at 20°'); markCourse(5, 'Course line'); },
+  lineup: () => { ringA(L21, 'Line it up'); markCourse(5, 'Course line'); },
+  gpWatch: () => { ringE(L21, 'Level at 2,000 ft'); markGp(5, 'Glidepath'); },
+  appr: () => { ringE(L21, 'Nearly on the glidepath'); },
+  begin: () => { ringE(L21); markGp(5, 'Glidepath'); },
+  dna: () => { ringE(L21, 'Descending'); },
+  rhythm: () => { ringE(L21, 'Glidepath call'); ringA(L21, 'Course call'); markRange(5, '5 miles'); },
+  combo: () => { ringE(L21, 'Glidepath'); ringA(L21, 'Course'); markRange(5, '5 miles'); },
+  trendQ: () => { ringE(L21, 'Each sweep a little higher'); },
+  adjust: () => { ringE(L21, 'Off the glidepath'); markGp(3, 'Glidepath'); },
+  wind: () => { ringA(L21, 'Drifting'); markCourse(6.5, 'Course line'); },
+  deckQ: () => { markRange(0.75, '¾ mile'); ringE(L21); },
+  ball: () => { markRange(0.75, '¾ mile'); ringE(L21, 'Glidepath'); ringA(L21, 'Course'); },
+  sinker: () => { ringE('LTNG22', 'Sinking'); markGp(5, 'Glidepath'); },
+  waveoff: () => { ringA('LTNG22', 'Well left, close in'); markCourse(4, 'Course line'); },
+  selfQ: () => { markRange(0.5, '½ mile'); },
+  ship: () => { markEl('shipBanner', 'Ship turn'); markCourse(8.5, 'Final course'); ringA('LTNG23'); },
+  grading: () => { markEl('log', 'Points show here'); },
+  pracIn: () => { ringA('LTNG31'); },
+  climb: () => { markRange(1, '1 mile'); ringE('LTNG31'); },
+  delta: () => { markRange(1, '1 mile'); ringE('KNGT41'); },
+  ngIn: () => { ringA('NHWK52'); markCourse(5, 'Course line'); },
+  ngTurn: () => { ringA('NHWK52', 'Turn until it points down the course'); },
+  asrIn: () => { ringA('KNGT41'); },
+  asrDesc: () => { markRange(4, '4 miles'); markRange(3, '3 miles (FAF)'); ringE('KNGT41'); },
+  mapQ: () => { markRange(0.75, '¾ mile (MAP)'); },
+};
+
 /* ---------------- runner ---------------- */
 function tasksOf(st) { return st.tasks || (st.type === 'call' ? [st] : []); }
 function curTask() { const st = eng && eng.step; return st ? tasksOf(st)[sub] : null; }
@@ -427,6 +537,7 @@ FI.gate = function (p, text) {
   if (!st || st.type !== 'call' || eng.solved) { eng.feedback('info', st && st.type === 'done' ? 'The guided part is finished. Pick what to do next.' : 'No radio call needed for this step. Press Next when you are ready.'); return false; }
   if (!ready) { eng.feedback('info', 'Not yet: wait until I stop the scope.'); return false; }
   if (t.ship) { eng.fail(heardMsg(p, ['a 99 call (start with "99, mother")'])); return false; }
+  if (p.cmds && p.cmds.some(c => c.k === 'adjDescent')) { eng.fail(heardMsg(p, ['leave out the rate of descent: only tell the pilot where it is (course, glidepath, range)'])); return false; }
   const a = cur();
   if (!a) return true;
   const miss = missing(val(t.check ? t.check(p, a, text) : []));
@@ -487,11 +598,13 @@ function launch(which, opts) {
     onEnter(st, api) { clearHL(); sub = 0; held = null; ready = true; freeze();
       if (st.tasks) setSub(0);
       if (st.type === 'done') setMeta(which === 'adv' ? { advDone: true } : { coreDone: true });
-      const c = st.enter ? st.enter(api) : null; F.refreshPanel(true); return c; },
+      const c = st.enter ? st.enter(api) : null; F.refreshPanel(true); if (MARKS[st.id]) try { MARKS[st.id](api); } catch (e) { console.error(e); } return c; },
     onLeave(st) { stopRun(); clearHL(); sub = 0; if (st.leave) try { st.leave(); } catch (e) {} },
     onSkip(st) { stopRun(); },
     onExit() { exitToStart('train'); },
+    nextCue: 'Click <b>Next</b> when you\'re ready.',
     renderDone(st, el) { doneButtons(el, which); } });
+  speedBar();
   keepT = setInterval(keepAlive, 100);
   const pr = prog(which), i = opts && opts.restart ? 0 : pr && pr.i >= 0 ? Math.min(pr.i, steps.length - 1) : 0;
   eng.show(i);

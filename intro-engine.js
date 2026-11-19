@@ -1,4 +1,4 @@
-/* AATCC shared guided-intro engine (v106). The mentor panel from intro.html (Aero's voice, section bar, step card,
+/* AATCC shared guided-intro engine (v106; v109: Next cue, talking state). The mentor panel from intro.html (Aero's voice, section bar, step card,
    choices, feedback, Back / Repeat / Next, saved progress) as a reusable component, so a real controller page can run a
    guided mode. The host page supplies the steps and does the sim work in onEnter / onLeave; call steps are checked by
    the host, which reports back with api.succeed() / api.fail(). No dependencies; plain DOM + speechSynthesis. */
@@ -42,6 +42,9 @@ const CSS = `
 .ie .nav .next{background:#123f1a;border-color:var(--g,#c8f5cd);color:#d8ffde;font-weight:bold;min-width:90px}
 .ie .nav .next:disabled{opacity:.45;cursor:default}
 .ie .nav .next.pulse{animation:iePulse 1.2s infinite}@keyframes iePulse{50%{box-shadow:0 0 0 4px rgba(120,255,140,.25)}}
+.ie .cue{display:none;font-size:13px;color:#9dffad;text-align:right;padding:2px 2px 0}
+.ie .cue.on{display:block;animation:ieCue 1.4s ease-in-out infinite}
+@keyframes ieCue{50%{color:#d8ffde}}
 .ie .small{background:none;border:none;color:var(--dim,#7d9a80);text-decoration:underline;cursor:pointer;font-size:12px;padding:0 2px;min-height:0}
 .ie .small:hover{color:var(--cyan,#8dff7a);background:none}
 .ie .done{display:flex;flex-direction:column;gap:6px}
@@ -109,11 +112,11 @@ function create(cfg) {
   const root = document.createElement('div'); root.className = 'ie'; root.id = cfg.id || 'aeroBox';
   root.innerHTML = `<div class="who"><span class="av">A</span><b>AERO</b><span class="bars"><i></i><i></i><i></i></span><span class="sec"></span>
       <button type="button" class="bMute"></button><button type="button" class="bExit">${esc(cfg.exitLabel || 'Exit to training')}</button></div>
-    <div class="prog"></div><div class="say"></div><div class="tk"></div><div class="fb"></div>
+    <div class="prog"></div><div class="say"></div><div class="tk"></div><div class="fb"></div><div class="cue"></div>
     <div class="nav"><button type="button" class="bBack">Back</button><button type="button" class="bRep">Repeat</button><span class="no"></span><button type="button" class="next">Next</button></div>`;
   (cfg.mount || document.body).prepend(root);
   const q = c => root.querySelector(c);
-  const elSay = q('.say'), elTk = q('.tk'), elFb = q('.fb'), elNext = q('.next'), elNo = q('.no'), elSec = q('.sec'), elProg = q('.prog'), bMute = q('.bMute');
+  const elSay = q('.say'), elTk = q('.tk'), elFb = q('.fb'), elNext = q('.next'), elNo = q('.no'), elSec = q('.sec'), elProg = q('.prog'), bMute = q('.bMute'), elCue = q('.cue');
   let muted = false; try { muted = localStorage.getItem(LS_MUTE) === '1'; } catch (e) {}
   let idx = -1, res = {}, fails = 0, cleanup = null, solved = false, dead = false;
 
@@ -169,14 +172,20 @@ function create(cfg) {
     const real = steps.filter(s => s.type !== 'done'), k = real.indexOf(st);
     elNo.textContent = k >= 0 ? `Step ${k + 1} of ${real.length}` : '';
   }
-  function setNext(on, label) { elNext.disabled = !on; elNext.classList.toggle('pulse', !!on); if (label) elNext.textContent = label; }
+  /* v109: when Next is ready, Aero says so (spoken once, and shown above the Next button) */
+  const cueHtml = () => cfg.nextCue ? val(cfg.nextCue, steps[idx]) : '';
+  function setNext(on, label) { elNext.disabled = !on; elNext.classList.toggle('pulse', !!on); if (label) elNext.textContent = label;
+    const st = steps[idx], c = on && st && st.type !== 'done' && idx < steps.length - 1 ? cueHtml() : '';
+    elCue.innerHTML = c ? '▶ ' + c : ''; elCue.classList.toggle('on', !!c); }
   function feedback(cls, html, say) { elFb.className = 'fb ' + (cls || ''); elFb.innerHTML = html || ''; if (say && html) speak(html); }
   function succeed(html, opt) {
     const st = steps[idx]; if (!st || solved) return; solved = true;
     res[st.id] = fails ? 'retry' : 'ok'; save(); drawProg();
     const g = html != null ? html : val(st.good, st);
-    if (g) { feedback('ok', g); if (!(opt && opt.silent)) speak(g); }
     setNext(true);
+    const cue = elCue.classList.contains('on') && !(opt && opt.auto) ? `<p>${cueHtml()}</p>` : '';
+    if (g) feedback('ok', g);
+    if (!(opt && opt.silent) && (g || cue)) speak((g || '') + cue);
     if (opt && opt.auto) setTimeout(() => { if (steps[idx] === st) next(); }, opt.auto);
   }
   function fail(html) { fails++; feedback('bad', html); speak(html); const st = steps[idx]; if (fails >= 2 && st) showHint(); }
@@ -220,19 +229,20 @@ function create(cfg) {
     if (!(opts && opts.silent)) {
       let narr = elSay.innerHTML;
       if (st.type === 'choice') narr += `<p>${val(st.q, st)}</p>`; else if ((st.type === 'call' || st.type === 'watch') && taskOf(st) && st.sayTask !== false && !st.wait) narr += `<p>${taskOf(st)}</p>`;
+      if (st.type === 'info' && cueHtml()) narr += `<p>${cueHtml()}</p>`;
       speak(narr);
     }
   }
   function next() { if (idx < steps.length - 1) show(idx + 1); }
   elNext.onclick = () => { if (!elNext.disabled) next(); };
   q('.bBack').onclick = () => { if (idx > 0) show(idx - 1); };
-  q('.bRep').onclick = () => { hush(); const st = steps[idx]; let n = elSay.innerHTML; if (st.type === 'choice') n += `<p>${val(st.q, st)}</p>`; else if (taskOf(st)) n += `<p>${taskOf(st)}</p>`; speak(n); };
+  q('.bRep').onclick = () => { hush(); const st = steps[idx]; let n = elSay.innerHTML; if (st.type === 'choice') n += `<p>${val(st.q, st)}</p>`; else if (taskOf(st)) n += `<p>${taskOf(st)}</p>`; if (elCue.classList.contains('on')) n += `<p>${cueHtml()}</p>`; speak(n); };
   q('.bExit').onclick = () => { if (cfg.onExit) cfg.onExit(api); };
 
   function load() { if (!cfg.storeKey) return null; try { return JSON.parse(localStorage.getItem(cfg.storeKey) || 'null'); } catch (e) { return null; } }
   function destroy() { if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; } if (steps[idx] && cfg.onLeave) try { cfg.onLeave(steps[idx], api); } catch (e) {} hush(); dead = true; root.remove(); }
   const api = { root, show, next, succeed, fail, feedback, speak, hush, yieldVoice, setNext, renderTask, showHint, destroy, load, setMute,
-    get idx() { return idx; }, get step() { return steps[idx]; }, get solved() { return solved; }, get fails() { return fails; }, get res() { return res; }, steps };
+    get idx() { return idx; }, get talking() { return busy || sq.length > 0; }, get step() { return steps[idx]; }, get solved() { return solved; }, get fails() { return fails; }, get res() { return res; }, steps };
   const saved = load();
   if (saved && saved.res) res = saved.res;
   return api;

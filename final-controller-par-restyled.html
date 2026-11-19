@@ -426,6 +426,11 @@ function normalizeSpeech(raw) {
   s = s.replace(/\bcent(?:er|re)\s*line\b/g, 'centerline').replace(/\bthresh\s+hold\b/g, 'threshold');
   // "on course" STT: Chrome often hears "of course", "on coarse", "encore", etc.
   s = s.replace(/\b(?:coarse|cores|corps|court|courts|cause|cars|horse|chorus|chord|chords|cord|cords|quartz)\b/g, 'course');
+  // v109: keep the qualifier and the side of a course call together, so "well right of course" never falls through to "on course":
+  // "well right, of course", "well right off course", "well to the right of course", "while/will right of course", "lightly left of course"
+  s = s.replace(/\b(left|right)\s*,\s*(?=(?:of|off)\s+(?:the\s+)?course\b)/g, '$1 ').replace(/\b(left|right)\s+off\s+(?=(?:the\s+)?course\b)/g, '$1 of ');
+  s = s.replace(/\b(slightly|well|way|very)\s*,\s*(?=(?:to\s+the\s+)?(?:left|right)\s+of\b)/g, '$1 ').replace(/\bto\s+the\s+(?=(?:left|right)\s+of\s+(?:the\s+)?course\b)/g, '');
+  s = s.replace(/\b(?:while|will|wall|whale|weld|wel)\s+(?=(?:left|right)\s+of\s+(?:the\s+)?course\b)/g, 'well ').replace(/\b(?:lightly|slighty|slight)\s+(?=(?:left|right)\s+of\s+(?:the\s+)?course\b)/g, 'slightly ');
   s = s.replace(/\bencore\b|\bown\s+course\b|\bun\s+course\b|\band\s+course\b|\ball\s+course\b|\bawn\s+course\b|\bon[\-\s]?course\b/g, ' on course ');
   s = s.replace(/\bof\s+course\b/g, (m, off, str) => /\b(?:left|right)\s+$/.test(str.slice(Math.max(0, off - 8), off)) ? m : ' on course ');
   // mileage units & number homophones ("for miles"→4, "4 mi"→4 miles, "six smiles"→6 miles)
@@ -1596,8 +1601,24 @@ function laaParts(raw) {
   return {
     alert: /\blow altitude alerts?\b/.test(t),
     check: /\bcheck (?:your )?altitude immediately\b/.test(t),
-    alt: /\baltimeter (?:setting )?(?:is )?2992\b/.test(t)
+    alt: /\baltimeter (?:setting )?(?:is )?2992\b/.test(t) || altimeterOk(raw)
   };
+}
+// v109: the altimeter as said or typed: "two niner niner two", "to niner niner to", "2992", "29.92", "29 92", "twenty nine ninety two"
+function altimeterOk(raw) {
+  const t = ' ' + String(raw).toLowerCase().replace(/[^a-z0-9.\s]/g, ' ') + ' ';
+  const m = /\baltimeter\s+(?:setting\s+)?(?:is\s+)?((?:\s*(?:\d+(?:\.\d+)?|zero|oh|one|two|to|too|three|tree|four|fower|five|fife|six|seven|eight|nine|niner|nina|twenty|ninety|point)\b)+)/.exec(t);
+  if (!m) return false;
+  const D = { zero: 0, oh: 0, one: 1, two: 2, to: 2, too: 2, three: 3, tree: 3, four: 4, fower: 4, five: 5, fife: 5, six: 6, seven: 7, eight: 8, nine: 9, niner: 9, nina: 9 }, T = { twenty: 2, ninety: 9 };
+  const w = m[1].trim().split(/[\s.]+/).filter(x => x && x !== 'point');
+  let out = '';
+  for (let i = 0; i < w.length; i++) {
+    const x = w[i];
+    if (/^\d+$/.test(x)) out += x;
+    else if (x in T) { const n = w[i + 1]; if (n && n in D && D[n] > 0) { out += String(T[x]) + D[n]; i++; } else out += String(T[x]) + '0'; }
+    else if (x in D) out += String(D[x]);
+  }
+  return out.startsWith('2992');
 }
 function execute(p, src) {
   if (!G || G.over) return;
@@ -1835,7 +1856,8 @@ function execute(p, src) {
         }
         if (isPrac(a)) { judge(a, false, 'three-quarter mile, call the ball', `a practice approach: use "${climbCallOf(a)}"`); pilotSay(a, `${a.tel}, unable, practice approach.`, `${a.telSay}, unable, practice approach.`, true); special = true; break; }
         const ok = !isHelo(a) && a.r >= 0.45 && a.r <= 1.1;
-        if (!a.ballAsked) { a.ballAsked = true; if (ok) a.pts += 3; }
+        const posOk = p.cmds.some(x => x.k === 'course' || x.k === 'onCourse') && p.cmds.some(x => x.k === 'gp' || x.k === 'onGp');   // v109: course and glidepath go with the three-quarter mile call
+        if (!a.ballAsked) { a.ballAsked = true; if (ok && posOk) a.pts += 3; else if (ok && !isHelo(a)) log('warn', `${a.cs}: at three-quarter mile give the course and glidepath with the deck call ("on course, on glidepath, three-quarter mile, call the ball"). No deck-call bonus.`); }
         judge(a, ok, 'three-quarter mile, call the ball', !isHelo(a) ? `${a.r.toFixed(2)} NM (call it at about three-quarter mile)` : `${a.type} is a helicopter: use "one mile, go green"`);
         if (!isHelo(a)) { a.ballCalled = true; const f = fuelOf(a); pilotSay(a, `${a.tel}, ball, state ${f}.`, `${a.telSay}, ball, state ${f.replace('.', ' point ').replace(/\d/g, d => DIGW[+d])}.`, true); deckClear(a); }
         break; }
@@ -2525,7 +2547,7 @@ const TUT_SHIP = {
    <li>Every few seconds: "on course, on glidepath", "slightly above glidepath"… and a <b>range every mile</b>: "four miles", "one and a half miles". At <b>2 miles</b> the pilot reports "<b>Lightning two one, see you</b>" (no reply needed; "roger" is fine).</li>
    <li><b>Sinker:</b> on some approaches the aircraft starts sinking below the glidepath and glidepath calls won't stop it. Only "<b>Low altitude alert, Lightning two one, check your altitude immediately, altimeter two niner niner two</b>" does (pilot: "Lightning two one, climbing.", even after "do not acknowledge"); it then climbs back to the glidepath.</li>
    <li>If you didn't say "wheels should be down" on contact: "<b>check wheels down</b>". No separate landing clearance is needed: the deck call exchange below clears the aircraft to land ("deck is clear, cleared to land spot seven" is still accepted).</li>
-   <li><b>Deck call</b> (required before half a mile): helicopters (CH-53E, AH-1Z, UH-1Y, MH-60S) get "<b>one mile, go green</b>" (pilot: "<b>Nighthawk three two five, going green</b>"). Jets (F-35B, AV-8B) get "<b>three-quarter mile, call the ball</b>" (pilot: "<b>Lightning two one, ball, state four, niner</b>", the fuel state). That reply is the landing clearance: the aircraft may land. "Roger ball" is optional. Pilots make these replies even after "do not acknowledge".</li>
+   <li><b>Deck call</b> (required before half a mile): helicopters (CH-53E, AH-1Z, UH-1Y, MH-60S) get "<b>one mile, go green</b>" (pilot: "<b>Nighthawk three two five, going green</b>"). Jets (F-35B, AV-8B) get "<b>three-quarter mile, call the ball</b>", with the course and glidepath in the same call (pilot: "<b>Lightning two one, ball, state four, niner</b>", the fuel state). That reply is the landing clearance: the aircraft may land. Pilots make these replies even after "do not acknowledge".</li>
    <li><b>Practice approaches</b>: at check-in each pilot states an intention: "…for the PAR to the ship, <b>full stop</b>" (FS) or "…<b>request multiple practice PARs</b>" (PRAC; shown in the side panel). A practice aircraft gets no deck call. At <b>one mile</b> instead: jets "<b>one mile, execute climb outs, go silver</b>" (pilot: "Lightning two one"; climbs to 1,200 ft, left turn to ${hdg3(CLIMB_JET.hdg)}); helicopters "<b>one mile, enter starboard delta, go green</b>" (pilot: "Nighthawk three two five"; climbs to 1,000 ft, right turn to ${hdg3(CLIMB_HELO.hdg)}). It then comes back around for another approach; after 1–3 practice approaches it checks in with "<b>this will be a full stop</b>" and lands.</li>
    <li>Full stop, inside half a mile: "<b>over the deck</b>", then "<b>contact Tower</b>" (or "Tower has you").</li></ol>
    <p>If you need to wave it off: "<b>wave off, wave off, take angels two, fly base recovery course ${BRC_SAY}</b>". No deck call (or spot clearance) by half a mile means a <b>fouled deck</b> and the pilot waves off.</p>`],
@@ -2553,7 +2575,7 @@ const TUT_SHIP = {
    <li>adjust / reduce / increase rate of descent</li><li>___ miles · one and a half miles · three-quarter mile · do not acknowledge further transmission(s) (pilots ack every call with their callsign until then)</li>
    <li>[callsign], ${FAC} final, how do you hear me, wheels should be down, report see me</li>
    <li>check wheels down · roger · deck is clear, cleared to land spot ___ (winds ___ at ___) · over the deck</li>
-   <li><b>one mile, go green</b> (helos) · <b>three-quarter mile, call the ball</b> (jets): the pilot's "(callsign), going green" / "(callsign), ball, state …" reply clears it to land · roger ball (optional)</li>
+   <li><b>one mile, go green</b> (helos) · <b>three-quarter mile, call the ball</b> (jets): the pilot's "(callsign), going green" / "(callsign), ball, state …" reply clears it to land</li>
    <li>practice approaches: <b>one mile, execute climb outs, go silver</b> (jets; "climb out" / "climbout" / "climb outs" all work) · <b>one mile, enter starboard delta, go green</b> (helos)</li>
    <li>low altitude alert, (callsign), check your altitude immediately, altimeter two niner niner two</li>
    <li><b>Ship turns (broadcast, no readback):</b> ninety-nine, mother is in port/starboard turn, standby for new BRC · ninety-nine, mother is steady, new BRC is ___ (digit by digit, e.g. "one seven three"; "99", "niner niner", "nine nine" all work)</li>
@@ -2681,11 +2703,32 @@ function draw(now) {
       ctx.strokeStyle = C.gd + '0.22)'; ctx.lineWidth = 1; ctx.setLineDash([4, 6]); const y = px5(SERVO[sc].y); line(L.left, y, L.left + L.plotW, y); ctx.setLineDash([]); ctx.restore();
     }
     drawHud(now, blink);
+    drawDemo();
   }
   glow(false);
   drawInset();
 }
 
+// v109: example course ticks on the azimuth panel (guided intro: what on / slightly / plain / well look like)
+let DEMO = [];
+function demoYft(cat, side) {   // the painted offset that puts the tick in the middle of a course zone
+  const half = (L.ah || 290) / 2, h = tickSize().TH / 2, b1 = Math.max(CC_PAD, CC_ON * h), b2 = CC_END * h, b3 = h + CC_PAD;
+  const d = cat === 'on' ? 0 : cat === 'slightly' ? (b1 + b2) / 2 : cat === 'plain' ? (b2 + b3) / 2 : b3 + h * 0.9;
+  return (side === 'L' ? -1 : 1) * d / half * YMAX;
+}
+function drawDemo() {
+  if (!DEMO.length) return;
+  const { TW, TH } = tickSize();
+  ctx.save(); ctx.beginPath(); ctx.rect(L.left, L.aTop, L.plotW, L.ah); ctx.clip(); glow(false);
+  for (const d of DEMO) {
+    const x = xr(d.r), y = ay(demoYft(d.cat, d.side));
+    ctx.fillStyle = 'rgba(255,191,60,0.95)'; ctx.fillRect(Math.round(x - TW / 2), Math.round(y - TH / 2), TW, TH);
+    ctx.font = FONT(10); ctx.textAlign = 'center'; ctx.fillStyle = '#ffbf3c';
+    const up = d.side !== 'L', ly = up ? y - TH / 2 - 6 : y + TH / 2 + 12;
+    String(d.label).split('\n').forEach((ln, i, arr) => ctx.fillText(ln, x, up ? ly - (arr.length - 1 - i) * 11 : ly + i * 11));
+  }
+  ctx.textAlign = 'left'; ctx.restore();
+}
 // target tick size (px), shared by drawing and the course-call categorizer
 function tickSize() { const k = clamp((L.eh || 362) / 362, 0.6, 1.6); return { TW: Math.max(2, Math.round(3 * k)), TH: Math.round(32 * k) }; }
 // Course position exactly as seen on the AZIMUTH panel: d = screen pixels between the course line and the tick centre,
@@ -2904,7 +2947,8 @@ window.__FIN = {
   YMAX, NM_FT, FAC, SHIP_NAME, PAR_PHASES, OUT_PHASES, ASR_MDA, APPR_WIN, SEE_YOU_R,
   ttsBusy: () => !!(ttsCur || ttsQ.length || pttDown), startOv, endOv, helpOv,
   setPhr,
-  servoOn, servoClear,
+  servoOn, servoClear, laaParts, altimeterOk, xr, ez, ay, demoYft,
+  setDemo(list) { DEMO = Array.isArray(list) ? list : []; },
   servoTo(a) {   // intro: park both servo bands on the aircraft's painted target (they slew there at the normal rate)
     if (!servoOn() || !a) return; const ye = ez(paintE(a).z), ya = ay(clamp(paintA(a).yft, -YMAX, YMAX));
     for (const [sc, y] of [['E', ye], ['A', ya]]) { const v = SERVO[sc]; if (!v) SERVO[sc] = { y, ty: y, ptr: null, mouse: true }; else if (v.ptr == null) v.ty = y; }
