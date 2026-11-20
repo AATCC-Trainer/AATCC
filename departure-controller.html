@@ -388,7 +388,7 @@ function departureCheckIn(L) {   // the lead checks in for the flight, then each
     a.ciFuel = appState(a); a.ciState = depStateTxt(a.ciFuel);
   }
   G.wave = null; L.flightCiT = G.t; L.sqDue = G.t + DEP_WAVE.sqGrace;
-  for (const x of DEP_PHRASES.checkIn(L, M)) pilotSay(x.a, x.t, x.s);
+  for (const x of DEP_PHRASES.checkIn(L, M)) pilotSay(x.a, x.t, x.s, false, false, true);   // v118: check-ins are priority speech (queued, never dropped)
   if (!G.selected) selectAc(L);
 }
 function depFly(a) {   // per step: wingmen fly trail on the lead; an aircraft cleared to a rendezvous point flies direct, then orbits
@@ -3115,7 +3115,7 @@ function appCheckIn(a, again) {
   a.checkInPosit = { brg: appBrg(a), rng: pR0, text: posit };
   const angT = a.fromMar && !again ? `angels ${appAngels(a.alt)}, ` : '', angS = a.fromMar && !again ? `angels ${appAngelsSay(a.alt)}, ` : '', req = a.fromMar && !again ? 'PAR approach' : 'practice PAR approach', reqS = a.fromMar && !again ? 'P A R approach' : 'practice P A R approach';
   pilotSay(a, `${FAC} Approach, ${a.tel}, ${pre}${posAlso ? posit : ""}${angT}state ${f}, ${n} ${sw} on board, request ${req}.`,
-    `${FAC} Approach, ${a.telSay}, ${pre}${posAlso ? positSay : ""}${angS}state ${fSay}, ${NUMW[n]} ${sw} on board, request ${reqS}.`);
+    `${FAC} Approach, ${a.telSay}, ${pre}${posAlso ? positSay : ""}${angS}state ${fSay}, ${NUMW[n]} ${sw} on board, request ${reqS}.`, false, false, true);
   if (!G.selected) selectAc(a);
 }
 /* ---------- ship turns (v95): every SHIPCFG.every s of sim time (default 10 min, v99), 5-20 deg (multiples of 5) port/starboard, 5 s warning, ~1 deg/s.

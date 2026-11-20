@@ -2854,6 +2854,14 @@ const MA = { on: localStorage.getItem('stingerMA') !== '0', ch: null, peerT: 0, 
   }
 };
 window.__MA = MA;
+/* v118: Marshal arrivals always head for the ship. A hand-off whose heading points away from the ship (> 90 deg off the bearing to it, e.g. a
+   wingman or an aircraft still on a holding / outbound leg) turns inbound; while it waits to check in on Silver it keeps tracking inbound. */
+const MAR_WING_GAP = 8;   // s: a wingman handed with its lead checks in this long after the lead's check-in (was the full 60 s MAR_GAP, so it sat silent and flew away)
+function appInbound(a) {
+  if (appRng(a) < 1.5) return false; const to = norm(Math.atan2(-a.e, -a.n) / DEG);
+  if (Math.abs(angDiff(to, a.tgtHdg)) <= 90) return false;
+  a.tgtHdg = Math.round(to) % 360 || 360; a.turnDir = null; return true;
+}
 MA.takeFn = s => {   // a Marshal aircraft handed to Approach: same position / altitude / heading / speed / squawk / fuel; checks in on Silver
   const a = makeAc({ cs: s.cs, type: TYPES[s.type] ? s.type : undefined });
   a.phase = 'app'; a.e = +s.e || 0; a.n = +s.n || 0; a.pars = 0; a.armed = false; a.turnDir = null;
@@ -2861,10 +2869,13 @@ MA.takeFn = s => {   // a Marshal aircraft handed to Approach: same position / a
   a.trail = []; a.trailT = 0; a.checked = false; a.lastTx = G.t; a.fuel0 = +s.state || 3; a.launchT = G.t; a.souls = +s.souls || 1;
   a.appCount = s.appCount != null ? +s.appCount : APP_MAX_PARS - 1; a.priCounted = true; a.sq = s.sq !== false; a.priStart = !!s.priStart; a.priCut = !!s.priCut;
   a.coneArm = !!s.coneArm || Math.hypot(a.e, a.n) > CONE_ARM_NM; a.fromMar = true; a.hoffFreq = null; a.button = null;
-  const wait = G.lastSpawnT != null ? G.lastSpawnT + MAR_GAP - G.t : 0;   // v111: a launch just checked in: this one comes up on Silver a little later (painted, not yet on frequency)
+  const flight = G.lastMarTake && G.t - G.lastMarTake.t < 5;   // v118: handed in the same moment as the previous Marshal aircraft = same flight (wingman)
+  const wait = flight ? G.lastMarTake.ci + MAR_WING_GAP - G.t : G.lastSpawnT != null ? G.lastSpawnT + MAR_GAP - G.t : 0;   // v111: a launch just checked in: this one comes up on Silver a little later (painted, not yet on frequency); v118: a wingman checks in right after its lead
+  if (appInbound(a)) log('sys', `${a.cs} was pointed away from ${SHIP_NAME}: turning inbound, heading ${hdg3(Math.round(a.tgtHdg))}.`);
   G.ac.push(a); const spd = a.ias;
   if (wait > 0) { a.st = 'marWait'; a.checkAt = G.t + wait; a.marSpd = spd; a.tasks = {}; } else { appCheckIn(a, false); a.ias = a.tgtSpd = spd; }
   noteSpawn(a, 'marshal'); if (wait > 0) G.spawnLog[G.spawnLog.length - 1].t = G.lastSpawnT = a.checkAt;
+  G.lastMarTake = { t: G.t, ci: wait > 0 ? a.checkAt : G.t };
   schedHold(G.lastSpawnT + SPAWN_GAP); if (G.confPlan && G.confPlan.length && G.confPlan[0] < G.lastSpawnT + SPAWN_GAP) G.confPlan[0] = G.lastSpawnT + SPAWN_GAP;   // v111: own launches stay clear of a Marshal arrival
   log('sys', `${a.cs} (${a.type}) handed off from Marshal: ${a.st === 'marWait' ? `switching to Silver (checks in about ${Math.round(a.checkAt - G.t)} s after the last check-in)` : 'checking in on Silver'}, ${Math.round(appRng(a))} NM, ${fmtAlt(a.alt)}${a.sq ? '' : ' (primary only)'}.`);
   if (s.tbrc != null && Math.round(+s.tbrc) % 360 !== Math.round(TBRC) % 360) log('warn', `Marshal is on BRC ${h3z(+s.tbrc)}, this run uses BRC ${h3z(TBRC)}: start both runs linked so they match.`);
@@ -2891,7 +2902,7 @@ function appCheckIn(a, again) {
   a.checkInPosit = { brg: appBrg(a), rng: pR0, text: posit };
   const angT = a.fromMar && !again ? `angels ${appAngels(a.alt)}, ` : '', angS = a.fromMar && !again ? `angels ${appAngelsSay(a.alt)}, ` : '', req = a.fromMar && !again ? 'PAR approach' : 'practice PAR approach', reqS = a.fromMar && !again ? 'P A R approach' : 'practice P A R approach';
   pilotSay(a, `${FAC} Approach, ${a.tel}, ${pre}${posAlso ? posit : ""}${angT}state ${f}, ${n} ${sw} on board, request ${req}.`,
-    `${FAC} Approach, ${a.telSay}, ${pre}${posAlso ? positSay : ""}${angS}state ${fSay}, ${NUMW[n]} ${sw} on board, request ${reqS}.`);
+    `${FAC} Approach, ${a.telSay}, ${pre}${posAlso ? positSay : ""}${angS}state ${fSay}, ${NUMW[n]} ${sw} on board, request ${reqS}.`, false, false, true);   // v118: priority = always spoken (queued, not dropped)
   if (!G.selected) selectAc(a);
 }
 /* ---------- ship turns (v95): every SHIPCFG.every s of sim time (default 10 min, v99), 5-20 deg (multiples of 5) port/starboard, 5 s warning, ~1 deg/s.
@@ -3080,6 +3091,7 @@ function appStep(dt) {
   for (const a of G.ac) {
     if (a.phase !== 'app') continue;
     coStep(a);
+    if (a.st === 'marWait' && G.t < a.checkAt) appInbound(a);   // v118: not on frequency yet: never drifts away from the ship
     if (a.st === 'marWait' && G.t >= a.checkAt) { a.st = 'ctl'; appCheckIn(a, false); a.ias = a.tgtSpd = a.marSpd || a.ias; }   // v111: delayed Marshal arrival checks in now
     const rng0 = appRng(a);
     if (a.st === 'final') {   // flown by Gator Final: straight in, low approach (or full stop), then climb back out
