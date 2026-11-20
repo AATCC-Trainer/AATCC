@@ -1,0 +1,104 @@
+<!doctype html><html lang="en"><head>
+<script src="gate.js"></script>
+<script src="traininglog.js"></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="approach-192.png">
+<title>Log Sheet · AATCC Training Simulation</title><meta name="theme-color" content="#0b0d0b">
+<style>
+:root{--g:rgb(120,255,140);--g2:rgb(190,255,200);--dim:rgba(160,255,175,.65);--line:rgba(120,255,140,.25);--bg:#0b0d0b;--card:#0e130e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--g2);font-family:monospace;font-size:14px;line-height:1.5}
+header{position:sticky;top:0;z-index:5;background:rgba(11,13,11,.97);border-bottom:1px solid var(--line);padding:12px 16px 10px}
+.wrap{max-width:1100px;margin:0 auto}
+h1{margin:0;font-size:22px;color:var(--g);letter-spacing:1px}
+.sub{color:var(--dim);font-size:12px;margin:2px 0 10px}.sub a{color:var(--g)}
+.note{color:#ffd27a;font-size:12.5px;margin:0 0 10px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+label.f{display:flex;flex-direction:column;font-size:11px;color:var(--dim);gap:2px}
+select,input[type=date]{font:14px monospace;background:#030503;color:#eaffee;border:1px solid rgba(120,255,140,.55);padding:6px 8px;color-scheme:dark}
+.btn{font:14px monospace;background:#0f1a10;color:rgb(160,255,175);border:1px solid rgba(120,255,140,.55);padding:7px 12px;cursor:pointer;text-decoration:none}
+.btn:hover{filter:brightness(1.25)}.btn.warn{border-color:#ff5a6e;color:#ff8a9a;background:#1a0a0d}
+main{padding:14px 16px 60px}
+h2{margin:18px 0 8px;font-size:17px;color:var(--g);border-bottom:1px solid var(--line);padding-bottom:4px}
+#cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--g);padding:10px 12px}
+.card h3{margin:0 0 4px;color:#ffd27a;font-size:15px}.card .big{font-size:20px;color:#eaffee}.card .row{display:flex;justify-content:space-between;font-size:12.5px;border-bottom:1px dotted rgba(120,255,140,.15);padding:1px 0}
+.card .row span:last-child{color:#eaffee}.card small{color:var(--dim)}
+.tw{overflow-x:auto;border:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:5px 6px;border-bottom:1px solid rgba(120,255,140,.13);text-align:left;white-space:nowrap}
+th{position:sticky;top:0;background:#0f1a10;color:var(--g);font-weight:normal}
+td.n{text-align:right;color:#eaffee}tr:hover td{background:#0f160f}
+td.gr{white-space:normal;min-width:140px;max-width:220px}
+.st-completed{color:var(--g)}.st-stopped{color:#c9ced6}.st-switched{color:#b48cff}.st-open{color:#ffd27a}
+.x{background:none;border:1px solid rgba(255,90,110,.5);color:#ff8a9a;font:12px monospace;cursor:pointer;padding:1px 6px}
+#empty{color:var(--dim);padding:14px}
+.red{color:#ff5a6e}.slv{color:#c9ced6}.prp{color:#b48cff}.cop{color:#e0915a}.tel{color:#3fd6c8}.ins{color:#2ee6e6}
+</style></head><body>
+<header><div class="wrap">
+<h1>LOG SHEET</h1>
+<div class="sub">Training sessions logged by the scopes, per controller. <a href="index.html">Home</a> · Pick the controller with the <b>Controller ▾</b> box on any scope.</div>
+<div class="note">This log is saved in this browser on this computer only. It is not uploaded anywhere; export a CSV to keep or share it.</div>
+<div class="bar">
+<label class="f">Controller<select id="fUser"></select></label>
+<label class="f">Sim<select id="fSim"><option value="">All sims</option><option>Marshal</option><option>Approach</option><option>Final</option><option>Final Intro</option><option>Departure</option><option>Instructor</option></select></label>
+<label class="f">From<input type="date" id="fFrom"></label>
+<label class="f">To<input type="date" id="fTo"></label>
+<button class="btn" id="bReset" type="button">Clear filters</button>
+<button class="btn" id="bCsv" type="button">⬇ Export CSV</button>
+<button class="btn warn" id="bClear" type="button">Clear all…</button>
+</div></div></header>
+<main><div class="wrap">
+<h2>Summary by controller <small id="sumNote" style="font-size:12px;color:var(--dim)"></small></h2>
+<div id="cards"></div>
+<h2>Sessions <small id="cnt" style="font-size:12px;color:var(--dim)"></small></h2>
+<div class="tw"><table><thead><tr><th>Date</th><th>Controller</th><th>Sim</th><th>Start</th><th>End</th><th>Training time</th><th>Wall time</th><th>Paused</th><th>Grade</th><th>Score</th><th>Worked</th><th>Landed</th><th>Ended</th><th></th></tr></thead><tbody id="tb"></tbody></table><div id="empty" hidden>No sessions match. Run a scope (Marshal, Approach, Final, Departure, Instructor) and they show up here.</div></div>
+</div></main>
+<script>
+(() => {
+  'use strict';
+  const TL = window.TrainingLog, $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const SIMS = ['Marshal', 'Approach', 'Final', 'Final Intro', 'Departure', 'Instructor'], SC = { Marshal: 'red', Approach: 'slv', Final: 'prp', 'Final Intro': 'prp', Departure: 'tel', Instructor: 'ins' };
+  const dur = s => { s = Math.max(0, Math.round(s || 0)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m ${String(x).padStart(2, '0')}s`; };
+  const all = () => { TL.closeStale(); return TL.sessions().filter(s => s && s.id && (s.status !== 'open' || (s.active || 0) >= TL.MIN_ACTIVE)).sort((a, b) => (b.t0 || 0) - (a.t0 || 0)); };
+  function users(list) { return Array.from(new Set(['Guest'].concat(TL.users(), list.map(s => s.user)))).filter(Boolean); }
+  function fillUsers(list) {
+    const sel = $('fUser'), v = sel.value; sel.innerHTML = '<option value="">All controllers</option>' + users(list).map(u => `<option>${esc(u)}</option>`).join(''); sel.value = users(list).includes(v) ? v : '';
+  }
+  function filtered(list) {
+    const u = $('fUser').value, sm = $('fSim').value, f = $('fFrom').value, t = $('fTo').value;
+    return list.filter(s => (!u || s.user === u) && (!sm || s.sim === sm) && (!f || s.date >= f) && (!t || s.date <= t));
+  }
+  function render() {
+    const list = all(); fillUsers(list); const rows = filtered(list);
+    $('cnt').textContent = `${rows.length} of ${list.length} · newest first`;
+    $('empty').hidden = rows.length > 0;
+    $('tb').innerHTML = rows.map(s => `<tr data-id="${esc(s.id)}"><td>${esc(s.date)}</td><td style="color:#ffd27a">${esc(s.user)}</td><td class="${SC[s.sim] || ''}">${esc(s.sim)}</td><td>${esc(s.startTime || '')}</td><td>${esc(s.endTime || '…')}</td>`
+      + `<td class="n">${dur(s.active)}</td><td class="n">${dur(s.wall)}</td><td class="n">${dur(s.paused)}</td><td class="gr">${esc(s.grade || '—')}</td><td class="n">${s.score == null ? '—' : esc(s.score)}</td>`
+      + `<td class="n">${s.worked || 0}</td><td class="n">${s.landed == null ? '—' : esc(s.landed)}</td><td class="st-${s.status === 'open' ? 'open' : esc(s.ended)}" title="${esc(s.note || '')}">${s.status === 'open' ? 'in progress' : esc(s.ended || '')}</td>`
+      + `<td><button class="x" type="button" data-del="${esc(s.id)}" title="Delete this session">✕</button></td></tr>`).join('');
+    const by = {}; for (const s of rows) { const b = by[s.user] || (by[s.user] = { n: 0, t: 0, sim: {}, g: [] }); b.n++; b.t += s.active || 0; b.sim[s.sim] = (b.sim[s.sim] || 0) + (s.active || 0); if (typeof s.gradePct === 'number') b.g.push(s.gradePct); }
+    $('sumNote').textContent = rows.length === list.length ? '' : '(filtered)';
+    $('cards').innerHTML = Object.keys(by).sort().map(u => { const b = by[u], avg = b.g.length ? Math.round(b.g.reduce((a, c) => a + c, 0) / b.g.length) : null;
+      return `<div class="card" data-user="${esc(u)}"><h3>${esc(u)}</h3><div class="big">${dur(b.t)}</div><small>training time · ${b.n} session${b.n === 1 ? '' : 's'} · avg grade ${avg == null ? '—' : avg + '%'}${b.g.length ? ` (${b.g.length} graded)` : ''}</small>`
+        + SIMS.filter(x => b.sim[x] != null).map(x => `<div class="row"><span class="${SC[x]}">${x}</span><span>${dur(b.sim[x])}</span></div>`).join('') + '</div>'; }).join('') || '<div id="empty">No sessions yet.</div>';
+  }
+  const csvq = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  $('bCsv').onclick = () => {
+    const rows = filtered(all()), H = ['id', 'controller', 'sim', 'date', 'start', 'end', 'training_s', 'training_min', 'wall_s', 'paused_s', 'sim_s', 'grade', 'grade_pct', 'score', 'worked', 'landed', 'ended', 'note'];
+    const out = [H.join(',')].concat(rows.map(s => [s.id, s.user, s.sim, s.date, s.startTime, s.endTime || '', s.active, ((s.active || 0) / 60).toFixed(1), s.wall, s.paused, s.simTime, s.grade, s.gradePct, s.score, s.worked, s.landed, s.status === 'open' ? 'in progress' : s.ended, s.note].map(csvq).join(',')));
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out.join('\r\n') + '\r\n'], { type: 'text/csv' }));
+    const d = new Date(); a.download = `aatcc-log-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.csv`;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  };
+  $('tb').onclick = e => { const b = e.target.closest('[data-del]'); if (!b) return; const s = all().find(x => x.id === b.dataset.del);
+    if (s && confirm(`Delete this session?\n${s.user} · ${s.sim} · ${s.date} ${s.startTime} · ${dur(s.active)}`)) { TL.del(s.id); render(); } };
+  $('bClear').onclick = () => { const n = all().length; if (!n) return; if (confirm(`Clear ALL ${n} logged sessions on this computer? This cannot be undone. (Export a CSV first to keep a copy.)`)) { TL.clear(); render(); } };
+  $('bReset').onclick = () => { ['fUser', 'fSim', 'fFrom', 'fTo'].forEach(i => $(i).value = ''); render(); };
+  ['fUser', 'fSim', 'fFrom', 'fTo'].forEach(i => $(i).addEventListener('change', render));
+  addEventListener('storage', e => { if (e.key && e.key.indexOf('aatccLog.') === 0) render(); });
+  setInterval(render, 20000); render();
+})();
+</script>
+</body></html>

@@ -1,6 +1,9 @@
-/* AATCC passcode gate: casual access gate only (static site), stores a salted SHA-256 hash, never the passcode */
+/* AATCC passcode gate: casual access gate only (static site), stores a salted SHA-256 hash, never the passcode.
+   v117: the hash lives in sessionStorage, so the passcode is asked on every visit (new tab / window / browser restart); pages in the same
+   tab, and same-site tabs opened from it (links without rel=noopener inherit the tab session), do not re-ask. Old localStorage copies are removed */
 (function(){var H="acb83ee7b673d974da758a161286f631a2aa056f87f0a2836b282dd664369b89",S="aatcc-gate-v1:",K="aatccGate";
-try{if(localStorage.getItem(K)===H)return;}catch(e){}
+try{localStorage.removeItem(K);}catch(e){}
+try{if(sessionStorage.getItem(K)===H)return;}catch(e){}
 var open=true;
 window.addEventListener("keydown",function(e){if(open&&e.target&&e.target.id==="aatccGateIn")e.stopImmediatePropagation();},true);
 window.addEventListener("keyup",function(e){if(open&&e.target&&e.target.id==="aatccGateIn")e.stopImmediatePropagation();},true);
@@ -11,6 +14,6 @@ d.innerHTML="<form id=\"aatccGateF\" style=\"text-align:center;border:1px solid 
 document.body.appendChild(d);var i=document.getElementById("aatccGateIn");setTimeout(function(){i.focus({preventScroll:true});},50);
 document.getElementById("aatccGateF").addEventListener("submit",function(e){e.preventDefault();e.stopPropagation();
 crypto.subtle.digest("SHA-256",new TextEncoder().encode(S+i.value.trim())).then(function(b){
-if(hex(b)===H){try{localStorage.setItem(K,H);}catch(x){}open=false;d.remove();}
+if(hex(b)===H){try{sessionStorage.setItem(K,H);}catch(x){}open=false;d.remove();}
 else{document.getElementById("aatccGateMsg").textContent="Incorrect passcode";i.value="";i.focus({preventScroll:true});}});});}
 if(document.body)build();else document.addEventListener("DOMContentLoaded",build);})();

@@ -26,13 +26,14 @@ details{margin:6px 0;border:1px solid rgba(120,255,140,.2);padding:6px 10px}summ
 .shr code{color:#ffd27a;font-weight:bold;word-break:break-all}.shr span{color:#eaffee}.shr small{grid-column:2;font-size:11px;color:rgba(160,255,175,.65)}
 .shNo{color:#ffd27a;padding:8px 0}
 #shIdx a.shAll{font-size:14px;padding:10px;margin:8px 12px 12px;max-width:none;text-align:center}
-</style></head><body><h1>AATCC Training Simulation Prototype</h1><a class="intro" href="intro.html" target="_blank" rel="noopener">New here? Start the Intro<small>A guided first mission: the scope, the flow and phraseology</small></a><a href="instructor-controller.html" target="_blank" rel="noopener">Instructor</a><a href="final-controller-par-restyled.html" target="_blank" rel="noopener">Final</a><a href="departure-controller.html" target="_blank" rel="noopener">Departure</a><a href="approach-controller.html" target="_blank" rel="noopener">Approach</a><a href="marshal-controller.html" target="_blank" rel="noopener">Marshal</a>
-<a class="pbk" href="playbook.html" target="_blank" rel="noopener">Phraseology Playbook<small>The right calls for each position, with examples</small></a>
+</style></head><body><h1>AATCC Training Simulation Prototype</h1><a class="intro" href="intro.html" target="_blank" rel="opener">New here? Start the Intro<small>A guided first mission: the scope, the flow and phraseology</small></a><a href="instructor-controller.html" target="_blank" rel="opener">Instructor</a><a href="final-controller-par-restyled.html" target="_blank" rel="opener">Final</a><a href="departure-controller.html" target="_blank" rel="opener">Departure</a><a href="approach-controller.html" target="_blank" rel="opener">Approach</a><a href="marshal-controller.html" target="_blank" rel="opener">Marshal</a>
+<a class="pbk" href="playbook.html" target="_blank" rel="opener">Phraseology Playbook<small>The right calls for each position, with examples</small></a>
+<a class="pbk" href="logsheet.html" target="_blank" rel="opener">Log Sheet<small>Training time and grades per controller, saved on this computer only</small></a>
 <details id="shIdx"><summary>Shorthand Commands<small>Every typed code and what it expands to</small></summary>
 <input id="shQ" type="search" placeholder="Search codes, e.g. heading, angels, lh2" autocomplete="off" aria-label="Search shorthand codes">
 <p class="shTip">Typed in a scope's command box only. Start with a callsign (<b>lt21</b>, <b>ea48</b>, helos <b>vn312</b>, digits <b>21</b>, or an accept letter <b>A</b>), then chain codes with spaces: <b>lt21 l180 ta1.2 du</b>. Type <b>?</b> on a scope to see the list there.</p>
 <div id="shList"></div>
-<a class="shAll" href="playbook.html#shorthand" target="_blank" rel="noopener">Open the list in the Playbook</a>
+<a class="shAll" href="playbook.html#shorthand" target="_blank" rel="opener">Open the list in the Playbook</a>
 </details>
 <button id="bHelp" type="button">⚙ Settings / Help</button>
 <div id="hov" role="dialog" aria-modal="true" aria-label="Settings and help"><div id="hp">
@@ -67,7 +68,7 @@ details{margin:6px 0;border:1px solid rgba(120,255,140,.2);padding:6px 10px}summ
 <h3>Data blocks (Marshal &amp; Approach)</h3>
 <p>Accepted aircraft get a letter in the order you accept them, shown with a short callsign (<code>A LT21</code>). Type the letter first to talk to it: <code>A h270</code>. Ground speed is hidden at the start of each sim; type <code>gsp</code> once and it shows on every data block, including aircraft that arrive later. Type <code>gsp</code> again to hide it. One arrival per sim shows up as a primary target only: click it, then <code>sqn</code> (squawk normal) or <code>sq4521</code> brings its data block back.</p>
 <h3>New to ATC?</h3>
-<p>Start with the <a href="intro.html" target="_blank" rel="noopener">Intro</a>: a guided first mission with Aero covering the scope, the flow and phraseology.</p>
+<p>Start with the <a href="intro.html" target="_blank" rel="opener">Intro</a>: a guided first mission with Aero covering the scope, the flow and phraseology.</p>
 <h3>FAQ / troubleshooting</h3>
 <details><summary>How do I get the latest version?</summary><p>Refresh the page (pull down on iPhone / iPad, or Ctrl+R / Cmd+R). The app always loads the newest files when you are online.</p></details>
 <details><summary>Something still looks old or broken</summary><p>Open <b>Settings → Clear app cache and reload</b>. If that does not help, use <b>Reset all saved trainer data</b>.</p></details>
@@ -108,7 +109,7 @@ details{margin:6px 0;border:1px solid rgba(120,255,140,.2);padding:6px 10px}summ
     try { sessionStorage.clear(); } catch (e) {}
     $('cOut').checked = $('cIn').checked = true; msg('Saved trainer data reset. Reload any open position tab.');
   };
-  $('bOut').onclick = function () { if (!confirm('Sign out on this device?')) return; try { localStorage.removeItem(GATE); } catch (e) {} location.reload(); };
+  $('bOut').onclick = function () { if (!confirm('Sign out on this device?')) return; try { sessionStorage.removeItem(GATE); localStorage.removeItem(GATE); } catch (e) {} location.reload(); };
   $('bCache').onclick = function () {
     msg('Clearing cache…');
     var p = [];
