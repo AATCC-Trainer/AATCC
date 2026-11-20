@@ -163,7 +163,7 @@ const TURN_RATE = 6;           // deg/s (v99: tactical-jet turn, was standard ra
 const CLIMB_FPM = 2000, SPD_RATE = 3, NM_FT = 6076.12, GP_TAN = Math.tan(3 * Math.PI / 180), SWEEP_MS = 2000;   // v100: 2 s/rev (was 4 s)
 const FCOL = { red: '#ff5a6e', silver: '#c9ced6', purple: '#b48cff', copper: '#e0915a', none: '#a8f0b2' };
 const FNAME = { red: 'Marshal · Red', silver: 'Approach · Silver', purple: 'Final · Purple', copper: 'Final · Copper' };
-const LS_KEY = 'aatccIntro.v2', LS_MUTE = 'aatccIntroMute', LS_SPEED = 'aatccIntroSpeed';
+const LS_KEY = 'aatccIntro.v3', LS_MUTE = 'aatccIntroMute', LS_SPEED = 'aatccIntroSpeed';
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 let SPEED = (() => { try { const v = parseFloat(localStorage.getItem(LS_SPEED)); return SPEEDS.includes(v) ? v : 1; } catch (e) { return 1; } })();   // talking speed + aircraft (demo) speed
 const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
@@ -375,6 +375,7 @@ function stepAc(a, dt) {
       if (Math.hypot(dx, dy) < 0.35) { a.wps.shift(); if (!a.wps.length) { a.mode = 'final'; onEvent('onFinal', a); } }
       else { a.tgtHdg = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360; a.turn = 0; }
     }
+    if (a.joinCL && a.tgtHdg == null && Math.abs(a.x) < 0.25) { a.joinCL = false; a.trackCL = true; a.turn = 0; }   // v121: on the intercept heading, the pilot joins the final course and turns inbound
     if (a.parHdg && Math.abs(a.x) < 0.03) { a.parHdg = false; a.trackCL = true; a.turn = 0; }   // PAR heading correction: back on course, the pilot settles on centerline
     if (a.trackCL || a.mode === 'final') { a.tgtHdg = (360 + Math.max(-12, Math.min(12, -a.x * 70))) % 360; a.turn = 0; }
     if (a.tgtHdg != null) {
@@ -426,7 +427,7 @@ function draw(now) {
   ctx.save(); ctx.beginPath(); ctx.rect(cx - R, cy - R, 2 * R, 2 * R); ctx.clip();
   const sw = W.sweep * Math.PI / 180;
   for (let k = 0; k < 24; k++) { const a1 = sw - k * 0.03, a0 = a1 - 0.03; ctx.fillStyle = `rgba(110,255,140,${0.16 * (1 - k / 24)})`; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R * 1.5, a0 - Math.PI / 2, a1 - Math.PI / 2); ctx.closePath(); ctx.fill(); }
-  const step = W.range <= 10 ? 2 : 5;
+  const step = 2;   // v121: range rings every 2 NM (the scopes let you change the spacing)
   for (let r = step; r <= W.range * 1.42 + 0.01; r += step) {
     const hl = W.hl.ring === r;
     ctx.strokeStyle = hl ? 'rgba(255,191,60,0.9)' : 'rgba(120,255,140,0.22)'; ctx.lineWidth = hl ? 2 : 1;
@@ -580,7 +581,7 @@ function fillVoicePicker(ranked) {
 const ICAO_RE = new RegExp('\\b(' + AIRLINES.map(a => a.icao).join('|') + ')(\\d{1,4})\\b', 'g');
 const TEL_RE = new RegExp('\\b(' + AIRLINES.map(a => a.tel).join('|') + ')\\s+(\\d{1,4})\\b', 'g');
 // HTML → plain on-screen text (UI hints and emoji removed)
-const plain = h => String(h).replace(/<span class="ui">[\s\S]*?<\/span>/g, ' ').replace(/<br\s*\/?>/gi, '. ').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&[a-z]+;/g, ' ')
+const plain = h => String(h).replace(/<span class="(?:ui|ns)">[\s\S]*?<\/span>/g, ' ').replace(/<br\s*\/?>/gi, '. ').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&[a-z]+;/g, ' ')
   .replace(/\p{Extended_Pictographic}|\uFE0F/gu, ' ').replace(/[▸◂↺·•★✓✗⌨]/g, ' ').replace(/\s+/g, ' ').trim();
 // on-screen text → how Aero should SAY it (phonetic tweaks only where needed)
 function forSpeech(t) {
@@ -679,16 +680,16 @@ const STEPS = [
   { ch: 0, id: 'meet', type: 'name', range: 15, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
     say: `<p>Hey there, and welcome! I'm <b>Aero</b>, your Personal Air Traffic Control Guide for this training.</p><p>Think of me as your coach in the headset. I'll show you how to read the radar scope, teach you the radio calls controllers use, and let you know the moment you nail one. Mess something up? No problem. I'll explain it and we'll run it again.</p><p>I'll be right here with you the whole way, from your first look at the scope to bringing a jet aboard the ship.</p><p>First things first: what should I call you? Your name or a callsign works.</p>` },
   { ch: 0, id: 'welcome', type: 'info', range: 15, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
-    say: () => `<p>Alright, <b>${esc(userName())}</b>, welcome aboard <b>USS Wasp</b>. Tonight you're working your first <b>night recovery</b>: bringing aircraft back aboard the ship in the dark.</p><p>At night pilots can't see much, so they rely on <b>you</b>, the controller, watching them on radar and talking them home.</p><p>We'll do it in four short chapters: <b>the scope</b>, <b>the flow</b>, <b>phraseology</b>, then a real <b>mission</b>. Let's get to work.</p><p><span class="ui">Tap <b>Next</b> (or press Enter) when you're ready.</span></p>` },
+    say: () => `<p>Alright, <b>${esc(userName())}</b>, welcome aboard <b>USS Wasp</b>. Tonight you're working your first <b>night recovery</b>: bringing aircraft back aboard the ship in the dark.</p><p>At night pilots can't see much, so they rely on <b>you</b>, the controller, watching them on radar and talking them home.</p><p>We'll do it in five short chapters: <b>the scope</b>, <b>the flow</b>, <b>phraseology</b>, a real <b>mission</b>, then the <b>final</b> talk-down on the PAR. Let's get to work.</p><p><span class="ui">Tap <b>Next</b> (or press Enter) when you're ready.</span></p>` },
   // ---------- Chapter A: the scope ----------
   { ch: 1, id: 'scope1', type: 'info', watch: true, range: 15, hl: { ship: true }, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
     say: `<p>This is your <b>radar scope</b>. Picture a map seen from straight above, with <b>north at the top</b>.</p><p>The <span class="k">ship</span> is always in the center. The bright rotating line is the <b>sweep</b>, the radar antenna turning. Each time it passes an aircraft, the target <b>jumps</b> to its new spot. That's why targets move in little steps.</p>` },
   { ch: 1, id: 'rings', type: 'click', range: 15, hl: { rings: true },
     acs: [LT21({ x: 3.5, y: 3.6, hdg: 200, alt: 3000, spd: 220 }), NH41({ x: -7.1, y: -7.0, hdg: 45, alt: 1500, spd: 120 }), VP12({ x: 14.2, y: -4.4, hdg: 300, alt: 2000, spd: 130 })],
-    say: `<p>The circles are <b>range rings</b>, one every <b>5 nautical miles</b> from the ship: 5, 10, 15. They let you judge distance at a glance.</p>`,
+    say: `<p>The circles are <b>range rings</b>, one every <b>2 nautical miles</b> from the ship: 2, 4, 6, 8, 10 and so on. They let you judge distance at a glance.</p><p>On the real scopes you can change the ring spacing with the <b>Rings</b> setting.</p>`,
     task: `🎯 Tap the aircraft that is <b>10 miles</b> from the ship.`, answer: 'NHWK412',
-    why: { LTNG21: 'That one is inside the first ring, about <b>5 miles</b> out.', VIPR123: 'That one is out on the third ring, about <b>15 miles</b>.' }, hint: 'Look for the target sitting on the <b>second</b> ring.',
-    good: `Exactly. It's on the <b>second ring</b>, so it's 10 miles from mother (that's what we call the ship).` },
+    why: { LTNG21: 'That one is between the 4 and 6 mile rings, about <b>5 miles</b> out.', VIPR123: 'That one is way out, about <b>15 miles</b>.' }, hint: 'Count the rings out from the ship: 2, 4, 6, 8, <b>10</b>. Look for the target on the fifth ring.',
+    good: `Exactly. It's on the <b>fifth ring</b>, the 10-mile ring, so it's 10 miles from mother (that's what we call the ship).` },
   { ch: 1, id: 'brg', type: 'click', range: 15, hl: { brgs: true },
     acs: [LT21({ x: 0, y: 11, hdg: 180, alt: 3000, spd: 250 }), NH41({ x: 8, y: 0, hdg: 270, alt: 1500, spd: 120 }), VP12({ x: -8.5, y: -8.5, hdg: 45, alt: 2000, spd: 130 })],
     say: `<p>The numbers around the edge are <b>bearings</b>: directions measured clockwise from north, always as three digits. <b>360</b> (or 000) is north, <b>090</b> east, <b>180</b> south, <b>270</b> west.</p><p>"Bearing 090 from mother" means the aircraft is due <b>east</b> of the ship.</p>`,
@@ -721,7 +722,7 @@ const STEPS = [
   { ch: 2, id: 'flowM', type: 'info', range: 15, watch: 'final', course: true, hold: { x: 7, y: 8, r: 1.5 }, loopDemo: true,
     acs: [LT24({ x: 3, y: 2.5, hdg: 180, alt: 1500, tgtAlt: 1200, spd: 170, tgtSpd: 150, freq: 'silver', mode: 'path', fast: 4, seedTrail: true, wps: [{ x: 3, y: -6.6 }, { x: 2.1, y: -8.7 }, { x: 0.5, y: -9.3 }] }),
           LT21({ x: 7, y: 9.5, hdg: 90, alt: 6000, spd: 250, freq: 'red', mode: 'hold', hold: { x: 7, y: 8, r: 1.5, ang: 0 } })],
-    say: `<p>Now the big picture. Every aircraft coming home passes through three controllers, each on their own radio frequency with its own <b>color</b>:</p><p><b class="f-red">1. MARSHAL (Red)</b>: aircraft check in and wait their turn in a holding pattern (Lightning 21, circling up top), stacked at different altitudes so they stay apart. Marshal sends them down one at a time.</p><p><b class="f-silver">2. APPROACH (Silver)</b>: gives the pilot <b>vectors</b> (headings, altitudes and speeds) to line them up behind the ship on the <b>final approach course</b>, the dashed line.</p><p>Watch <b class="f-silver">Lightning 24</b> on Silver: it's on the <b>downwind</b> leg, flying away from the ship alongside the final course. Then it turns <b>base</b> and rolls out on <b>final</b>, lined up with the ship.</p>` },
+    say: `<p>Now the big picture. An aircraft recovering through <b>Marshal</b> passes through three controllers, each on their own radio frequency with its own <b>color</b>:</p><p><b class="f-red">1. MARSHAL (Red)</b>: aircraft check in and wait their turn in a holding pattern (Lightning 21, circling up top), stacked at different altitudes so they stay apart. Marshal sends them down one at a time.</p><p><b class="f-silver">2. APPROACH (Silver)</b>: gives the pilot <b>vectors</b> (headings, altitudes and speeds) to line them up behind the ship on the <b>final approach course</b>, the dashed line.</p><p>Watch <b class="f-silver">Lightning 24</b> on Silver: it's on the <b>downwind</b> leg, flying away from the ship alongside the final course. Then it turns <b>base</b> and rolls out on <b>final</b>, lined up with the ship.</p><p>Not every aircraft talks to all three: one that checks in straight with <b>Approach</b> (like Lightning 24 later on) only works with Approach and then Final.</p>` },
   { ch: 2, id: 'flowF', type: 'info', range: 10, course: true, watch: 'land', par: true,
     acs: [LT21({ x: 0.2, y: -6.5, hdg: 360, alt: 1200, spd: 150, freq: 'purple', mode: 'final' })],
     say: `<p><b class="f-purple">3. FINAL</b> (<span class="f-purple">Purple</span> or <span class="f-copper">Copper</span>: two Final frequencies, so two controllers can work at once) talks the pilot down the last few miles, keeping them on <b>course</b> (left/right) and on the <b>glidepath</b> (the right descent angle) all the way to the deck.</p><p>Final has its own radar, the <b>PAR</b>, shown here: the top view is <b>height</b>, the bottom view is <b>left/right</b>, and the ship is at the left edge. You'll learn to read it later.</p><p>Watch it come aboard.</p>` },
@@ -731,9 +732,9 @@ const STEPS = [
     good: `Right. Marshal → <b class="f-silver">Approach</b> → Final. The controller says "<b>go silver</b>" to send it there.` },
   // ---------- Chapter C: phraseology ----------
   { ch: 3, id: 'struct', type: 'info', range: 15, acs: PRACTICE(),
-    say: `<p>Radio time. Every call has the same shape:</p><p><span class="ex"><b>WHO</b> you're talking to, then <b>WHAT</b> to do.<br>"Lightning 21, turn left heading two seven zero."</span></p><p>Callsign <b>first</b>, so the right pilot knows the call is for them. Short and standard: no "please", no chit-chat.</p>` },
+    say: `<p>Radio time. Every call has the same shape:</p><p><span class="ex"><b>WHO</b> you're talking to, <b>WHO</b> you are, then <b>WHAT</b> to do.<br>"Lightning 21, <b>Gator Approach</b>, turn left heading two seven zero."</span></p><p>Callsign <b>first</b>, so the right pilot knows the call is for them. Then your <b>self-ID</b>: your position, "<b>Gator Marshal</b>", "<b>Gator Approach</b>" or "<b>Gator Final</b>", so the pilot knows who is talking. Short and standard: no "please", no chit-chat.</p>` },
   { ch: 3, id: 'numbers', type: 'info', range: 15, acs: PRACTICE(),
-    say: `<p>Numbers are spoken <b>digit by digit</b> so they can't be misheard:</p><p><span class="ex">Heading 270 → "heading <b>two seven zero</b>"<br>Heading 090 → "heading <b>zero niner zero</b>" (9 is "niner")<br>3,000 ft → "<b>angels three</b>"<br>1,200 ft → "<b>angels one point two</b>"</span></p><p>The everyday instructions: <b>fly heading</b>, <b>turn left/right heading</b>, <b>take angels</b> (climb or descend to that altitude), <b>take speed</b>, <b>signal buster</b> (max speed), and <b>go silver / purple / copper</b> to switch frequency.</p>` },
+    say: `<p>Numbers are spoken <b>digit by digit</b> so they can't be misheard:</p><p><span class="ex"><span class="ns">Heading 270 → </span>"heading <b>two seven zero</b>"<br><span class="ns">Heading 090 → </span>"heading <b>zero niner zero</b>" (9 is "niner")<br><span class="ns">3,000 ft → </span>"<b>angels three</b>" for 3,000 feet<br><span class="ns">1,200 ft → </span>"<b>angels one point two</b>" for 1,200 feet</span></p><p>The everyday instructions: <b>fly heading</b>, <b>turn left/right heading</b>, <b>take angels</b> (climb or descend to that altitude), <b>take speed</b>, <b>signal buster</b> (max speed), and <b>go silver / purple / copper</b> to switch frequency.</p>` },
   { ch: 3, id: 'qCall', type: 'choice', range: 15, acs: PRACTICE(),
     say: `<p>You want Lightning 21 to turn left to heading 270.</p>`, q: `Which transmission is correct?`,
     opts: [{ t: '"Turn left heading two seventy, Lightning 21."', why: 'Callsign goes <b>first</b>, and the heading is said digit by digit: two seven zero.' }, { t: '"Lightning 21, turn left heading two seven zero."', ok: 1 }, { t: '"Lightning 21, go left two hundred seventy degrees, please."', why: 'Use the standard words: "turn left heading", digits, and no "please".' }, { t: '"Hey Lightning, head west a bit."', why: 'No full callsign and no exact heading. The pilot can\'t fly "a bit".' }],
@@ -751,7 +752,7 @@ const STEPS = [
     target: ['Lightning 21', 'turn right', 'heading', 'zero', 'niner', 'zero'], extra: ['turn left', 'ninety', 'nine'],
     good: `"<b>Lightning 21, turn right heading zero niner zero.</b>" Spot on.` },
   { ch: 3, id: 'readback', type: 'info', range: 15, acs: PRACTICE(),
-    say: `<p>After you give an instruction, the pilot answers with just their <b>callsign</b>. That means "heard you, doing it".</p><p><span class="ex">You: "Lightning 21, turn left heading two seven zero."<br>Pilot: "Lightning 21."</span></p><p>Then <b>watch the scope</b> to confirm it does what you said. If <b>you</b> misspoke, say "<b>correction</b>" and give the right instruction. "Correction" is the only correction word: everything you said before it is thrown out.</p>` },
+    say: `<p>After you give an instruction, the pilot answers with just their <b>callsign</b>. That means "heard you, doing it".</p><p><span class="ex">Controller: "Lightning 21, turn left heading two seven zero."<br>Pilot: "Lightning 21."</span></p><p>Then <b>watch the scope</b> to confirm it does what you said. If <b>you</b> misspoke, say "<b>correction</b>" and give the right instruction. "Correction" is the only correction word: everything you said before it is thrown out.</p>` },
   { ch: 3, id: 'spot1', type: 'choice', range: 15, acs: PRACTICE(),
     say: `<p>Listen to this exchange. You meant to send Lightning 21 down to <b>angels two</b>.</p>`,
     dlg: [['you', 'Lightning 21, turn right heading one eight zero, take angels three.'], ['plt', 'Lightning 21.']],
@@ -767,24 +768,18 @@ const STEPS = [
   { ch: 3, id: 'v2', type: 'voice', range: 15, keep: true, acs: [LT21({ x: 4.6, y: -3.5, hdg: 270, alt: 3000, spd: 250, freq: 'silver' })],
     say: `<p>Now bring it lower.</p>`, task: `🎯 Have Lightning 21 descend to <b>angels 2</b> (2,000 feet).`, expect: { cs: 'LTNG21', need: [{ k: 'alt', v: 2000 }] },
     hint: 'Lightning 21, take angels two', good: 'Watch the altitude in the data block count down: 030… 025… 020.' },
-  { ch: 3, id: 'v3', type: 'voice', range: 15, keep: true, acs: [LT21({ x: 1, y: -3.5, hdg: 270, alt: 2000, spd: 250, freq: 'silver' })],
-    say: `<p>Last one before the mission: slow it down.</p>`, task: `🎯 Slow Lightning 21 to <b>200 knots</b>.`, expect: { cs: 'LTNG21', need: [{ k: 'spd', v: 200 }] },
-    hint: 'Lightning 21, take speed two zero zero', good: 'The speed in the block drops from 25 to 20 as it slows.' },
   // ---------- Final mission ----------
-  { ch: 4, id: 'm0', type: 'info', range: 15, course: true, acs: [LT24({ x: 7, y: -11, hdg: 270, alt: 4000, spd: 250, freq: 'silver' })],
+  { ch: 4, id: 'm0', type: 'info', still: true, range: 15, course: true, acs: [LT24({ x: 7, y: -11, hdg: 270, alt: 4000, spd: 250, freq: 'silver' })],
     pilot: 'Gator Approach, Lightning 24, one three miles southeast of mother, angels four, request PAR approach, full stop.',
     say: `<p>This is it. <b>Lightning 24</b>, an F-35, just checked in with you on <b class="f-silver">Approach</b>. Your job: get it lined up, hand it to Final, then talk it all the way down to the deck.</p><p>The dashed purple line is the <b>final approach course</b>. Ships land into the wind, so tonight final comes from the south, heading <b>360</b>.</p>` },
   { ch: 4, id: 'm1', type: 'voice', range: 15, course: true, keep: true, acs: [LT24({ x: 7, y: -11, hdg: 270, alt: 4000, spd: 250, freq: 'silver' })],
     say: `<p>Final approach starts at <b>1,200 feet</b>, which is angels one point two.</p>`, task: `🎯 Descend Lightning 24 to <b>angels 1.2</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'alt', v: 1200 }] },
     hint: 'Lightning 24, take angels one point two', good: 'Down it goes.' },
-  { ch: 4, id: 'm2', type: 'voice', range: 15, course: true, keep: true, acs: [LT24({ x: 5.5, y: -11, hdg: 270, alt: 2400, tgtAlt: 1200, spd: 250, freq: 'silver' })],
-    say: `<p>It needs to be slower before final.</p>`, task: `🎯 Slow Lightning 24 to <b>150 knots</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'spd', v: 150 }] },
-    hint: 'Lightning 24, take speed one five zero', good: 'Speed coming back.' },
-  { ch: 4, id: 'm3', type: 'voice', range: 15, course: true, acs: [LT24({ x: 0.85, y: -9.5, hdg: 270, alt: 1200, spd: 150, freq: 'silver' })],
-    say: `<p>A minute later, it's nearly at the final course. Turn it now so it rolls out right on the dashed line.</p>`, task: `🎯 Turn Lightning 24 <b>right</b> to heading <b>360</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'hdg', v: 360, dir: 'R' }] },
-    hint: 'Lightning 24, turn right heading three six zero', good: 'Rolling out on final. Nicely timed.' },
+  { ch: 4, id: 'm3', type: 'voice', range: 15, course: true, acs: [LT24({ x: 1.6, y: -10.5, hdg: 270, alt: 1200, spd: 150, freq: 'silver', joinCL: true })],
+    say: `<p>A minute later, it's getting close to the final course. Give it an <b>intercept heading</b>: a 20 degree cut to the dashed line, so it joins the course smoothly instead of overshooting.</p>`, task: `🎯 Turn Lightning 24 <b>right</b> to heading <b>340</b> (20 degrees off the 360 final course).`, expect: { cs: 'LTNG24', need: [{ k: 'hdg', v: 340, dir: 'R' }] },
+    hint: 'Lightning 24, turn right heading three four zero', good: 'Heading 340: a 20 degree intercept. Watch it cut in and join the dashed line, then turn inbound on 360.' },
   { ch: 4, id: 'm4', type: 'voice', range: 15, course: true, keep: true, acs: [LT24({ x: 0.05, y: -9, hdg: 360, alt: 1200, spd: 150, freq: 'silver' })],
-    say: `<p>It's lined up. Time to hand it to Final Control on <b class="f-purple">Purple</b>.</p>`, task: `🎯 Switch Lightning 24 to <b>Purple</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'freq', v: 'purple' }] },
+    say: `<p>It joined the final course and is lined up on 360. Time to hand it to Final Control on <b class="f-purple">Purple</b>.</p>`, task: `🎯 Switch Lightning 24 to <b>Purple</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'freq', v: 'purple' }] },
     hint: 'Lightning 24, go purple', good: 'Handed off to Final.' },
   // ---------- Chapter F: how Final works (PAR) ----------
   { ch: 5, id: 'pf1', type: 'info', range: 10, course: true, par: true, watch: true, hl: { parE: true, parA: true }, acs: [LT24({ x: 0, y: -8.5, hdg: 360, alt: 1200, spd: 150, freq: 'purple', trackCL: true })],
@@ -800,20 +795,28 @@ const STEPS = [
     opts: [{ t: 'Above glidepath', ok: 1 }, { t: 'Below glidepath', why: 'The mark is <b>over</b> the dashed line, so it is above glidepath.' }, { t: 'On glidepath', why: 'On glidepath means the dashed line runs through the middle of the mark. This one is clearly over it.' }],
     good: `Yes, <b>above glidepath</b>. The pilot would ease the descent to get back down onto the dashed line.` },
   { ch: 5, id: 'pf4', type: 'info', range: 10, course: true, par: true, watch: true, hl: { ranges: true }, acs: [LT24({ x: 0, y: -5, hdg: 360, alt: Math.round(5 * NM_FT * GP_TAN + 60), spd: 150, freq: 'purple', trackCL: true, gpOn: true })],
-    say: `<p><b>Your job on Final</b> is a steady stream of short calls, all the way down:</p><p><span class="ex">Course: "on course", "slightly left of course"…<br>Glidepath: "on glidepath", "slightly above glidepath"…<br>Range, every mile: "four miles", "three miles"…</span></p><p>The pilot answers with just the <b>callsign</b> and keeps flying.</p><p>Close in comes the <b>deck call</b>, which clears the aircraft to land. Jets get "<b>three-quarter mile, call the ball</b>". The pilot answers "<b>Lightning 24, ball, state 4.9</b>" (the state is the fuel left, in thousands of pounds), and that reply is the landing clearance. Helicopters get "<b>one mile, go green</b>" instead.</p>` },
+    say: `<p><b>Your job on Final</b> is a steady stream of short calls, all the way down:</p><p><span class="ex">Course: "on course", "slightly left of course"…<br>Glidepath: "on glidepath", "slightly above glidepath"…<br>Range, every mile: "four miles", "three miles"…</span></p><p>The pilot answers with just the <b>callsign</b> and keeps flying.</p><p>Close in comes the <b>deck call</b>, which clears the aircraft to land. Jets get "<b>three-quarter mile, on course, on glidepath, call the ball</b>" (with the actual course and glidepath). The pilot answers "<b>Lightning 24, ball, state 4.9</b>" (the state is the fuel left, in thousands of pounds), and that reply is the landing clearance. Helicopters get "<b>one mile, go green</b>" instead.</p>` },
   { ch: 5, id: 'm5', type: 'info', range: 10, course: true, par: true, acs: [LT24({ x: -0.05, y: -8, hdg: 360, alt: 1200, spd: 150, freq: 'purple' })],
     pilot: 'Gator Final, Lightning 24, eight miles, level one thousand two hundred, heading three six zero.',
     say: `<p>Your turn. <b>You</b> are the <b class="f-purple">Final controller</b>, and Lightning 24 just checked in on Purple at 8 miles.</p><p>Remember: a course call like "<b>left of course</b>" says where the aircraft <i>is</i> (below the line in the azimuth view), so the pilot corrects back to the <b>right</b>. You can add a heading to fix it faster: "<b>come right heading …</b>".</p>` },
   { ch: 5, id: 'm6', type: 'voice', range: 10, course: true, par: true, acs: [LT24({ x: -0.2, y: -6.8, hdg: 356, alt: 1200, spd: 150, freq: 'purple' })],
     say: `<p>Uh oh: in the azimuth view it's sitting <b>well below</b> the course line, far from it. It's <b>well left</b> of course.</p><p>Give the course call, and you can add a <b>heading</b> to bring it back, the way Final does it: "well left of course, <b>come right heading zero one zero</b>".</p>`,
-    task: `🎯 Tell Lightning 24 it's <b>well left of course</b>, and give it a <b>right</b> heading to correct (e.g. <b>010</b>).`, expect: { cs: 'LTNG24', need: [{ k: 'course', side: 'L', q: 'well' }], allow: ['hdg'] },
-    hint: 'Lightning 24, well left of course, come right heading zero one zero', good: 'The pilot answers "Lightning 24". Watch the mark climb back up to the course line in the azimuth view; on centerline the pilot settles back on course.' },
+    task: `🎯 Tell Lightning 24 it's <b>well left of course</b>, and give it a <b>right</b> heading to correct (for example, heading <b>zero one zero</b>).`, expect: { cs: 'LTNG24', need: [{ k: 'course', side: 'L', q: 'well' }], allow: ['hdg'] },
+    hint: 'Lightning 24, well left of course, come right heading zero one zero', good: 'The pilot answers "Lightning 24". Watch the mark climb back up toward the course line in the azimuth view.' },
+  { ch: 5, id: 'm6b', type: 'voice', range: 10, course: true, par: true, acs: [LT24({ x: -0.035, y: -5.9, hdg: 10, alt: 1200, spd: 150, freq: 'purple' })],
+    say: `<p>It's almost back on the line, still on heading <b>010</b>. If you leave it there, it flies straight through the course and ends up right of it.</p><p>Give the <b>counter-correction</b>: turn it back to the final course heading, "<b>come left heading three six zero</b>". You can lead with the course call.</p>`,
+    task: `🎯 Turn Lightning 24 back <b>left</b> to heading <b>360</b>, the final course.`, expect: { cs: 'LTNG24', need: [{ k: 'hdg', v: 360, dir: 'L' }] },
+    hint: 'Lightning 24, slightly left of course, come left heading three six zero', good: 'Back on 360 as it reaches the line: that is the counter-correction. Small turns, then back to the course heading.' },
+  { ch: 5, id: 'm6c', type: 'voice', range: 10, course: true, par: true, acs: [LT24({ x: 0, y: -4.6, hdg: 360, alt: 1200, spd: 150, freq: 'purple', trackCL: true })],
+    say: `<p>On course. In the elevation view the dashed <b>glidepath</b> is coming down toward the mark: it will meet it in about half a mile.</p><p>Give the pilot a heads-up so they are ready to start down: "<b>approaching glidepath</b>".</p>`,
+    task: `🎯 Tell Lightning 24 it's <b>approaching glidepath</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'approachingGp' }] },
+    hint: 'Lightning 24, on course, approaching glidepath', good: 'The pilot gets ready to descend. Next call when the glidepath meets the mark.' },
   { ch: 5, id: 'm7', type: 'voice', range: 10, course: true, par: true, acs: [LT24({ x: 0, y: -3.7, hdg: 360, alt: 1200, spd: 150, freq: 'purple', trackCL: true })],
     say: `<p>In the elevation view the dashed <b>glidepath</b> has come down to meet the mark. The pilot stays level until you tell them.</p>`, task: `🎯 Tell Lightning 24 to <b>begin descent</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'beginDescent' }] },
     hint: 'Lightning 24, begin descent', good: 'Watch the mark ride down the dashed line in the top view.' },
   { ch: 5, id: 'm8', type: 'voice', range: 10, course: true, par: true, waitLand: true, acs: [LT24({ x: 0, y: -0.78, hdg: 360, alt: Math.round(0.78 * NM_FT * GP_TAN + 60), spd: 150, freq: 'purple', trackCL: true, gpOn: true })],
-    say: `<p>On course, on glidepath, three-quarters of a mile out, and the deck is clear. Time for the deck call.</p>`, task: `🎯 Give Lightning 24 the jet deck call: <b>three-quarter mile, call the ball</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'callBall' }] },
-    hint: 'Lightning 24, three-quarter mile, call the ball', good: 'The pilot\'s "ball" reply is the landing clearance. Here it comes…' },
+    say: `<p>On course, on glidepath, three-quarters of a mile out, and the deck is clear. Time for the deck call.</p>`, task: `🎯 Give Lightning 24 the jet deck call: <b>three-quarter mile, on course, on glidepath, call the ball</b>.`, expect: { cs: 'LTNG24', need: [{ k: 'callBall' }] },
+    hint: 'Lightning 24, three quarter mile, on course, on glidepath, call the ball', good: 'The pilot\'s "ball" reply is the landing clearance. Here it comes…' },
   { ch: 5, id: 'done', type: 'done', par: true, range: 10, course: true, acs: [] },
 ];
 const sayOf = st => typeof st.say === 'function' ? st.say() : (st.say || '');
@@ -854,7 +857,7 @@ function setScene(st, first) {
   const have = st.keep && !first && st.acs && W.acs.length === st.acs.length && st.acs.every(a => W.acs.some(x => x.cs === a.cs && !x.landed));
   if (!have) W.acs = (st.acs || []).map(a => mk(JSON.parse(JSON.stringify(a))));
   if (st.enter) st.enter(first);
-  W.frozen = st.type === 'voice' && !(R && R.done && STEPS[cur] === st);
+  W.frozen = (st.type === 'voice' && !(R && R.done && STEPS[cur] === st)) || !!st.still;   // v121: still = hold the aircraft until Aero finishes explaining
   updTag();
 }
 function show(i, first) {
@@ -874,6 +877,7 @@ function show(i, first) {
   if (st.pilot) speak(st.pilot, 'pilot');
   speakQuestion(st);
   if (!sqBusy && !sq.length) R.narr = true;
+  if (st.still && R.narr) W.frozen = false;   // muted / no TTS: nothing to wait for
   updNav(); updProg(); save();
   $('pscroll').scrollTop = 0;
 }
@@ -901,7 +905,7 @@ function updNav() {
   cue.innerHTML = txt; cue.classList.toggle('on', !!txt); cue.classList.toggle('go', go);
   if (ready && !R.cued) { R.cued = true; if (TTS && !muted) setTimeout(() => { if (STEPS[cur] === st && R.cued) speak(last ? 'Press Finish when you\'re ready.' : 'Press Next when you\'re ready.', 'mentor'); }, 250); }
 }
-function speechIdle() { if (R && !R.narr) { R.narr = true; try { updNav(); } catch (e) {} } }
+function speechIdle() { if (R && !R.narr) { R.narr = true; try { updNav(); } catch (e) {} } if (R && R.narr && STEPS[cur] && STEPS[cur].still) W.frozen = false; }
 function feedback(kind, html) { const f = $('fb'); f.className = kind; f.innerHTML = html; if (html) setTimeout(() => { try { f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {} }, 30); }
 function succeed(st, extra) {
   markResult(st, R.tries === 0);
@@ -990,12 +994,14 @@ function setName(st, raw) {
 function shuffle(a) { let s = 7; for (let i = a.length - 1; i > 0; i--) { s = (s * 9301 + 49297) % 233280; const j = Math.floor(s / 233280 * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 function choose(st, i, b) {
   if (R.done) return;
+  hush();   // v121: answering cuts Aero off at once (speech cancelled, queue cleared), then the right / wrong feedback is spoken
   const o = st.opts[i];
   if (o.ok) { b.classList.add('right'); [...b.parentNode.children].forEach(x => x.disabled = true); succeed(st); }
   else { b.classList.add('wrong'); b.disabled = true; fail(st, `Not quite. ${o.why || ''}`); }
 }
 function clickAc(st, cs) {
   if (R.done) return;
+  hush();   // v121: same for a tap on the scope
   if (cs === st.answer) { W.mark = { cs, ok: true }; succeed(st); }
   else { W.mark = { cs, ok: false }; fail(st, `That's <b>${tel(cs)}</b>. ${(st.why && st.why[cs]) || ''}`); }
 }
@@ -1114,8 +1120,9 @@ function describeNeed(n) {
     case 'freq': return `go ${n.v}`;
     case 'course': return (n.q ? n.q + ' ' : '') + (n.side === 'R' ? 'right' : 'left') + ' of course';
     case 'beginDescent': return 'begin descent';
+    case 'approachingGp': return 'approaching glidepath';
     case 'clearLand': return 'cleared to land';
-    case 'callBall': return 'three-quarter mile, call the ball';
+    case 'callBall': return 'three-quarter mile, on course, on glidepath, call the ball';
   }
   return n.k;
 }
@@ -1141,7 +1148,7 @@ function evaluate(st, p) {
   for (const c of p.cmds.filter(c => c.k === 'hdg' && allowed.includes('hdg'))) {   // optional heading correction (PAR style): it must turn back toward the course
     const a0 = W.acs.find(x => !x.landed), d = a0 ? angDiff(a0.hdg, c.v % 360) : 0;
     if (c.dir === 'L') issues.push('It is left of course, so the correction is a <b>right</b> turn ("come <b>right</b> heading …"). A left turn takes it further away.');
-    else if (d <= 0 || d > 45) issues.push(`Heading <b>${h3(c.v)}</b> doesn't bring it back. Pick a small <b>right</b> correction, a few degrees right of 360 (e.g. <b>010</b>).`);
+    else if (d <= 0 || d > 45) issues.push(`Heading <b>${h3(c.v)}</b> doesn't bring it back. Pick a small <b>right</b> correction, a few degrees right of 360 (for example, heading <b>zero one zero</b>).`);
   }
   const extra = p.cmds.filter(c => !ex.need.some(n => n.k === c.k || (n.k === 'callBall' && c.k === 'clearLand')) && !allowed.includes(c.k) && !INFO_K.has(c.k));
   if (extra.length) issues.push(`You also said "<b>${extra.map(cmdStr).join('", "')}</b>", which wasn't part of this task, and a real pilot would do it too.`);
@@ -1277,7 +1284,7 @@ buildProg(); setMute(muted); resize(); requestAnimationFrame(frame);
   const go = `style="background:#123f1a;border-color:var(--g);color:#d8ffde;font-weight:bold"`;
   openOv(`<h1>FIRST NIGHT ABOARD USS WASP</h1><h2>A guided intro to air traffic control</h2>
     <p>No experience needed. <b>Aero</b>, your Personal Air Traffic Control Guide, will teach you to <b>read the radar scope</b> and <b>talk like a controller</b>. Then you'll bring an aircraft aboard the ship yourself, by voice.</p>
-    <p class="small">About 10 minutes · progress saves automatically · 🔊 voices on (toggle with the speaker button or M)</p>
+    <p class="small">🔊 voices on (toggle with the speaker button or M)</p>
     <div class="btns">${resume ? `<button id="ovGo" ${go}>Continue: ${CHAPTERS[STEPS[cur].ch]}, step ${cur + 1}</button><button id="ovRe">↺ Restart from the beginning</button>` : `<button id="ovGo" ${go}>Meet Aero ▸</button>`}</div>`);
   $('ovGo').onclick = () => { closeOv(); show(cur, true); };
   if ($('ovRe')) $('ovRe').onclick = restart;
