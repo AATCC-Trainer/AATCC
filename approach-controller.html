@@ -2736,7 +2736,7 @@ const LINK = { on: localStorage.getItem('stingerLink') === '1', ch: null, lastAc
     const m = { type: 'handoff', callsign: a.tel || a.cs, acType: isHelo(a) ? 'helo' : 'jet', freq, bearingFromShip: Math.round(appBrg(a)) % 360, rangeNm: Math.round(appRng(a) * 10) / 10,
       altitudeFt: Math.round(a.alt), speedKt: Math.round(a.ias), headingDeg: Math.round(norm(a.hdg)), approachNum: Math.min(APP_MAX_PARS, (a.appCount || 0) + 1),
       climbout: { heading: Math.round(coH), altitudeFt: coA }, simTime: Math.round(G.t), mv: MV, brc: TBRC, fb: FB(), dwh: DWH(), src: 'APPROACH' };
-    this.post(m); a.phase = 'withFinal'; a.accepted = false; a.linkCs = m.callsign; a.hoffFreq = freq || a.hoffFreq || 'purple'; a.button = a.button || a.hoffFreq; a.st = a.st === 'ctl' ? 'purple' : a.st;
+    this.post(m); a.phase = 'withFinal'; a.hoTagT = G.t; a.accepted = false; a.linkCs = m.callsign; a.hoffFreq = freq || a.hoffFreq || 'purple'; a.button = a.button || a.hoffFreq; a.st = a.st === 'ctl' ? 'purple' : a.st;
     log('sys', `${a.cs} handed off to Final Control (${freq} / ${freqTag(freq)}, approach ${m.approachNum}/${APP_MAX_PARS}).`); refreshPanel(true);
   },
   complete(m) {
@@ -2909,6 +2909,12 @@ function appCheckIn(a, again) {
    One master turns the ship: Marshal (always), else Approach (when no running linked Marshal). Followers (Approach behind Marshal) replay the
    master's 'ship-turn' messages so every linked scope shows the same BRC; Final follows via the 'brc' link messages. The Instructor can switch
    auto turns off, change the interval, or turn the ship now (direction + degrees): 'ship-cfg' / 'ship-cmd' over stinger-link. ---------- */
+/* v120: hand-off tag. After "go silver" / "go purple" / "go copper" the data block stays on this scope for HO_TAG_S seconds showing the new
+   frequency (SLVR / PRPL / COPR), still moving, then drops off (before, a linked hand-off vanished at once and a standalone commenced
+   hand-off kept its old block, so the data block never showed the change). */
+const HO_TAG_S = 12;
+const hoTag = a => !!(a && a.hoTagT != null && G && G.t - a.hoTagT < HO_TAG_S && (a.phase === 'withApp' || a.phase === 'withFinal' || (a.phase === 'gone' && (a.maDone || a.hoGone))));
+function hoMove(a, dt) { const h = a.hdg * DEG, v = a.ias || a.gs || 200; a.e += v * Math.sin(h) / 3600 * dt; a.n += v * Math.cos(h) / 3600 * dt; }
 const SHIP_TURNS_ON = true;
 const SHIPCFG = { auto: true, every: 600 };   // Instructor 'ship-cfg' overrides (auto on/off, interval s)
 const SHIP_TURN = { warn: 5, rate: 1, degs: [5, 10, 15, 20], turnCallGrace: 15, steadyCallWin: 30, bonus: 10, steadyBanner: 8 };
@@ -3089,6 +3095,7 @@ function appStep(dt) {
   const w = appWind();
   if (LINK.pendingHandoff) { const h = LINK.pendingHandoff; LINK.pendingHandoff = null; LINK.handoff(h.a, h.freq); }
   for (const a of G.ac) {
+    if (hoTag(a)) { hoMove(a, dt); continue; }   // v120: handed off to Final, PRPL / COPR tag still shown: keeps flying its heading
     if (a.phase !== 'app') continue;
     coStep(a);
     if (a.st === 'marWait' && G.t < a.checkAt) appInbound(a);   // v118: not on frequency yet: never drifts away from the ship
@@ -3464,7 +3471,7 @@ function drawApp(now) {
   // primary paints: refreshed when the sweep crosses the target's bearing, then decay over one rotation
   const crossed = d => { const span = norm(ang - prev); return span < 180 && norm(d - prev) <= span; };
   if (G) for (const a of G.ac) {
-    if (a.phase !== 'app' || a.st === 'dep') continue;   // not shown until checked in
+    if ((a.phase !== 'app' && !hoTag(a)) || a.st === 'dep') continue;   // not shown until checked in (v120: hand-off tag lingers)
     if (!a.paint || crossed(appBrg(a))) a.paint = { e: a.e, n: a.n, t: now, alt: a.alt, gs: a.gs, hdg: a.hdg };   // displayed position/readouts latch on each sweep pass
     a.dispE = a.paint.e; a.dispN = a.paint.n; a.dispAlt = a.paint.alt; a.dispGs = a.paint.gs; a.dispHdg = a.paint.hdg;
     a.cone = inCone(a);   // quiet flag: over the ship, paints are suppressed (sim / voice still run)
@@ -3496,7 +3503,7 @@ function drawApp(now) {
   // TPX-42 style beacon data blocks (computer generated: live position, no fade)
   ctx.textAlign = 'left'; ctx.font = FONT(11); syncLetters();
   for (const a of G.ac) {
-    if (a.phase !== 'app' || a.st === 'dep') continue;   // not shown until checked in
+    if ((a.phase !== 'app' && !hoTag(a)) || a.st === 'dep') continue;   // not shown until checked in (v120: hand-off tag lingers)
     if (!a.code) a.code = '4' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 8)).join('');   // octal Mode 3/A code
     if (a.cone) { a.hitR = null; continue; }   // cone of confusion: hide beacon / data block (not clickable)
     const sel = a === G.selected, fin = a.st === 'final' || a.st === 'purple' || a.st === 'lowout', Q = a.paint ? P(a.paint.e, a.paint.n) : P(a.e, a.n);   // sweep-latched position
@@ -3511,7 +3518,8 @@ function drawApp(now) {
     const dbo = a.dbo || { x: 14, y: -22 }, bx = Q[0] + dbo.x, by = Q[1] + dbo.y;
     if (a.dbo) { ctx.save(); ctx.globalAlpha = 0.5; ctx.lineWidth = 1; line(Q[0], Q[1], bx + (dbo.x < 0 ? 40 : -2), by + (dbo.y < -6 ? 16 : -10)); ctx.restore(); }   // leader line when moved
     if (sel) { ctx.save(); ctx.strokeStyle = 'rgba(220,255,225,0.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(Q[0], Q[1], 10, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }   // subtle selection ring
-    const l1 = a.st === 'purple' ? dbName(a) + ' ' + freqTag(a.hoffFreq || a.button || 'purple') : dbName(a), l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')}${G.gsp ? ' ' + String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0') : ''} ${a.code}`;   // ground speed only after GSP
+    if (a.phase !== 'app') a.hitR = null;   // v120: handed-off tag: display only
+    const l1 = (a.st === 'purple' || hoTag(a)) ? dbName(a) + ' ' + freqTag(a.hoffFreq || a.button || 'purple') : dbName(a), l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')}${G.gsp ? ' ' + String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0') : ''} ${a.code}`;   // ground speed only after GSP
     ctx.fillStyle = col; if (a.hoff && !((now / 350 | 0) % 2)) ctx.globalAlpha = 0.3; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12); ctx.globalAlpha = 1;
     { const tags = (a.identified ? ' ID' : '');   // ownership / handoff tags
       if (a.hoff) { if ((now / 350 | 0) % 2) { ctx.fillStyle = 'rgba(255,235,120,1)'; ctx.fillText(' ' + (a.hoff.dir === 'out' ? 'APP' : 'FIN') + (a.identified ? ' ID' : ''), bx + ctx.measureText(l1).width, by); ctx.fillStyle = col; } }

@@ -2301,7 +2301,9 @@ function refreshPanel(force) {
         const eatTag = x.mar && x.mar.eat != null ? `  EAT :${String(x.mar.eat).padStart(2, '0')}${x.mar.eatDone ? '✓' : ''}` : '';
         return `${x.cs.padEnd(8)} ${ok ? '✓ 99 weather   1/1' : '· needs 99 wx  0/1'}${eatTag}`;
       });
-      const t = `GRADING · 99 WEATHER (1 pt/bird)${eatHdr}\n` + (L.length ? L.join('\n') : '(waiting for marshal arrivals)') + `\nPOINTS ${pts} / ${gr.length}`;
+      const cca = G.ccaGraded || [], CL = cca.map(x => `${x.cs.padEnd(8)} ` + GRADE_TASKS.map(([k]) => (x.tasks || {})[k] ? '✓' : '·').join('') + ` +${x.pts10 || 0}`);   // v120: Approach grading scale for CCA birds
+      const t = `GRADING · 99 WEATHER (1 pt/bird)${eatHdr}\n` + (L.length ? L.join('\n') : '(waiting for marshal arrivals)') + `\nPOINTS ${pts} / ${gr.length}`
+        + (cca.length ? `\n\nCCA GRADING  1 stgr 2 rc 3 alt 4 cca 5 btn 6 pos 7 co 8 slow\n${CL.join('\n')}\nCCA SCORE +${cca.reduce((s2, x) => s2 + (x.pts10 || 0), 0)}` : '');
       if (gb.textContent !== t) gb.textContent = t;
     }
   } else {
@@ -2550,6 +2552,7 @@ function endGame() {
     G.mcPts = pts;
     $('endGrade').innerHTML = `Marshal Grading: <b>${pts} / ${gr.length}</b> point${gr.length === 1 ? '' : 's'} <span style="font-size:13px;color:var(--dim)">(99 weather per marshal aircraft)</span>`;
     const mcRows = [['Level', G.d.name], ['Points (99 weather)', `${pts} / ${gr.length}`], ...(G.eatBase != null ? [['Entered time → 1st EAT', `:${String(G.eatRef).padStart(2, '0')} → :${String(G.eatBase).padStart(2, '0')}`]] : []), ['Marshal birds', gr.length]];
+    const cca = G.ccaGraded || []; if (cca.length) mcRows.push(['CCA birds (Approach grading)', cca.map(x => `${x.cs} +${x.pts10 || 0} (${GRADE_TASKS.filter(([k]) => (x.tasks || {})[k]).map(([, l]) => l).join(', ') || 'no items'})`).join('<br>')]);   // v120
     $('endTable').innerHTML = mcRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
     $('endList').innerHTML = '<table class="st">' + gr.map(x => {
       const ok = !!(x.mcTasks && x.mcTasks.wx99);
@@ -2994,7 +2997,7 @@ const LINK = { on: localStorage.getItem('stingerLink') === '1', ch: null, lastAc
     const m = { type: 'handoff', callsign: a.tel || a.cs, acType: isHelo(a) ? 'helo' : 'jet', freq, bearingFromShip: Math.round(appBrg(a)) % 360, rangeNm: Math.round(appRng(a) * 10) / 10,
       altitudeFt: Math.round(a.alt), speedKt: Math.round(a.ias), headingDeg: Math.round(norm(a.hdg)), approachNum: Math.min(APP_MAX_PARS, (a.appCount || 0) + 1),
       climbout: { heading: Math.round(coH), altitudeFt: coA }, simTime: Math.round(G.t), mv: MV, brc: TBRC, fb: FB(), dwh: DWH(), src: 'MARSHAL' };
-    this.post(m); a.phase = 'withFinal'; a.accepted = false; a.linkCs = m.callsign; a.st = 'purple'; a.onFinal = false; a.turnDir = null; a.inForm = false;
+    this.post(m); a.phase = 'withFinal'; a.hoTagT = G.t; a.hoffFreq = freq || a.hoffFreq; a.accepted = false; a.linkCs = m.callsign; a.st = 'purple'; a.onFinal = false; a.turnDir = null; a.inForm = false;
     log('sys', `${a.cs} handed off to Final Control (${freq}, approach ${m.approachNum}/${APP_MAX_PARS}).`); refreshPanel(true);
   },
   complete(m) {
@@ -3103,7 +3106,7 @@ const MA = { on: localStorage.getItem('stingerMA') !== '0', ch: null, peerT: 0, 
   },
   acked(m) {
     if (!G) return; const a = G.ac.find(x => x.maPend && x.maPend.id === m.id); if (!a) return; a.maPend = null;
-    if (m.ok) { a.phase = 'gone'; a.removeAt = G.t; a.maDone = true; if (G.selected === a) G.selected = null; log('good', `${a.cs} handed off to Approach (Silver): now on the Approach scope.`); try { refreshPanel(true); } catch (e) {} }
+    if (m.ok) { a.phase = 'gone'; a.removeAt = G.t + (a.hoTagT != null ? Math.max(0, HO_TAG_S - (G.t - a.hoTagT)) : 0); a.maDone = true; /* v120: SLVR tag stays a few seconds */ if (G.selected === a) G.selected = null; log('good', `${a.cs} handed off to Approach (Silver): now on the Approach scope.`); try { refreshPanel(true); } catch (e) {} }
     else if (/APPROACH FULL/.test(m.msg || '')) {   // v111: Approach holds at 4 aircraft: the aircraft stays with Marshal on Red
       a.phase = 'app'; a.st = 'ctl'; a.hoffFreq = null; a.button = a.button === 'silver' ? null : a.button; a.onFinal = false;
       log('warn', `Approach is full (4 aircraft): ${a.cs} stays on Red with you. Hand it to Silver again when Approach has room.`); try { refreshPanel(true); } catch (e) {} }
@@ -3125,7 +3128,7 @@ const MA = { on: localStorage.getItem('stingerMA') !== '0', ch: null, peerT: 0, 
 window.__MA = MA;
 function maSilver(a) {   // go silver: hand the aircraft (and any wingman flying formation on it) to the linked Approach page
   if (!MA.handoff(a)) return false;
-  for (const w of G.ac.filter(w => alive(w) && w !== a && w.inForm && w.lead === a.uid)) { w.sector = null; w.hoffFreq = 'silver'; w.button = 'silver'; w.st = 'purple'; w.phase = 'withApp'; w.inForm = false; w.turnDir = null; MA.handoff(w); }
+  for (const w of G.ac.filter(w => alive(w) && w !== a && w.inForm && w.lead === a.uid)) { w.sector = null; w.hoffFreq = 'silver'; w.button = 'silver'; w.st = 'purple'; w.phase = 'withApp'; w.hoTagT = G.t; w.inForm = false; w.turnDir = null; MA.handoff(w); }
   return true;
 }
 setTimeout(() => MA.init(), 0);
@@ -3222,7 +3225,7 @@ function mcParArrive() {
   a.hdg = a.tgtHdg = Math.round(norm(b + 180));   // inbound toward mother
   a.alt = a.tgtAlt = helo ? 2000 : 3000; a.trail = []; a.trailT = 0; a.lastTx = G.t;
   { const f = appFuelSpec(a); a.fuel0 = f[0] * rand(0.45, 0.7); a.launchT = G.t; a.souls = Math.round(rand(f[2], f[3])); }
-  G.ac.push(a); appCheckIn(a, false);
+  G.ac.push(a); (G.ccaGraded = G.ccaGraded || []).push(a); appCheckIn(a, false);   // v120: CCA birds get the Approach grading scale
   log('sys', `${a.cs} (${a.type}) checking in ${R.toFixed(1)} NM out, angels ${appAngels(a.alt)}, requesting CCA approach.`);
   return a;
 }
@@ -3244,21 +3247,27 @@ function appCheckIn(a, again) {
   if (MC && a.lead) return;   // wingman
   if (MC && a.parArr) {   // CCA arrival 6 NM from the right: Approach-style check-in on Marshal, requesting CCA approach
     pilotSay(a, `${FAC} Marshal, ${a.tel}, ${posit}angels ${appAngels(a.alt)}, state ${f}, ${n} ${sw} on board, request CCA approach.`,
-      `${FAC} Marshal, ${a.telSay}, ${positSay}angels ${appAngelsSay(a.alt)}, state ${fSay}, ${NUMW[n]} ${sw} on board, request C C A approach.`);
+      `${FAC} Marshal, ${a.telSay}, ${positSay}angels ${appAngelsSay(a.alt)}, state ${fSay}, ${NUMW[n]} ${sw} on board, request C C A approach.`, false, false, true);   // v120: check-ins are priority speech (queued while the mic is keyed, never dropped)
     if (!G.selected) selectAc(a); return; }
   if (MC) { const st = (Math.floor(appState(a) * 10) / 10).toFixed(1), dB = String(Math.round(appBrg(a)) % 360 || 360).padStart(3, '0'), dR = Math.round(appRng(a));
     const wt = a.wingCs ? telephony(a.wingCs) : null, fl = a.flight ? `flight of ${a.flight}, ${wt ? wt.text + ', ' : ''}` : '', flS = a.flight ? `flight of ${NUMW[a.flight]}, ${wt ? wt.say + ', ' : ''}` : '';
     pilotSay(a, `${FAC} Marshal, ${a.tel}, ${fl}${dB} for ${dR}, angels ${appAngels(a.alt)}, state ${st}, ${n} ${sw} on board.`,
-      `${FAC} Marshal, ${a.telSay}, ${flS}${dB.split('').map(d => DIGW[+d]).join(' ')} for ${dR >= 10 ? sayTwo(dR) : NUMW[dR]}, angels ${String(appAngels(a.alt)).split('.').map((x, i) => i ? NUMW[+x] : sayTwo(+x)).join(' point ')}, state ${fSay}, ${NUMW[n]} ${sw} on board.`);
+      `${FAC} Marshal, ${a.telSay}, ${flS}${dB.split('').map(d => DIGW[+d]).join(' ')} for ${dR >= 10 ? sayTwo(dR) : NUMW[dR]}, angels ${String(appAngels(a.alt)).split('.').map((x, i) => i ? NUMW[+x] : sayTwo(+x)).join(' point ')}, state ${fSay}, ${NUMW[n]} ${sw} on board.`, false, false, true);
     if (!G.selected) selectAc(a); return; }
   pilotSay(a, `${FAC} Approach, ${a.tel}, ${pre}${again ? posit : ""}state ${f}, ${n} ${sw} on board, request practice PAR approach.`,
-    `${FAC} Approach, ${a.telSay}, ${pre}${again ? positSay : ""}state ${fSay}, ${NUMW[n]} ${sw} on board, request practice P A R approach.`);
+    `${FAC} Approach, ${a.telSay}, ${pre}${again ? positSay : ""}state ${fSay}, ${NUMW[n]} ${sw} on board, request practice P A R approach.`, false, false, true);
   if (!G.selected) selectAc(a);
 }
 /* ---------- ship turns (v95): every SHIPCFG.every s of sim time (default 10 min, v99), 5-20 deg (multiples of 5) port/starboard, 5 s warning, ~1 deg/s.
    One master turns the ship: Marshal (always), else Approach (when no running linked Marshal). Followers (Approach behind Marshal) replay the
    master's 'ship-turn' messages so every linked scope shows the same BRC; Final follows via the 'brc' link messages. The Instructor can switch
    auto turns off, change the interval, or turn the ship now (direction + degrees): 'ship-cfg' / 'ship-cmd' over stinger-link. ---------- */
+/* v120: hand-off tag. After "go silver" / "go purple" / "go copper" the data block stays on this scope for HO_TAG_S seconds showing the new
+   frequency (SLVR / PRPL / COPR), still moving, then drops off (before, a linked hand-off vanished at once and a standalone commenced
+   hand-off kept its old block, so the data block never showed the change). */
+const HO_TAG_S = 12;
+const hoTag = a => !!(a && a.hoTagT != null && G && G.t - a.hoTagT < HO_TAG_S && (a.phase === 'withApp' || a.phase === 'withFinal' || (a.phase === 'gone' && (a.maDone || a.hoGone))));
+function hoMove(a, dt) { const h = a.hdg * DEG, v = a.ias || a.gs || 200; a.e += v * Math.sin(h) / 3600 * dt; a.n += v * Math.cos(h) / 3600 * dt; }
 const SHIP_TURNS_ON = true;
 const SHIPCFG = { auto: true, every: 600 };   // Instructor 'ship-cfg' overrides (auto on/off, interval s)
 const SHIP_TURN = { warn: 5, rate: 1, degs: [5, 10, 15, 20], turnCallGrace: 15, steadyCallWin: 30, bonus: 10, steadyBanner: 8 };
@@ -3720,7 +3729,7 @@ const MAR = {
         if (G.selected === a) G.selected = null;
       } else {
         if (LINK.on) log('warn', `Final Control not detected: ${a.cs} recovering on Marshal (standalone Final).`);
-        for (const x of group) { x.st = 'mfinal'; x.inForm = false; if (x !== a) { x.mar = JSON.parse(JSON.stringify(M)); } }
+        for (const x of group) { x.st = 'mfinal'; x.hoffFreq = freq; x.inForm = false; if (x !== a) { x.mar = JSON.parse(JSON.stringify(M)); } }   // v120: data block shows PRPL / COPR
         log('sys', `${a.cs} switched to Final${m.hoFreq ? ' (' + m.hoFreq + ')' : ''} (${this.T[M.run].name}); off Marshal frequency.`); parts.push(m.hoFreq ? `go ${m.hoFreq}` : 'switching final');
         if (G.selected === a) G.selected = null;
       }
@@ -3731,7 +3740,7 @@ const MAR = {
       const mApp = { type: 'handoff', cs: a.cs, callsign: a.tel || a.cs, from: 'MARSHAL', to: 'APP', id: a.cs + '-' + Date.now(), freq: 'silver' };
       if (LINK.on && LINK.ch) LINK.post(mApp);
       maSilver(a);   // v94: linked Approach page takes it (full state)
-      a.st = 'purple'; a.phase = 'withApp'; a.onFinal = false; a.turnDir = null; a.inForm = false;
+      a.st = 'purple'; a.phase = 'withApp'; a.hoTagT = G.t; a.onFinal = false; a.turnDir = null; a.inForm = false;
       log('sys', `${a.cs} switching Silver (Approach)${LINK.on ? '' : ' (solo)'}; off Marshal frequency.`);
       parts.push('switching silver'); says.push('switching silver');
       if (G.selected === a) G.selected = null;
@@ -3978,6 +3987,7 @@ function appStep(dt) {
   const w = appWind();
   if (LINK.pendingHandoff) { const h = LINK.pendingHandoff; LINK.pendingHandoff = null; LINK.handoff(h.a, h.freq); }
   for (const a of G.ac) {
+    if (hoTag(a)) { hoMove(a, dt); continue; }   // v120: handed off, tag still shown: keeps flying its heading
     if (a.phase !== 'app') continue;
     coStep(a);
     const rng0 = appRng(a);
@@ -4150,7 +4160,7 @@ function appExecute(p, src) {
   selectAc(a); a.lastTx = G.t;
   { const snap = snapTx(a), sc0 = G.score, rec = { a, t: G.t, snap, dScore: 0, irreversible: p.cmds.some(c => c.k === 'purple') }; G.lastTx = rec; queueMicrotask(() => { rec.dScore = G.score - sc0; }); }
   log('ctl', `${a.cs}${p.cs ? '' : ' (selected)'}: "${p.raw.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  ${p.cmds.length ? p.cmds.map(cmdStr).join('; ') : '??'}`);
-  if (a.firstTx) { a.firstTx = false; if (p.stinger && !MC) award(a, 'cs', 'Gator Approach'); }   // never penalized
+  if (a.firstTx) { a.firstTx = false; if (p.stinger && (!MC || a.parArr)) award(a, 'cs', MC ? 'Gator Marshal' : 'Gator Approach'); }   // never penalized
   const rb = [], rbSay = []; let marked = false, secRb = 0;
   for (const c of p.cmds) {
     if (MC && !a.parArr && ['sector', 'purple', 'cca', 'button', 'climbOut', 'pos', 'rid'].includes(c.k)) { log('sys', `${cmdStr(c)}: not used on the Marshal scope (Approach only).`); continue; }
@@ -4194,7 +4204,7 @@ function appExecute(p, src) {
     if (c.k === 'button') { award(a, 'btn', 'expect final button'); a.button = c.v; rb.push('wilco'); rbSay.push('wilco'); continue; }
     if (c.k === 'goRed') { if (a.hoff && a.hoff.dir === 'in') HOFF.click(a); a.phase = 'app'; a.st = 'ctl'; a.onFinal = false; a.hoffFreq = null;
       log('sys', `${a.cs} on Red (Marshal frequency).`); rb.push('switching red'); rbSay.push('switching red'); continue; }
-    if (c.k === 'goSilver') { a.sector = null; MAR.cancel(a, 'go silver'); a.hoffFreq = 'silver'; a.button = 'silver'; a.st = 'purple'; a.phase = 'withApp'; a.onFinal = false; a.turnDir = null;
+    if (c.k === 'goSilver') { a.sector = null; MAR.cancel(a, 'go silver'); a.hoffFreq = 'silver'; a.button = 'silver'; a.st = 'purple'; a.phase = 'withApp'; a.hoTagT = G.t; a.onFinal = false; a.turnDir = null;
       if (LINK.on && LINK.ch) LINK.post({ type: 'handoff', cs: a.cs, callsign: a.tel || a.cs, from: 'MARSHAL', to: 'APP', id: a.cs + '-' + Date.now(), freq: 'silver' });
       maSilver(a);   // v94
       log('sys', `${a.cs} switching Silver (Approach); off Marshal frequency.`); rb.push('switching silver'); rbSay.push('switching silver'); continue; }
@@ -4358,7 +4368,7 @@ function drawApp(now) {
   // primary paints: refreshed when the sweep crosses the target's bearing, then decay over one rotation
   const crossed = d => { const span = norm(ang - prev); return span < 180 && norm(d - prev) <= span; };
   if (G) for (const a of G.ac) {
-    if (a.phase !== 'app' || a.st === 'dep') continue;   // not shown until checked in
+    if ((a.phase !== 'app' && !hoTag(a)) || a.st === 'dep') continue;   // not shown until checked in (v120: hand-off tag lingers)
     if (!a.paint || crossed(appBrg(a))) a.paint = { e: a.e, n: a.n, t: now, alt: a.alt, gs: a.gs, hdg: a.hdg };   // displayed position/readouts latch on each sweep pass
     a.dispE = a.paint.e; a.dispN = a.paint.n; a.dispAlt = a.paint.alt; a.dispGs = a.paint.gs; a.dispHdg = a.paint.hdg;
     a.cone = inCone(a);   // quiet flag: over the ship, paints are suppressed (sim / voice still run)
@@ -4393,7 +4403,7 @@ function drawApp(now) {
   // TPX-42 style beacon data blocks (computer generated: live position, no fade)
   ctx.textAlign = 'left'; ctx.font = FONT(11); syncLetters();
   for (const a of G.ac) {
-    if (a.phase !== 'app' || a.st === 'dep') continue;   // not shown until checked in
+    if ((a.phase !== 'app' && !hoTag(a)) || a.st === 'dep') continue;   // not shown until checked in (v120: hand-off tag lingers)
     if (!a.code) a.code = '4' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 8)).join('');   // octal Mode 3/A code
     if (a.cone) { a.hitR = null; continue; }   // cone of confusion: hide beacon / data block (not clickable)
     const sel = a === G.selected, fin = a.st === 'final' || a.st === 'mfinal' || a.st === 'purple' || a.st === 'lowout', Q = a.paint ? P(a.paint.e, a.paint.n) : P(a.e, a.n);   // sweep-latched position
@@ -4406,7 +4416,8 @@ function drawApp(now) {
     if (a.priCut) ctx.globalAlpha = 0; ctx.strokeStyle = col; ctx.lineWidth = sel ? 1.8 : 1.4; ctx.beginPath(); if (a.accepted) { const k = 3; ctx.moveTo(Q[0] - k, Q[1] - k); ctx.lineTo(Q[0] + k, Q[1] + k); ctx.moveTo(Q[0] + k, Q[1] - k); ctx.lineTo(Q[0] - k, Q[1] + k); } else ctx.arc(Q[0], Q[1], 3, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1; ctx.globalAlpha = 1;   // v105: ~65% size; simple target blip (no lines; hidden when the instructor cuts primary radar)
     const bx = Q[0] + 14 + (a.dbx || 0), by = Q[1] - 22 + (a.dby || 0);
     if (a.dbx || a.dby) { ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(Q[0], Q[1]); ctx.lineTo(bx - 2, by + 4); ctx.stroke(); ctx.globalAlpha = 1; }   // leader line to a moved data block
-    const l1 = (a.st === 'purple' || a.phase === 'withFinal' || a.phase === 'withApp') ? dbName(a) + ' ' + freqTag(a.hoffFreq || a.button || (a.phase === 'withApp' ? 'silver' : 'purple')) : dbName(a), l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')}${G.gsp ? ' ' + String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0') : ''} ${a.code}`;   // ground speed only after GSP
+    if (a.phase !== 'app') a.hitR = null;   // v120: handed-off tag: display only
+    const l1 = (a.st === 'purple' || a.phase === 'withFinal' || a.phase === 'withApp' || hoTag(a) || (a.st === 'mfinal' && a.hoffFreq)) ? dbName(a) + ' ' + freqTag(a.hoffFreq || a.button || (a.phase === 'withApp' ? 'silver' : 'purple')) : dbName(a), l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')}${G.gsp ? ' ' + String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0') : ''} ${a.code}`;   // ground speed only after GSP
     ctx.fillStyle = col; if (a.hoff && !((now / 350 | 0) % 2)) ctx.globalAlpha = 0.3; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12); ctx.globalAlpha = 1;
     { const tags = (a.identified ? ' ID' : '');   // ownership / handoff tags
       if (a.hoff) { if ((now / 350 | 0) % 2) { ctx.fillStyle = 'rgba(255,235,120,1)'; ctx.fillText(' ' + (a.hoff.dir === 'out' ? 'APP' : 'FIN') + (a.identified ? ' ID' : ''), bx + ctx.measureText(l1).width, by); ctx.fillStyle = col; } }
