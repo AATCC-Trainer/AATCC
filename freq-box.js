@@ -12,7 +12,7 @@
     { id: 'purple', name: 'Purple', tag: 'PRPL', sw: '#b48cff', pos: 'final', who: 'Final', self: 'Gator Final', call: 'go purple' },
     { id: 'copper', name: 'Copper', tag: 'COPR', sw: '#e0915a', pos: 'final', who: 'Final (2nd)', self: 'Gator Final', call: 'go copper' },
   ];
-  const TOWER = { name: 'Tower', who: 'PriFly · shore only', sw: null };
+  const TOWER = { name: 'Tower', who: 'PriFly', sw: null };
   const page = (location.pathname.split('/').pop() || '').toLowerCase();
   const POS = /marshal/.test(page) ? 'marshal' : /approach/.test(page) ? 'approach' : /departure/.test(page) ? 'departure' : /final/.test(page) ? 'final' : /instructor/.test(page) ? 'instructor' : null;
   if (!POS) return;

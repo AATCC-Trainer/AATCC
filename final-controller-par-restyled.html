@@ -767,12 +767,12 @@ const azDeg = a => Math.atan2(a.yft, (Math.max(0, a.r) + 0.5) * NM_FT) / DEG;
 const classify = (v, on, sl) => Math.abs(v) <= on ? 'on' : Math.abs(v) <= sl ? 'slightly' : 'well';
 
 const TYPES = {
-  F35B:  { ball: 'Lightning', vapp: 105, vmin: 95, vmax: 190, feed: 160 },   // F-35B Lightning II
-  AV8B:  { ball: 'Harrier', vapp: 100, vmin: 90, vmax: 180, feed: 150 },   // AV-8B Harrier II
-  CH53E: { helo: true, vapp: 80, vmin: 70, vmax: 120, feed: 110 },     // CH-53E Super Stallion
-  AH1Z:  { helo: true, vapp: 80, vmin: 70, vmax: 120, feed: 110 },     // AH-1Z Viper
-  UH1Y:  { helo: true, vapp: 80, vmin: 70, vmax: 120, feed: 110 },     // UH-1Y Venom
-  MH60S: { helo: true, vapp: 70, vmin: 65, vmax: 115, feed: 105 },     // MH-60S Knighthawk
+  F35B:  { ball: 'Lightning', vapp: 80, vmin: 72, vmax: 190, feed: 125 },   // v119: slower on final, ~16% below the old wind-reduced groundspeed (was vapp 105 / vmin 95 / feed 160)   // F-35B Lightning II
+  AV8B:  { ball: 'Harrier', vapp: 76, vmin: 68, vmax: 180, feed: 118 },   // v119 (was 100 / 90 / 150)   // AV-8B Harrier II
+  CH53E: { helo: true, vapp: 62, vmin: 55, vmax: 120, feed: 88 },   // v119 (was 80 / 70 / 110)     // CH-53E Super Stallion
+  AH1Z:  { helo: true, vapp: 62, vmin: 55, vmax: 120, feed: 88 },   // v119 (was 80 / 70 / 110)     // AH-1Z Viper
+  UH1Y:  { helo: true, vapp: 62, vmin: 55, vmax: 120, feed: 88 },   // v119 (was 80 / 70 / 110)     // UH-1Y Venom
+  MH60S: { helo: true, vapp: 52, vmin: 48, vmax: 115, feed: 80 },   // v119 (was 70 / 65 / 105)     // MH-60S Knighthawk
 };
 const DIFFS = {
   training: { name: 'Training', n: 3, spacing: null, wind: [0, 3], gust: 4, bias: 0.12, gap: 25, hints: true, spawnEvery: 70, noise: 45 },   // v101: gust 4 kt (was none), noise 45 (was 30)
@@ -836,7 +836,7 @@ function linkHandoff(m) {
   if (fc != null && fc !== BRC) {
     const src = m.brc != null ? ` (ship ${hdg3(+m.brc)}T, var ${(+m.mv || 0) > 0 ? '+' : ''}${+m.mv || 0})` : '';
     if (G.ac.some(a => a.phase !== 'gone' && a.removeAt == null)) log('sys', `Approach Control final bearing ${hdg3(fc)}${src} ignored: aircraft still on final bearing ${BRC3}.`);
-    else if (setBRC(fc)) log('sys', `Approach Control: final bearing ${BRC3}${src} (wind ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd}).`);
+    else if (setBRC(fc)) log('sys', `Approach Control: final bearing ${BRC3}${src} ${G.wind.spd ? ` (wind ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd})` : ''}.`);
   }
   const cs = String(m.callsign || 'UNKN01').toUpperCase().replace(/\s+/g, '');
   { const ex = G.ac.find(a => a.cs === cs && a.phase !== 'gone' && a.removeAt == null);
@@ -1076,7 +1076,7 @@ function newGame(diffKey, opts = {}) {
   rng = opts.seed != null ? mulberry32(opts.seed) : Math.random;
   if (!LINK.on && opts.brc == null) { SHIP_MV = 0; SHIP_BRCT = null; setBRC((Math.floor(rng() * 72) + 1) * 5); } else if (opts.brc != null) setBRC(opts.brc);   // solo: random BRC each run
   const d = DIFFS[diffKey]; lastDiff = diffKey;
-  const wind = { dir: norm(Math.round((BRC + rand(-45, 45)) / 10) * 10) || 360, spd: randi(6, 12), gust: d.gust || 0 };   // v101: 6-12 kt within BRC +/-45 with gusts (was 2-5 kt within +/-30, no gusts)
+  const wind = { dir: Math.round(BRC) % 360 || 360, spd: 0, gust: 0 };   // v119: no wind (it shifted too much); drift now comes from the pilot's slow heading wander (FIN_WANDER). Only the guided intro's crosswind lesson sets a wind.   // v101: 6-12 kt within BRC +/-45 with gusts (was 2-5 kt within +/-30, no gusts)
   if (wind.gust == null) wind.gust = 0;
   G = {
     diffKey, d, t: 0, ac: [], score: 0, landed: 0, practice: 0, rejoin: [], busy: false, gateAt: 0, missed: 0, crashes: 0, sepLoss: 0, callsGood: 0, callsBad: 0,
@@ -1091,7 +1091,7 @@ function newGame(diffKey, opts = {}) {
   G.gateAt = rand(FIRST_GAP[0], FIRST_GAP[1]);
   logEl.innerHTML = '';
   setScale(S.simSpeed); setPaused(false);
-  log('sys', `${d.name}: ${ph('PAR to ' + SHIP_NAME + ', BRC ' + BRC3, 'PAR runway ' + RWY_NUM)}. Wind ${String(wind.dir).padStart(3, '0')}° at ${wind.spd} kt. ${G.toSpawn} arrivals.`);
+  log('sys', `${d.name}: ${ph('PAR to ' + SHIP_NAME + ', BRC ' + BRC3, 'PAR runway ' + RWY_NUM)}. ${G.wind.spd ? `Wind ${String(G.wind.dir).padStart(3, '0')}° at ${G.wind.spd} kt. ` : ''}${G.toSpawn} arrivals.`);
   if (d.hints && !opts.intro && !opts.noHints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
   selectAc(null);
   refreshPanel(true);
@@ -1196,6 +1196,14 @@ function headingForTrack(tas, trk) {
   const r0 = (G.wind.dir - BRC_OFF + 180) * DEG, w = { x: G.wind.spd * Math.sin(r0) * CRAB_K, y: G.wind.spd * Math.cos(r0) * CRAB_K }, rr = (trk - BRC_OFF + 90) * DEG;
   const wc = w.x * Math.sin(rr) + w.y * Math.cos(rr);
   return norm(trk + Math.asin(clamp(-wc / tas, -0.9, 0.9)) / DEG);
+}
+/* v119: with the wind gone, the pilot's held heading wanders slowly (a smooth, gentle sine, per aircraft) on the PAR final descent, so the
+   aircraft still drifts off course and needs course calls / small turns. Amplitude by difficulty (deg), period 90-140 s; none in the guided intro. */
+const FIN_WANDER = { training: 1.0, normal: 1.5, gusty: 2.0 };
+function finWander(a) {
+  if (!G || G.intro || a.phase !== 'descent' || a.asr) return 0;
+  if (a.wndP == null) { a.wndP = rand(90, 140); a.wndPh = rand(0, Math.PI * 2); a.wndA = (FIN_WANDER[G.diffKey] || 1) * rand(0.7, 1.15) * (rng() < 0.5 ? 1 : -1); a.wndT0 = G.t; }
+  const t = G.t - a.wndT0; return a.wndA * Math.min(1, t / 20) * Math.sin(2 * Math.PI * t / a.wndP + a.wndPh);
 }
 const tasOf = a => a.ias;   // low-level final: TAS = IAS, so calm-air groundspeed equals the type's approach speed
 const vsNominal = a => a.gs * 101.27 * GP_TAN;   // fpm for a 3 degree path at this groundspeed
@@ -1339,7 +1347,7 @@ function updatePar(a, dt) {
   }
   if (a.ias !== ts) { const r = (a.buster ? 10 : 1.5) * dt; a.ias = Math.abs(ts - a.ias) <= r ? ts : a.ias + Math.sign(ts - a.ias) * r; }
   // ---- move
-  const w = windVec(), tas = tasOf(a), h = ((LINK.on ? a.hdg : headingForTrack(tas, a.hdg)) - BRC_OFF) * DEG;   // solo: pilot crabs automatically (a.hdg held as ground track); linked to Approach: plain heading, wind drifts it
+  const w = windVec(), tas = tasOf(a), h = ((LINK.on ? a.hdg : headingForTrack(tas, a.hdg)) + finWander(a) - BRC_OFF) * DEG;   // solo: pilot crabs automatically (a.hdg held as ground track); linked to Approach: plain heading, wind drifts it
   const vx = tas * Math.sin(h) + w.x, vy = tas * Math.cos(h) + w.y;
   a.gs = Math.hypot(vx, vy);
   a.r += vx / 3600 * dt;
@@ -1548,9 +1556,7 @@ function doCrash(a) {
   G.crashes++; G.score -= 200;
   log('bad', `CRASH (simulated): ${a.cs} descended below the lower limit and hit ${ph('the water', 'terrain')} at ${a.r.toFixed(1)} NM. Nobody called the ${ph('wave-off', 'go-around')}. (-200)`);
   finalize(a, false, ph('crashed (below lower limit, no wave-off)', 'crashed (below lower limit, no go-around)'));
-  G.failMsg = `${a.cs} flew below the lower limit line and crashed at ${a.r.toFixed(1)} NM.`;
-  Sound.crash();
-  G.endAt = G.t + 3;
+  Sound.crash();   // v119: no "APPROACH FAILED" screen: the crash is logged and scored (-200) and the session carries on with the next approach
 }
 
 /* ===================== radar sweep (display + grading only; physics untouched) ===================== */
@@ -2000,7 +2006,7 @@ function suggestCall(a) {
     }
     if (shipCall) add(shipCall);
     if (!a.gear && a.r < 5 && a.phase === 'descent') add(ph('check wheels down', 'check gear down'));
-    if (a.gear && !a.cleared && a.r < 4 && !isShip()) { const w = G.wind; const wd = String(w.dir).padStart(3, '0'); if (isShip()) add(`deck is clear, cleared to land spot ${spotOf(a)}, winds ${wd} at ${w.spd}`, `deck is clear, cleared to land spot ${ONES[spotOf(a)]}, winds ${sayDigits(wd)} at ${sayTwo(w.spd)}`); else add(`runway ${RWY_NUM}, cleared to land, wind ${wd} at ${w.spd}`, `runway ${RWY_SAY}, cleared to land, wind ${sayDigits(wd)} at ${sayTwo(w.spd)}`); }
+    if (a.gear && !a.cleared && a.r < 4 && !isShip()) { const w = G.wind; const wd = String(w.dir).padStart(3, '0'); const calm = !w.spd; if (isShip()) add(`deck is clear, cleared to land spot ${spotOf(a)}, ${calm ? 'winds calm' : `winds ${wd} at ${w.spd}`}`, `deck is clear, cleared to land spot ${ONES[spotOf(a)]}, ${calm ? 'winds calm' : `winds ${sayDigits(wd)} at ${sayTwo(w.spd)}`}`); else add(`runway ${RWY_NUM}, cleared to land, ${calm ? 'wind calm' : `wind ${wd} at ${w.spd}`}`, `runway ${RWY_SAY}, cleared to land, ${calm ? 'wind calm' : `wind ${sayDigits(wd)} at ${sayTwo(w.spd)}`}`); }
     if (!isShip() && !a.asr && !a.dhCalled && a.r <= DH_R + 0.15 && a.phase === 'descent' && !(shipCall && shipCall.includes('ball') && a.r > DH_R + 0.05)) add(ph('at minimums', 'at decision height'));
   }
   const multi = G.ac.filter(x => PAR_PHASES.includes(x.phase)).length > 1 || !a.contacted;
@@ -2792,7 +2798,7 @@ function drawTarget(a, blink) {
 let hudCache = { st: null, al: null };
 function drawHud(now, blink) {
   const w = G.wind;
-  const st = `${ph('FINAL · ' + SHIP_NAME.toUpperCase() + ' · PURPLE/COPPER · BRC ' + BRC3, 'FINAL RWY ' + RWY_NUM + ' · PURPLE/COPPER')} · WIND ${String(w.dir).padStart(3, '0')}/${w.spd}KT · ${G.intro ? 'GUIDED INTRO' : G.d.name.toUpperCase()} · ${G.intro ? (G.paused ? 'FROZEN' : 'RUNNING ' + G.scale + 'x') : G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
+  const st = `${ph('FINAL · ' + SHIP_NAME.toUpperCase() + ' · PURPLE/COPPER · BRC ' + BRC3, 'FINAL RWY ' + RWY_NUM + ' · PURPLE/COPPER')} ${w.spd ? `· WIND ${String(w.dir).padStart(3, '0')}/${w.spd}KT ` : ''}· ${G.intro ? 'GUIDED INTRO' : G.d.name.toUpperCase()} · ${G.intro ? (G.paused ? 'FROZEN' : 'RUNNING ' + G.scale + 'x') : G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   const waiting = !G.busy && !G.ac.some(a => PAR_PHASES.includes(a.phase)) && (G.rejoin.length || G.ac.some(a => a.phase === 'queue') || G.spawned < G.toSpawn);
   const af = (G.selected && G.selected.link && G.selected.link.freq) ? String(G.selected.link.freq).toUpperCase() : '';
   const st2 = st + (af ? ' · ON ' + af : '') + (G.linked ? (G.ac.some(a => alive(a) && a.removeAt == null) ? '' : ' · LINKED, AWAITING HANDOFF') : (waiting && G.gateAt > G.t ? ` · NEXT AIRCRAFT IN ${Math.ceil(G.gateAt - G.t)}s` : ''));
