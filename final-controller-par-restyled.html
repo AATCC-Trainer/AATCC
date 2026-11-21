@@ -841,7 +841,7 @@ function linkHandoff(m) {
   if (fc != null && fc !== BRC) {
     const src = m.brc != null ? ` (ship ${hdg3(+m.brc)}T, var ${(+m.mv || 0) > 0 ? '+' : ''}${+m.mv || 0})` : '';
     if (G.ac.some(a => a.phase !== 'gone' && a.removeAt == null)) log('sys', `Approach Control final bearing ${hdg3(fc)}${src} ignored: aircraft still on final bearing ${BRC3}.`);
-    else if (setBRC(fc)) log('sys', `Approach Control: final bearing ${BRC3}${src} ${G.wind.spd ? ` (wind ${String(G.wind.dir).padStart(3, '0')}/${G.wind.spd})` : ''}.`);
+    else if (setBRC(fc)) log('sys', `Approach Control: final bearing ${BRC3}${src} ${G.wind.spd ? ` (wind ${String(G.wind.dir === 0 ? 360 : G.wind.dir).padStart(3, '0')}/${G.wind.spd})` : ''}.`);
   }
   const cs = String(m.callsign || 'UNKN01').toUpperCase().replace(/\s+/g, '');
   { const ex = G.ac.find(a => a.cs === cs && a.phase !== 'gone' && a.removeAt == null);
@@ -1096,7 +1096,7 @@ function newGame(diffKey, opts = {}) {
   G.gateAt = rand(FIRST_GAP[0], FIRST_GAP[1]);
   logEl.innerHTML = '';
   setScale(S.simSpeed); setPaused(false);
-  log('sys', `${d.name}: ${ph('PAR to ' + SHIP_NAME + ', BRC ' + BRC3, 'PAR runway ' + RWY_NUM)}. ${G.wind.spd ? `Wind ${String(G.wind.dir).padStart(3, '0')}° at ${G.wind.spd} kt. ` : ''}${G.toSpawn} arrivals.`);
+  log('sys', `${d.name}: ${ph('PAR to ' + SHIP_NAME + ', BRC ' + BRC3, 'PAR runway ' + RWY_NUM)}. ${G.wind.spd ? `Wind ${String(G.wind.dir === 0 ? 360 : G.wind.dir).padStart(3, '0')}° at ${G.wind.spd} kt. ` : ''}${G.toSpawn} arrivals.`);
   if (d.hints && !opts.intro && !opts.noHints) log('warn', 'Training: the amber box shows a suggested next call. Hold SPACE (or the big button) and say it.');
   selectAc(null);
   refreshPanel(true);
@@ -2011,7 +2011,7 @@ function suggestCall(a) {
     }
     if (shipCall) add(shipCall);
     if (!a.gear && a.r < 5 && a.phase === 'descent') add(ph('check wheels down', 'check gear down'));
-    if (a.gear && !a.cleared && a.r < 4 && !isShip()) { const w = G.wind; const wd = String(w.dir).padStart(3, '0'); const calm = !w.spd; if (isShip()) add(`deck is clear, cleared to land spot ${spotOf(a)}, ${calm ? 'winds calm' : `winds ${wd} at ${w.spd}`}`, `deck is clear, cleared to land spot ${ONES[spotOf(a)]}, ${calm ? 'winds calm' : `winds ${sayDigits(wd)} at ${sayTwo(w.spd)}`}`); else add(`runway ${RWY_NUM}, cleared to land, ${calm ? 'wind calm' : `wind ${wd} at ${w.spd}`}`, `runway ${RWY_SAY}, cleared to land, ${calm ? 'wind calm' : `wind ${sayDigits(wd)} at ${sayTwo(w.spd)}`}`); }
+    if (a.gear && !a.cleared && a.r < 4 && !isShip()) { const w = G.wind; const wd = String(w.dir === 0 ? 360 : w.dir).padStart(3, '0'); const calm = !w.spd; if (isShip()) add(`deck is clear, cleared to land spot ${spotOf(a)}, ${calm ? 'winds calm' : `winds ${wd} at ${w.spd}`}`, `deck is clear, cleared to land spot ${ONES[spotOf(a)]}, ${calm ? 'winds calm' : `winds ${sayDigits(wd)} at ${sayTwo(w.spd)}`}`); else add(`runway ${RWY_NUM}, cleared to land, ${calm ? 'wind calm' : `wind ${wd} at ${w.spd}`}`, `runway ${RWY_SAY}, cleared to land, ${calm ? 'wind calm' : `wind ${sayDigits(wd)} at ${sayTwo(w.spd)}`}`); }
     if (!isShip() && !a.asr && !a.dhCalled && a.r <= DH_R + 0.15 && a.phase === 'descent' && !(shipCall && shipCall.includes('ball') && a.r > DH_R + 0.05)) add(ph('at minimums', 'at decision height'));
   }
   const multi = G.ac.filter(x => PAR_PHASES.includes(x.phase)).length > 1 || !a.contacted;
@@ -2803,7 +2803,7 @@ function drawTarget(a, blink) {
 let hudCache = { st: null, al: null };
 function drawHud(now, blink) {
   const w = G.wind;
-  const st = `${ph('FINAL · ' + SHIP_NAME.toUpperCase() + ' · PURPLE/COPPER · BRC ' + BRC3, 'FINAL RWY ' + RWY_NUM + ' · PURPLE/COPPER')} ${w.spd ? `· WIND ${String(w.dir).padStart(3, '0')}/${w.spd}KT ` : ''}· ${G.intro ? 'GUIDED INTRO' : G.d.name.toUpperCase()} · ${G.intro ? (G.paused ? 'FROZEN' : 'RUNNING ' + G.scale + 'x') : G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
+  const st = `${ph('FINAL · ' + SHIP_NAME.toUpperCase() + ' · PURPLE/COPPER · BRC ' + BRC3, 'FINAL RWY ' + RWY_NUM + ' · PURPLE/COPPER')} ${w.spd ? `· WIND ${String(w.dir === 0 ? 360 : w.dir).padStart(3, '0')}/${w.spd}KT ` : ''}· ${G.intro ? 'GUIDED INTRO' : G.d.name.toUpperCase()} · ${G.intro ? (G.paused ? 'FROZEN' : 'RUNNING ' + G.scale + 'x') : G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   const waiting = !G.busy && !G.ac.some(a => PAR_PHASES.includes(a.phase)) && (G.rejoin.length || G.ac.some(a => a.phase === 'queue') || G.spawned < G.toSpawn);
   const af = (G.selected && G.selected.link && G.selected.link.freq) ? String(G.selected.link.freq).toUpperCase() : '';
   const st2 = st + (af ? ' · ON ' + af : '') + (G.linked ? (G.ac.some(a => alive(a) && a.removeAt == null) ? '' : ' · LINKED, AWAITING HANDOFF') : (waiting && G.gateAt > G.t ? ` · NEXT AIRCRAFT IN ${Math.ceil(G.gateAt - G.t)}s` : ''));

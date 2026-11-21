@@ -17,7 +17,7 @@ const RDV_NAMES = ['coke', 'water', 'milk', 'coffee', 'tea', 'juice', 'soda', 'c
 // two-letter callsign prefixes (plus any unique start of a callsign name, and the ICAO codes the parser knows)
 const CS_ALIAS = { lt: 'Lightning', li: 'Lightning', nh: 'Nighthawk', vp: 'Viper', vi: 'Viper', vn: 'Venom', ve: 'Venom', ea: 'Eagle', eg: 'Eagle',
   rd: 'Ridge', ri: 'Ridge', gf: 'Gunfighter', gu: 'Gunfighter', ch: 'Charger', cg: 'Charger', kn: 'Knight', kt: 'Knight' };
-const h3 = v => String(+v).padStart(3, '0');
+const h3 = v => String(+v % 360 || 360).padStart(3, '0');   // v123: north is 360, never 000
 const NUM = '(\\d+(?:\\.\\d+)?)';
 const takeOr = (verb, n, sc) => { const v = parseFloat(n); return v < 100 ? `take angels ${n}` : `${verb} and maintain ${angOrFt(n, sc)}`; };   // v95: Marshal / Approach use "take angels"; v107: Final too (wave-off "take angels two")
 const angOrFt = (n, sc) => { n = parseFloat(n); if (sc === 'final') return (n < 100 ? Math.round(n * 1000) : n) + ' feet'; return n < 100 ? 'angels ' + n : n + ' feet'; };

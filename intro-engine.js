@@ -109,7 +109,7 @@ function forSpeech(t, fix) {
 function chunks(html, fix) {
   const paras = String(html).split(/<\/p>|<p>|\n\n/).map(plain).map(t => forSpeech(t, fix)).filter(s => /[a-z0-9]/i.test(s));
   const out = [];
-  paras.forEach((p, pi) => { const ss = p.match(/[^.!?]+[.!?]*["')]?/g) || [p]; ss.map(s => s.trim()).filter(s => /[a-z0-9]/i.test(s)).forEach((s, si, arr) => out.push({ t: s, gap: si === arr.length - 1 && pi < paras.length - 1 ? 420 : 170 })); });
+  paras.forEach((p, pi) => { const ss = p.match(/[^.!?]+[.!?]*["')]?/g) || [p]; ss.map(s => s.trim()).filter(s => /[a-z0-9]/i.test(s)).forEach((s, si, arr) => out.push({ t: s, gap: si === arr.length - 1 && pi < paras.length - 1 ? 200 : 70 }) /* v123: shorter pauses (were 170 / 420 ms) */); });
   return out;
 }
 
@@ -199,7 +199,7 @@ function create(cfg) {
     q('.snName').textContent = allDone ? 'COMPLETE' : sc ? sc.name.toUpperCase() : '';
     q('.snStep').textContent = !allDone && mineS.length > 1 && mineS.indexOf(st) >= 0 ? `Step ${mineS.indexOf(st) + 1} of ${mineS.length} in this section` : '';
     const real = steps.filter(s => s.type !== 'done'), k = real.indexOf(st);
-    elNo.textContent = k >= 0 ? `Step ${k + 1} of ${real.length} overall` : '';
+    elNo.textContent = k >= 0 ? `Step ${k + 1} of ${real.length}` : '';
   }
   /* v109: when Next is ready, Aero says so (spoken once, and shown above the Next button) */
   const cueHtml = () => cfg.nextCue ? val(cfg.nextCue, steps[idx]) : '';

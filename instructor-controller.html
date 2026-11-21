@@ -389,7 +389,7 @@ function draw() {
     const kx = Math.abs(s1) > 1e-9 ? RX / Math.abs(s1) : Infinity, ky = Math.abs(c1) > 1e-9 ? RY / Math.abs(c1) : Infinity, k = Math.min(kx, ky);
     const ex = cx + s1 * k, ey = cy - c1 * k, side = kx < ky, nx = side ? Math.sign(s1) : 0, ny = side ? 0 : -Math.sign(c1);
     ctx.strokeStyle = ppi(dg % 10 ? 0.4 : 0.7); ctx.beginPath(); ctx.moveTo(ex - s1 * l, ey + c1 * l); ctx.lineTo(ex, ey); ctx.stroke();   // v105: slanted along heading dg
-    if (dg % 30 === 0) { ctx.fillStyle = ppi(0.8); ctx.fillText(String(dg).padStart(3, '0'), Math.max(cx - RX + 22, Math.min(cx + RX - 22, ex - nx * 24)), Math.max(cy - RY + 22, Math.min(cy + RY - 14, ey - ny * 20 + 4))); } }
+    if (dg % 30 === 0) { ctx.fillStyle = ppi(0.8); ctx.fillText(String(dg === 0 ? 360 : dg).padStart(3, '0'), Math.max(cx - RX + 22, Math.min(cx + RX - 22, ex - nx * 24)), Math.max(cy - RY + 22, Math.min(cy + RY - 14, ey - ny * 20 + 4))); } }
   if (!links().some(x => live(x) && I.src[x].running)) { ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,191,60,0.9)'; ctx.font = FONT(15); ctx.fillText('Waiting for ' + links().filter(x => x !== 'FINAL').map(x => x[0] + x.slice(1).toLowerCase()).join(' / ') + ' / Final simulation to start in its tab…', cx, cy - 40); }
   { const st = ['MARSHAL', 'APPROACH', 'FINAL', 'DEPARTURE'].map(x => live(x) ? I.src[x] : null).find(Boolean);   // BRC / DWH / weather block (matches Marshal & Approach)
     const sm = shipMaster(), tb = st ? (st.tbrc != null ? st.tbrc : st.brc) : sm ? sm.tbrc : null, dwh = st && st.dwh != null ? st.dwh : sm && !st ? sm.dwh : tb != null ? tb + 180 : null, w = st && st.wind;

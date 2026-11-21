@@ -365,6 +365,7 @@ const gpAlt = d => d * NM_FT * GP_TAN + 60;
 const angDiff = (a, b) => ((b - a + 540) % 360) - 180;
 function stepAc(a, dt) {
   if (a.landed) return;
+  if (a.held) return;   // v123: waits for Aero's line about it (st.release)
   if (a.mode === 'hold' && a.hold) {
     const H = a.hold, w = (a.spd / 3600) / H.r * dt * 180 / Math.PI;
     H.ang = (H.ang + w) % 360; const r = H.ang * Math.PI / 180;
@@ -444,7 +445,7 @@ function draw(now) {
     const r = d * Math.PI / 180, nx = Math.sin(r), ny = -Math.cos(r), hl = W.hl.brg === d || (W.hl.brgs && d % 90 === 0), E = edge(nx, ny);
     ctx.strokeStyle = hl ? '#ffbf3c' : 'rgba(120,255,140,0.5)'; ctx.lineWidth = hl ? 2 : 1;
     const l = d % 30 === 0 ? 9 : 4; ctx.beginPath(); ctx.moveTo(cx + nx * E, cy + ny * E); ctx.lineTo(cx + nx * (E - l), cy + ny * (E - l)); ctx.stroke();
-    if (d % 30 === 0 && (!small || d % 90 === 0 || W.hl.brgs)) { ctx.fillStyle = hl ? '#ffbf3c' : 'rgba(168,240,178,0.8)'; const t = String(d).padStart(3, '0'), tw = ctx.measureText(t).width, k = 12 / Math.max(Math.abs(nx), Math.abs(ny)); ctx.fillText(t, cx + nx * (E + Math.min(k, 18)) - tw / 2, cy + ny * (E + Math.min(k, 18)) + fs / 3); }
+    if (d % 30 === 0 && (!small || d % 90 === 0 || W.hl.brgs)) { ctx.fillStyle = hl ? '#ffbf3c' : 'rgba(168,240,178,0.8)'; const t = String(d === 0 ? 360 : d).padStart(3, '0'), tw = ctx.measureText(t).width, k = 12 / Math.max(Math.abs(nx), Math.abs(ny)); ctx.fillText(t, cx + nx * (E + Math.min(k, 18)) - tw / 2, cy + ny * (E + Math.min(k, 18)) + fs / 3); }
     if (W.hl.brg === d) { ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + nx * E, cy + ny * E); ctx.stroke(); ctx.setLineDash([]); }
   }
   ctx.lineWidth = 1;
@@ -600,7 +601,7 @@ function forSpeech(t) {
 function chunks(html) {
   const paras = String(html).split(/<\/p>|<p>|\n\n/).map(plain).map(forSpeech).filter(s => /[a-z0-9]/i.test(s));
   const out = [];
-  paras.forEach((p, pi) => { const ss = p.match(/[^.!?]+[.!?]*["')]?/g) || [p]; ss.map(s => s.trim()).filter(s => /[a-z0-9]/i.test(s)).forEach((s, si, arr) => out.push({ t: s, gap: si === arr.length - 1 && pi < paras.length - 1 ? 420 : 170 })); });
+  paras.forEach((p, pi) => { const ss = p.match(/[^.!?]+[.!?]*["')]?/g) || [p]; ss.map(s => s.trim()).filter(s => /[a-z0-9]/i.test(s)).forEach((s, si, arr) => out.push({ t: s, gap: si === arr.length - 1 && pi < paras.length - 1 ? 200 : 70 }) /* v123: shorter pauses between sentences (were 170 / 420 ms) */); });
   return out;
 }
 let sq = [], sqBusy = false, sqGen = 0, actx = null, curChunk = null, lastCancel = -1e9, recEndAt = -1e9;
@@ -635,7 +636,7 @@ function nextChunk() {
     const u = new SpeechSynthesisUtterance(c.t); u.lang = 'en-US';
     if (c.who === 'pilot') { if (pilotV && !c.noVoice) u.voice = pilotV; u.rate = Math.min(1.8, 1.08 * SPEED); u.pitch = pilotV === aeroV ? 0.94 : 1;   /* v95: natural pitch (0.8 sounded eerie) */ u.volume = 1; squelch(); }
     else { if (aeroV) u.voice = aeroV; u.rate = SPEED; u.pitch = 0.97; u.volume = 1; }
-    u.onstart = () => { started = true; if (c.who === 'aero' && gen === sqGen) setTalking(true); };
+    u.onstart = () => { started = true; if (c.who === 'aero' && gen === sqGen) { setTalking(true); const s0 = STEPS[cur]; if (s0 && s0.release && s0.release.test(c.t)) releaseHeld(); } };
     u.onend = done; u.onerror = e => { const er = e && e.error; if (c.who === 'pilot' && er && !/interrupted|canceled/.test(er) && retry()) { /* try again with the default voice */ } done(); };
     if (c.who === 'pilot') st = setTimeout(() => { if (!started && !doneOnce && gen === sqGen && retry()) { try { speechSynthesis.cancel(); lastCancel = performance.now(); } catch (e) {} done(); } }, 2200);   // never started (voice not installed / audio session busy): retry once
     try { if (speechSynthesis.paused) speechSynthesis.resume(); } catch (e) {}
@@ -684,15 +685,15 @@ const STEPS = [
   // ---------- Chapter A: the scope ----------
   { ch: 1, id: 'scope1', type: 'info', watch: true, range: 15, hl: { ship: true }, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
     say: `<p>This is your <b>radar scope</b>. Picture a map seen from straight above, with <b>north at the top</b>.</p><p>The <span class="k">ship</span> is always in the center. The bright rotating line is the <b>sweep</b>, the radar antenna turning. Each time it passes an aircraft, the target <b>jumps</b> to its new spot. That's why targets move in little steps.</p>` },
-  { ch: 1, id: 'rings', type: 'click', range: 15, hl: { rings: true },
+  { ch: 1, id: 'rings', type: 'click', freeze: true, range: 15, hl: { rings: true },
     acs: [LT21({ x: 3.5, y: 3.6, hdg: 200, alt: 3000, spd: 220 }), NH41({ x: -7.1, y: -7.0, hdg: 45, alt: 1500, spd: 120 }), VP12({ x: 14.2, y: -4.4, hdg: 300, alt: 2000, spd: 130 })],
     say: `<p>The circles are <b>range rings</b>, one every <b>2 nautical miles</b> from the ship: 2, 4, 6, 8, 10 and so on. They let you judge distance at a glance.</p><p>On the real scopes you can change the ring spacing with the <b>Rings</b> setting.</p>`,
     task: `🎯 Tap the aircraft that is <b>10 miles</b> from the ship.`, answer: 'NHWK412',
     why: { LTNG21: 'That one is between the 4 and 6 mile rings, about <b>5 miles</b> out.', VIPR123: 'That one is way out, about <b>15 miles</b>.' }, hint: 'Count the rings out from the ship: 2, 4, 6, 8, <b>10</b>. Look for the target on the fifth ring.',
     good: `Exactly. It's on the <b>fifth ring</b>, the 10-mile ring, so it's 10 miles from mother (that's what we call the ship).` },
-  { ch: 1, id: 'brg', type: 'click', range: 15, hl: { brgs: true },
+  { ch: 1, id: 'brg', type: 'click', freeze: true, range: 15, hl: { brgs: true },
     acs: [LT21({ x: 0, y: 11, hdg: 180, alt: 3000, spd: 250 }), NH41({ x: 8, y: 0, hdg: 270, alt: 1500, spd: 120 }), VP12({ x: -8.5, y: -8.5, hdg: 45, alt: 2000, spd: 130 })],
-    say: `<p>The numbers around the edge are <b>bearings</b>: directions measured clockwise from north, always as three digits. <b>360</b> (or 000) is north, <b>090</b> east, <b>180</b> south, <b>270</b> west.</p><p>"Bearing 090 from mother" means the aircraft is due <b>east</b> of the ship.</p>`,
+    say: `<p>The numbers around the edge are <b>bearings</b>: directions measured clockwise from north, always as three digits. <b>360</b> is north, <b>090</b> east, <b>180</b> south, <b>270</b> west.</p><p>"Bearing 090 from mother" means the aircraft is due <b>east</b> of the ship.</p>`,
     task: `🎯 Tap the aircraft on <b>bearing 090</b> (due east of the ship).`, answer: 'NHWK412',
     why: { LTNG21: 'That one is due <b>north</b>, bearing 360.', VIPR123: 'That one is <b>southwest</b>, about bearing 225.' }, hint: '090 is to the <b>right</b> of the ship.',
     good: `Right, due east: bearing <b>zero niner zero</b>.` },
@@ -719,8 +720,8 @@ const STEPS = [
     opts: [{ t: 'Primary only', ok: 1 }, { t: 'Secondary only', why: 'Secondary is what <b>draws</b> the data block. No blocks means you\'re seeing primary only.' }, { t: 'The aircraft have landed', why: 'They\'re still moving, just without their transponder data.' }],
     good: `That's it, <b>primary only</b>. You can still see where they are, so you can still work them; you just have to ask the pilot for things like altitude.` },
   // ---------- Chapter B: the flow ----------
-  { ch: 2, id: 'flowM', type: 'info', range: 15, watch: 'final', course: true, hold: { x: 7, y: 8, r: 1.5 }, loopDemo: true,
-    acs: [LT24({ x: 3, y: 2.5, hdg: 180, alt: 1500, tgtAlt: 1200, spd: 170, tgtSpd: 150, freq: 'silver', mode: 'path', fast: 4, seedTrail: true, wps: [{ x: 3, y: -6.6 }, { x: 2.1, y: -8.7 }, { x: 0.5, y: -9.3 }] }),
+  { ch: 2, id: 'flowM', type: 'info', range: 15, watch: 'final', course: true, hold: { x: 7, y: 8, r: 1.5 }, loopDemo: true, release: /\bwatch\b[^.]*\blightning\b/i,
+    acs: [LT24({ held: true, x: 3, y: 2.5, hdg: 180, alt: 1500, tgtAlt: 1200, spd: 170, tgtSpd: 150, freq: 'silver', mode: 'path', fast: 4, seedTrail: true, wps: [{ x: 3, y: -6.6 }, { x: 2.1, y: -8.7 }, { x: 0.5, y: -9.3 }] }),
           LT21({ x: 7, y: 9.5, hdg: 90, alt: 6000, spd: 250, freq: 'red', mode: 'hold', hold: { x: 7, y: 8, r: 1.5, ang: 0 } })],
     say: `<p>Now the big picture. An aircraft recovering through <b>Marshal</b> passes through three controllers, each on their own radio frequency with its own <b>color</b>:</p><p><b class="f-red">1. MARSHAL (Red)</b>: aircraft check in and wait their turn in a holding pattern (Lightning 21, circling up top), stacked at different altitudes so they stay apart. Marshal sends them down one at a time.</p><p><b class="f-silver">2. APPROACH (Silver)</b>: gives the pilot <b>vectors</b> (headings, altitudes and speeds) to line them up behind the ship on the <b>final approach course</b>, the dashed line.</p><p>Watch <b class="f-silver">Lightning 24</b> on Silver: it's on the <b>downwind</b> leg, flying away from the ship alongside the final course. Then it turns <b>base</b> and rolls out on <b>final</b>, lined up with the ship.</p><p>Not every aircraft talks to all three: one that checks in straight with <b>Approach</b> (like Lightning 24 later on) only works with Approach and then Final.</p>` },
   { ch: 2, id: 'flowF', type: 'info', range: 10, course: true, watch: 'land', par: true,
@@ -849,15 +850,15 @@ function updProg() {
   $('secLbl').textContent = st.type === 'done' ? 'ALL SECTIONS DONE' : `SECTION ${st.ch + 1} OF ${CHAPTERS.length}`;
   $('secName').textContent = st.type === 'done' ? 'MISSION COMPLETE' : CHAPTERS[st.ch].toUpperCase();
   $('secStep').textContent = st.type === 'done' ? '' : `Step ${sc.k} of ${sc.n} in this section`;
-  $('stepNo').textContent = st.type === 'done' ? '' : `Step ${cur + 1} of ${STEPS.length - 1} overall`;
+  $('stepNo').textContent = st.type === 'done' ? '' : `Step ${cur + 1} of ${STEPS.length - 1}`;
 }
-function updTag() { const a = W.acs[0]; $('scopeTag').innerHTML = (W.par ? `<b class="f-purple">Final · PAR</b>10 NM` : a && a.freq && a.freq !== 'none' ? `<b class="f-${a.freq}">${FNAME[a.freq]}</b>${W.range} NM` : `${W.range} NM range`) + (W.frozen && W.acs.length ? ' · <b style="color:var(--amber);border-color:var(--amber)">⏸ HOLDING FOR YOUR CALL</b>' : '') + (SPEED !== 1 ? ` · ${SPEED}×` : ''); }
+function updTag() { const a = W.acs[0]; $('scopeTag').innerHTML = (W.par ? `<b class="f-purple">Final · PAR</b>10 NM` : a && a.freq && a.freq !== 'none' ? `<b class="f-${a.freq}">${FNAME[a.freq]}</b>${W.range} NM` : `${W.range} NM range`) + (W.frozen && W.acs.length && STEPS[cur] && STEPS[cur].type === 'voice' ? ' · <b style="color:var(--amber);border-color:var(--amber)">⏸ HOLDING FOR YOUR CALL</b>' : '') + (SPEED !== 1 ? ` · ${SPEED}×` : ''); }
 function setScene(st, first) {
   W.par = !!st.par; W.range = st.range || 15; W.course = !!st.course; W.vis = st.vis || 'both'; W.hl = st.hl || {}; W.hold = st.hold ? Object.assign({}, st.hold) : null; W.mark = null;
   const have = st.keep && !first && st.acs && W.acs.length === st.acs.length && st.acs.every(a => W.acs.some(x => x.cs === a.cs && !x.landed));
   if (!have) W.acs = (st.acs || []).map(a => mk(JSON.parse(JSON.stringify(a))));
   if (st.enter) st.enter(first);
-  W.frozen = (st.type === 'voice' && !(R && R.done && STEPS[cur] === st)) || !!st.still;   // v121: still = hold the aircraft until Aero finishes explaining
+  W.frozen = (st.type === 'voice' && !(R && R.done && STEPS[cur] === st)) || !!st.still || !!st.freeze;   // v123: freeze = the targets stay put for the whole step (questions that read their position); v121: still = hold the aircraft until Aero finishes explaining
   updTag();
 }
 function show(i, first) {
@@ -878,6 +879,7 @@ function show(i, first) {
   speakQuestion(st);
   if (!sqBusy && !sq.length) R.narr = true;
   if (st.still && R.narr) W.frozen = false;   // muted / no TTS: nothing to wait for
+  if (st.release && R.narr) releaseHeld();
   updNav(); updProg(); save();
   $('pscroll').scrollTop = 0;
 }
@@ -905,7 +907,8 @@ function updNav() {
   cue.innerHTML = txt; cue.classList.toggle('on', !!txt); cue.classList.toggle('go', go);
   if (ready && !R.cued) { R.cued = true; if (TTS && !muted) setTimeout(() => { if (STEPS[cur] === st && R.cued) speak(last ? 'Press Finish when you\'re ready.' : 'Press Next when you\'re ready.', 'mentor'); }, 250); }
 }
-function speechIdle() { if (R && !R.narr) { R.narr = true; try { updNav(); } catch (e) {} } if (R && R.narr && STEPS[cur] && STEPS[cur].still) W.frozen = false; }
+function releaseHeld() { for (const a of W.acs) a.held = false; }
+function speechIdle() { if (STEPS[cur] && STEPS[cur].release) releaseHeld(); if (R && !R.narr) { R.narr = true; try { updNav(); } catch (e) {} } if (R && R.narr && STEPS[cur] && STEPS[cur].still) W.frozen = false; }
 function feedback(kind, html) { const f = $('fb'); f.className = kind; f.innerHTML = html; if (html) setTimeout(() => { try { f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {} }, 30); }
 function succeed(st, extra) {
   markResult(st, R.tries === 0);
@@ -1196,7 +1199,7 @@ function onEvent(kind, a) {
   if (kind === 'onFinal') { if (st.watch === 'final' && !R.demo) { R.demo = true; addLog('sys', `${tel(a.cs)} is on final.`); updNav(); } return; }
   if (kind === 'landed' && st.loopDemo) {   // demo step: run the Silver approach again
     addLog('sys', `${tel(a.cs)} is aboard.`);
-    setTimeout(() => { if (STEPS[cur] !== st) return; const src = st.acs.find(x => x.cs === a.cs); const i = W.acs.indexOf(a); if (src && i >= 0) W.acs[i] = mk(JSON.parse(JSON.stringify(src))); }, 2500);
+    setTimeout(() => { if (STEPS[cur] !== st) return; const src = st.acs.find(x => x.cs === a.cs); const i = W.acs.indexOf(a); if (src && i >= 0) { W.acs[i] = mk(JSON.parse(JSON.stringify(src))); W.acs[i].held = false; } }, 2500);
     return;
   }
   if (kind === 'landed') {
