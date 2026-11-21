@@ -589,6 +589,7 @@ const plain = h => String(h).replace(/<span class="(?:ui|ns)">[\s\S]*?<\/span>/g
 // on-screen text → how Aero should SAY it (phonetic tweaks only where needed)
 function forSpeech(t) {
   return (' ' + t + ' ')
+    .replace(/\bAATCC\b/g, 'A A T C C')   // v130: say the letters
     .replace(/\((?:[^()]*\b(?:tap|press|click|Enter|Space bar|button)\b[^()]*)\)/gi, ' ')   // "(or press Enter)" is UI, not speech
     .replace(/×/g, ' times ').replace(/°/g, ' degree').replace(/\s*[←→]\s*/g, ', ').replace(/\s=\s/g, ' equals ').replace(/\b(\w+)\s?\/\s?(\w+)\b/g, (m, a, b) => /\d/.test(m) ? m : a + ' or ' + b).replace(/_{2,}/g, 'blank')
     .replace(ICAO_RE, (m, p, d) => telSay(p + d)).replace(TEL_RE, (m, w, d) => w + ' ' + sayDigits(d))
@@ -681,7 +682,7 @@ const PRACTICE = () => [LT21({ x: 6, y: -6, hdg: 360, alt: 3000, spd: 250, freq:
 const STEPS = [
   // ---------- Briefing ----------
   { ch: 0, id: 'meet', type: 'name', range: 15, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
-    say: `<p>Hey there, and welcome! I'm <b>Aero</b>, your Personal Air Traffic Control Guide for this training.</p><p>Think of me as your coach in the headset. I'll show you how to read the radar scope, teach you the radio calls controllers use, and let you know the moment you nail one. Mess something up? No problem. I'll explain it and we'll run it again.</p><p>I'll be right here with you the whole way, from your first look at the scope to bringing a jet aboard the ship.</p><p>First things first: what should I call you? Your name or a callsign works.</p>` },
+    say: `<p>Hey there, and welcome! I'm <b>Aero</b>, your Personal Air Traffic Control Guide for this <b>Amphibious Air Traffic Control Center (AATCC)</b> training.</p><p>Think of me as your coach in the headset. I'll show you how to read the radar scope, teach you the radio calls controllers use, and let you know the moment you nail one. Mess something up? No problem. I'll explain it and we'll run it again.</p><p>I'll be right here with you the whole way, from your first look at the scope to bringing a jet aboard the ship.</p><p>First things first: what should I call you? Your name or a callsign works.</p>` },
   { ch: 0, id: 'welcome', type: 'info', range: 15, acs: [LT21({ x: 8, y: 9, hdg: 225, alt: 4000, spd: 280 })],
     say: () => `<p>Alright, <b>${esc(userName())}</b>, welcome aboard <b>USS Wasp</b>. Tonight you're working your first <b>night recovery</b>: bringing aircraft back aboard the ship in the dark.</p><p>At night pilots can't see much, so they rely on <b>you</b>, the controller, watching them on radar and talking them home.</p><p>We'll do it in five short chapters: <b>the scope</b>, <b>the flow</b>, <b>phraseology</b>, a real <b>mission</b>, then the <b>final</b> talk-down on the PAR. Let's get to work.</p><p><span class="ui">Tap <b>Next</b> (or press Enter) when you're ready.</span></p>` },
   // ---------- Chapter A: the scope ----------
@@ -1287,7 +1288,7 @@ buildProg(); setMute(muted); resize(); requestAnimationFrame(frame);
   setScene(STEPS[cur], true); updProg(); $('say').innerHTML = sayOf(STEPS[cur]); updNav();
   // nothing speaks until the first tap (iOS needs a user gesture for audio)
   const go = `style="background:#123f1a;border-color:var(--g);color:#d8ffde;font-weight:bold"`;
-  openOv(`<h1>FIRST NIGHT ABOARD USS WASP</h1><h2>A guided intro to air traffic control</h2>
+  openOv(`<h1>FIRST NIGHT ABOARD USS WASP</h1><h2>A guided intro to Amphibious Air Traffic Control Center (AATCC) training</h2>
     <p>No experience needed. <b>Aero</b>, your Personal Air Traffic Control Guide, will teach you to <b>read the radar scope</b> and <b>talk like a controller</b>. Then you'll bring an aircraft aboard the ship yourself, by voice.</p>
     <p class="small">🔊 voices on (toggle with the speaker button or M)</p>
     <div class="btns">${resume ? `<button id="ovGo" ${go}>Continue: ${CHAPTERS[STEPS[cur].ch]}, step ${cur + 1}</button><button id="ovRe">↺ Restart from the beginning</button>` : `<button id="ovGo" ${go}>Meet Aero ▸</button>`}</div>`);
