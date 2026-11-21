@@ -190,7 +190,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
 <body>
 <div id="layBar" role="group" aria-label="Layout"><button type="button" data-lay="normal" title="Normal layout">▦ Normal</button><button type="button" data-lay="expand" title="Expand the scopes (hide side panel)">⤢ Scope</button><button type="button" data-lay="trans" title="Scopes + narrow transcript log">☰ Log</button></div>
 <div id="app">
-  <div id="scopeWrap"><canvas id="scope"></canvas><button type="button" id="bPause2" title="Pause / Resume (P)">❚❚</button><div id="pauseOv" class="hidden"><b>PAUSED</b><span>Sim, timers and radio are frozen.</span><button type="button" id="bResume">▶ Resume</button><small>or press P</small></div></div>
+  <div id="scopeWrap"><canvas id="scope"></canvas><div id="shipOv" style="display:none;position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:7;pointer-events:none;padding:6px 14px;border:2px solid var(--amber);color:var(--amber);background:rgba(26,18,0,.92);border-radius:6px;font-size:16px;font-weight:bold;letter-spacing:1px;white-space:nowrap;box-shadow:0 0 12px rgba(255,191,60,.4)"></div><button type="button" id="bPause2" title="Pause / Resume (P)">❚❚</button><div id="pauseOv" class="hidden"><b>PAUSED</b><span>Sim, timers and radio are frozen.</span><button type="button" id="bResume">▶ Resume</button><small>or press P</small></div></div>
   <div id="panel">
     <div class="row">
       <button id="bPause" title="Pause (P)">❚❚ Pause</button>
@@ -752,7 +752,7 @@ const INTERCEPT_START_X = 10.3;              // feeder turns the aircraft onto t
 const GP_INTERCEPT_R = [4, 5];               // entry altitude chosen so the glidepath is intercepted at 4-5 NM (~1,300-1,550 ft)
 const NEXT_GAP = [10, 15];                   // s: one aircraft on final at a time; the next one appears this long after the last one leaves
 const FIRST_GAP = [3, 5];                    // s: first aircraft of the session
-const PRAC_RANGE = [1, 3];                   // practice-approach aircraft fly 1-3 practice PARs, then a full stop
+const PRAC_RANGE = [1, 1];                   // v124: one practice PAR, then the aircraft departs (a new aircraft every approach); linked hand-offs keep their own counts
 const CLIMB_JET = { alt: 1200, hdg: norm(BRC - 90), dir: 'L' };   // "execute climb outs, go silver": angels 1.2, left to BRC-90
 const CLIMB_HELO = { alt: 1000, hdg: norm(BRC + 90), dir: 'R' };  // "enter starboard delta": angels 1, right to BRC+90
 const CLIMB_WIN = [0.6, 1.4];                 // NM window for the one-mile practice call
@@ -818,10 +818,12 @@ function setBRC(b) {
   b = Math.round(norm(+b)) || 360; if (b === BRC) return false;
   const old = BRC;
   BRC = b; RWY = BRC; BRC_OFF = BRC - 270; BRC3 = hdg3(BRC); BRC_SAY = sayDigits(BRC3);
-  if (G && !G.over && G.ac && isShip()) {   // v122: mother turning: the final course swings about the ship, the aircraft stay where they are in space,
-    const d = angDiff(b, old) * DEG, cd = Math.cos(d), sd = Math.sin(d);   // so each target moves on the scope relative to the new BRC (starboard turn -> targets shift right of course)
+  if (G && !G.over && G.ac && isShip()) {   // v122/v124: mother turning: the final course swings about the ship while the aircraft keeps flying its old heading,
+    // so its target slides across the azimuth display: starboard turn -> right of course, port turn -> left of course. The course moves one degree at a time
+    // (SHIP_RATE), so the slide is gradual; it is scaled (SHIP_DRIFT_K) and kept inside the display (SHIP_DRIFT_MAX) so the target never vanishes off the scope.
+    const d = angDiff(b, old) * DEG;
     for (const a of G.ac) { if (!alive(a) || !PAR_PHASES.includes(a.phase) || a.r == null || a.yft == null) continue;
-      const R0 = a.r * NM_FT, y0 = a.yft; a.r = (R0 * cd - y0 * sd) / NM_FT; a.yft = R0 * sd + y0 * cd; }
+      a.yft = clamp(a.yft + a.r * NM_FT * Math.sin(d) * SHIP_DRIFT_K, -SHIP_DRIFT_MAX, SHIP_DRIFT_MAX); }
   }
   RWY_NUM = String(Math.round(BRC / 10) || 36).padStart(2, '0'); RWY_SAY = sayDigits(RWY_NUM);
   CLIMB_JET.hdg = norm(BRC - 90) || 360; CLIMB_HELO.hdg = norm(BRC + 90) || 360;
@@ -921,6 +923,7 @@ function hoffTyped(text) {   // "<callsign> hndoff" / "handoff" / "hand off": a 
 // BRC is TRUE; the final course (BRC variable) = FB = BRC - MV. Solo has no magvar, so FB = BRC.
 let SHIP_MV = 0, SHIP_BRCT = null;   // last magvar / true BRC from Approach (null = same as course)
 const SHIP_RATE = 1, SHIP_WARN = 5, SHIP_STEADY = 8, SHIP_GRACE = 10, SHIP_DEGS = [5, 10, 15, 20];
+const SHIP_DRIFT_K = 0.15, SHIP_DRIFT_MAX = 1950;   // v124: on-scope slide per degree of ship turn (fraction of the true geometric offset) and its limit in ft (azimuth display is +/-2200 ft)
 const SHIPCFG = { auto: true, every: 600 };   // v99: a ship turn every 10 min of sim time by default (Instructor: auto on/off, interval, turn now)
 let SHIP_PEER_RX = 0;   // last time a running, linked Marshal / Approach told us about the ship
 const finFollowing = () => !!(G && G.linked && Date.now() - SHIP_PEER_RX < 5000);   // linked behind a running Marshal / Approach: replay their turns ('brc' messages)
@@ -938,12 +941,26 @@ function shipBannerSet() {
   const S2 = G && G.ship; let txt = '', col = 'var(--amber)';
   if (S2 && isShip()) {
     const D = S2.dir === 'L' ? 'PORT' : S2.dir === 'R' ? 'STARBOARD' : '';
-    if (S2.phase === 'warn') txt = `SHIP TURN IN ${Math.max(1, Math.ceil(S2.until - G.t))} · ${D}`;
-    else if (S2.phase === 'turn') txt = `MOTHER IN ${D ? D + ' ' : ''}TURN`;
+    if (S2.phase === 'warn') txt = `SHIP TURN IN ${Math.min(SHIP_WARN, Math.max(1, Math.ceil(S2.until - G.t)))} · ${D} · NEW BRC ${hdg3(shipNewBrc())}`;
+    else if (S2.phase === 'turn') txt = `MOTHER IN ${D ? D + ' ' : ''}TURN · NEW BRC ${hdg3(shipNewBrc())}`;
     else if (S2.phase === 'steady') { txt = `MOTHER STEADY — NEW BRC ${hdg3(shipBrcT())}`; col = 'var(--cyan)'; }
   }
+  const ov = typeof document !== 'undefined' && document.getElementById('shipOv');   // v124: the same warning, big, on the scope
+  if (ov && ov.dataset.t !== txt) { ov.dataset.t = txt; ov.textContent = txt; ov.style.display = txt ? 'block' : 'none'; ov.style.color = col; ov.style.borderColor = col; }
   if (el && el.dataset.t !== txt) { el.dataset.t = txt; el.textContent = txt; el.style.display = txt ? 'block' : 'none'; el.style.color = col; el.style.borderColor = col; el.style.background = col === 'var(--amber)' ? '#1a1200' : '#0f2412'; }
   if (info) { const b = shipBrcT(), t = isShip() && G ? `BRC ${hdg3(b)}T · FB ${BRC3} · DWH ${hdg3(norm(b + 180) || 360)}T${SHIP_MV ? ' · VAR ' + SHIP_MV : ''}` : ''; if (info.textContent !== t) { info.textContent = t; info.style.display = t ? '' : 'none'; } }
+}
+// v124: the true BRC the ship is turning to (warning: from the planned amount; turning: from the target final course)
+function shipNewBrc() { const S2 = G && G.ship; if (!S2) return shipBrcT();
+  if (S2.linkT && SHIP_BRCT != null) return SHIP_BRCT;
+  const fc = S2.phase === 'warn' ? norm(BRC + (S2.dir === 'L' ? -S2.amt : S2.amt)) : S2.target;
+  return Math.round(norm(fc + SHIP_MV)) || 360; }
+function shipAnnounce(kind) {   // v124: an alarm tone, a log line and a spoken note, so a ship turn is never missed
+  const S2 = G && G.ship; if (!S2 || !isShip()) return;
+  const side = S2.dir === 'L' ? 'port' : S2.dir === 'R' ? 'starboard' : '', nb = hdg3(shipNewBrc());
+  try { Sound.alarm(); } catch (e) {}
+  const t = kind === 'warn' ? `Mother turning ${side} in ${SHIP_WARN} seconds, new BRC ${nb}.` : `Mother in ${side ? side + ' ' : ''}turn, new BRC ${nb}. Watch the target drift ${S2.dir === 'L' ? 'left' : S2.dir === 'R' ? 'right' : 'off'} of course.`;
+  if (!G.intro) pilotSay0({ cs: 'MOTHER', uid: 'MOTHER' }, t, t.replace(/BRC (\d{3})/, (m, d) => 'B R C ' + sayDigits(d)).replace(/Watch the target.*$/, ''), true, false, true);
 }
 function shipStep(dt) {
   const S2 = G.ship; if (!S2) return;
@@ -951,17 +968,23 @@ function shipStep(dt) {
     const rem = angDiff(S2.target, S2.cur), st = SHIP_RATE * dt;
     S2.cur = Math.abs(rem) <= st ? S2.target : norm(S2.cur + Math.sign(rem) * st);
     if (!S2.linkT) SHIP_BRCT = null;
+    // v124: a parked azimuth servo band follows the target it was showing, so the drifting target does not slide out of the band and vanish
+    const sv = servoOn() && SERVO.A && SERVO.A.ptr == null ? SERVO.A : null;
+    if (S2.svN !== S2.n) { S2.svN = S2.n; const t0 = sv && [G.selected, ...G.ac].find(a => a && alive(a) && PAR_PHASES.includes(a.phase) && a.yft != null && servoShows('A', ay(clamp(paintA(a).yft, -YMAX, YMAX)))); S2.svUid = t0 ? t0.uid : null; }
+    const trk = sv && S2.svUid != null && G.ac.find(a => a.uid === S2.svUid && alive(a) && PAR_PHASES.includes(a.phase));
     shipCourse(S2.cur);
+    if (trk) sv.y = sv.ty = ay(clamp(trk.yft, -YMAX, YMAX));
     if (S2.cur === S2.target && !S2.linkT) shipSteady();
   } else if (S2.phase === 'warn' && G.t >= S2.until) {
     S2.phase = 'turn'; S2.cur = BRC; S2.target = norm(BRC + (S2.dir === 'L' ? -S2.amt : S2.amt)) || 360;
     log('warn', `Mother in ${S2.dir === 'L' ? 'port' : 'starboard'} turn (${S2.amt}°). Call "ninety-nine, mother is in ${S2.dir === 'L' ? 'port' : 'starboard'} turn, standby for new BRC".`);
+    shipAnnounce('turn');
   } else if (S2.phase === 'steady' && G.t >= S2.until) S2.phase = null;
   if (S2.on && SHIPCFG.auto && !finFollowing() && isShip() && !S2.phase && G.t >= S2.next) {
     S2.next = Math.max(S2.next, G.t) + SHIPCFG.every;
     S2.phase = 'warn'; S2.until = G.t + SHIP_WARN; S2.dir = S2.rng() < 0.5 ? 'L' : 'R'; S2.amt = SHIP_DEGS[Math.floor(S2.rng() * SHIP_DEGS.length)];
     S2.n++; S2.gotTurn = S2.gotSteady = false; S2.dirKnown = true; S2.endT = null;
-    log('warn', `SHIP TURN IN 5 · ${S2.dir === 'L' ? 'PORT' : 'STARBOARD'}.`);
+    log('warn', `SHIP TURN IN 5 · ${S2.dir === 'L' ? 'PORT' : 'STARBOARD'}.`); shipAnnounce('warn');
   }
   shipBannerSet();
 }
@@ -1002,12 +1025,14 @@ function shipLinkBrc(m) {
     if (/^(p|l)/.test(md)) d = -1; else if (/^(s|r)/.test(md)) d = 1;
     if (S2.phase !== 'turn') { S2.n++; S2.gotTurn = S2.gotSteady = false; S2.endT = null; S2.cur = BRC; }
     S2.phase = 'turn'; S2.linkT = true; S2.target = fc; S2.dirKnown = Math.abs(d) >= 0.5; S2.dir = d < 0 ? 'L' : d > 0 ? 'R' : null;
+    const wasTurn = S2.announced === S2.n;
     log('warn', `Approach Control: mother in ${S2.dir ? (S2.dir === 'L' ? 'port ' : 'starboard ') : ''}turn${m.brc != null ? ' to BRC ' + hdg3(+m.brc) : ''}.`);
+    if (!wasTurn) { S2.announced = S2.n; shipAnnounce('turn'); }
   } else {
     const was = S2.phase === 'turn';
     if (!was && fc === BRC) { shipBannerSet(); return; }
-    if (!was) { const d = angDiff(fc, BRC); S2.n++; S2.gotTurn = S2.gotSteady = false; S2.dir = d < 0 ? 'L' : 'R'; S2.dirKnown = true; }
-    S2.cur = S2.target = fc; shipCourse(fc); shipSteady();
+    if (!was) { const d = angDiff(fc, BRC); S2.n++; S2.gotTurn = S2.gotSteady = false; S2.dir = d < 0 ? 'L' : 'R'; S2.dirKnown = true; S2.endT = null; S2.cur = BRC; S2.announced = S2.n; shipAnnounce('turn'); }
+    S2.phase = 'turn'; S2.linkT = false; S2.target = fc;   // v124: finish the turn at the ship's rate (no jump); shipStep calls shipSteady on arrival
   }
   shipBannerSet();
 }
@@ -1020,7 +1045,7 @@ function shipInstCmd(m) {
   const dir = /^(p|l)/i.test(String(m.dir || '')) ? 'L' : /^(s|r)/i.test(String(m.dir || '')) ? 'R' : (S2.rng() < 0.5 ? 'L' : 'R');
   const amt = Math.max(1, Math.min(90, Math.round(+m.deg || 0))) || SHIP_DEGS[Math.floor(S2.rng() * SHIP_DEGS.length)];
   S2.phase = 'warn'; S2.until = G.t + SHIP_WARN; S2.dir = dir; S2.amt = amt; S2.n++; S2.gotTurn = S2.gotSteady = false; S2.dirKnown = true; S2.endT = null; S2.next = G.t + SHIP_WARN + SHIPCFG.every;
-  log('warn', `SHIP TURN IN 5 · ${dir === 'L' ? 'PORT' : 'STARBOARD'} (${amt}°).`); shipBannerSet();
+  log('warn', `SHIP TURN IN 5 · ${dir === 'L' ? 'PORT' : 'STARBOARD'} (${amt}°).`); shipBannerSet(); shipAnnounce('warn');
   return { ok: true, text: `ship turn ${dir === 'L' ? 'port' : 'starboard'} ${amt}° in ${SHIP_WARN} s (BRC ${hdg3(shipBrcT())} → ${hdg3(norm(shipBrcT() + (dir === 'L' ? -amt : amt)))})` };
 }
 function shipInstCfg(m) {
@@ -1111,13 +1136,27 @@ function csNum(al, used, R) {   // R: random int (a, b) -> the sim rng by defaul
 }
 const csNumOk = (al, num) => alHelo(al) ? /^\d{3}$/.test(num) : /^\d{2}$/.test(num);
 window.__csTest = n => Array.from({ length: n || 40 }, () => { const al = pick(AIRLINES); return [al.icao + csNum(al), alHelo(al)]; });   // test hook
+/* v124: a different aircraft each time: types come from a shuffled bag (every type once before any repeats, never the same type twice in a row,
+   carried across sessions), and the callsign avoids the last few used */
+let TYPE_BAG = [], LAST_TYPE = null; const LAST_CS = [];
+function nextType() {
+  if (!TYPE_BAG.length) {
+    const all = [...new Set(AIRLINES.flatMap(a => a.types))].filter(t => TYPES[t]);
+    for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
+    if (all.length > 1 && all[0] === LAST_TYPE) [all[0], all[all.length - 1]] = [all[all.length - 1], all[0]];
+    TYPE_BAG = all;
+  }
+  return TYPE_BAG.shift();
+}
 function makeAc(spec) {
   let cs = spec.cs, type = spec.type;
   if (!cs) {
+    const ty = nextType(), als = AIRLINES.filter(a => a.types.includes(ty));
     for (let i = 0; i < 40; i++) {
-      const al = pick(AIRLINES); cs = al.icao + csNum(al); type = pick(al.types);
-      if (!G.ac.some(a => a.cs === cs) && !G.rejoin.some(j => j.cs === cs)) break;
+      const al = pick(als.length ? als : AIRLINES); cs = al.icao + csNum(al); type = als.length ? ty : pick(al.types);
+      if (!G.ac.some(a => a.cs === cs) && !G.rejoin.some(j => j.cs === cs) && !LAST_CS.includes(cs) && !LAST_CS.slice(-1).some(c => c.startsWith(al.icao))) break;
     }
+    LAST_TYPE = type; LAST_CS.push(cs); if (LAST_CS.length > 6) LAST_CS.shift();
   }
   if (!type) { const al = AIRLINES.find(a => cs.startsWith(a.icao)); type = al ? al.types[0] : 'MH60S'; }
   const tel = telephony(cs), T = TYPES[type];
@@ -1158,7 +1197,7 @@ function spawnQueue(spec = {}) {
   // every arrival appears at the ~12 NM hold fix, stacked by altitude on its side
   a.px = B.x; a.py = B.y; a.alt = a.feedAlt; a.atB = true; a.holding = true; a.path = [];
   G.ac.push(a);
-  const it = isShip() ? (isPrac(a) ? `, practice approach ${a.pracNo} of ${a.pracLeft + a.pracNo - 1}, then a full stop` : a.afterPrac ? ', back for a full stop' : ', full stop') : '';
+  const it = isShip() ? (isPrac(a) ? (a.pracLeft + a.pracNo - 1 > 1 ? `, practice approach ${a.pracNo} of ${a.pracLeft + a.pracNo - 1}, then a full stop` : ', one practice approach, then it departs') : a.afterPrac ? ', back for a full stop' : ', full stop') : '';
   log('sys', spec.rejoin ? `${a.cs} (${a.type}) is back with the feeder for another PAR${it}, number ${a.seq}.` : `${a.cs} (${a.type}) is inbound with the feeder controller, number ${a.seq} for PAR${it}.`);
   return a;
 }
@@ -1529,6 +1568,7 @@ function practiceDone(a) {
   finalize(a, false, 'practice approach', true);
   if (G.linked) { a.removeAt = G.t + 3; return; }   // Approach Control flies the climb-out
   const left = a.pracLeft - 1;
+  if (left <= 0 && !G.intro) { a.removeAt = G.t + 25; log('sys', `${a.cs} is done with its practice approach and departs the pattern. The next aircraft will be a new one.`); return; }   // v124: no return as the same aircraft
   G.rejoin.push({ cs: a.cs, spec: { cs: a.cs, type: a.type, side: a.side, rejoin: true,
     intent: left > 0 ? 'prac' : 'fs', pracLeft: left, pracNo: left > 0 ? a.pracNo + 1 : 0, afterPrac: left <= 0 } });
   log('sys', `${a.cs} is coming back around for ${left > 0 ? 'another practice PAR' : 'a full stop'}.`);
@@ -2582,12 +2622,12 @@ const TUT_SHIP = {
    <li><b>Sinker:</b> on some approaches the aircraft starts sinking below the glidepath and glidepath calls won't stop it. Only "<b>Low altitude alert, Lightning two one, check your altitude immediately, altimeter two niner niner two</b>" does (pilot: "Lightning two one, climbing.", even after "do not acknowledge"); it then climbs back to the glidepath.</li>
    <li>If you didn't say "wheels should be down" on contact: "<b>check wheels down</b>". No separate landing clearance is needed: the deck call exchange below clears the aircraft to land ("deck is clear, cleared to land spot seven" is still accepted).</li>
    <li><b>Deck call</b> (required before half a mile): helicopters (CH-53E, AH-1Z, UH-1Y, MH-60S) get "<b>one mile, go green</b>" (pilot: "<b>Nighthawk three two five, going green</b>"). Jets (F-35B, AV-8B) get "<b>three-quarter mile, call the ball</b>", with the course and glidepath in the same call (pilot: "<b>Lightning two one, ball, state four, niner</b>", the fuel state). That reply is the landing clearance: the aircraft may land. Pilots make these replies even after "do not acknowledge".</li>
-   <li><b>Practice approaches</b>: at check-in each pilot states an intention: "…for the PAR to the ship, <b>full stop</b>" (FS) or "…<b>request multiple practice PARs</b>" (PRAC; shown in the side panel). A practice aircraft gets no deck call. At <b>one mile</b> instead: jets "<b>one mile, execute climb outs, go silver</b>" (pilot: "Lightning two one"; climbs to 1,200 ft, left turn to ${hdg3(CLIMB_JET.hdg)}); helicopters "<b>one mile, enter starboard delta, go green</b>" (pilot: "Nighthawk three two five"; climbs to 1,000 ft, right turn to ${hdg3(CLIMB_HELO.hdg)}). It then comes back around for another approach; after 1–3 practice approaches it checks in with "<b>this will be a full stop</b>" and lands.</li>
+   <li><b>Practice approaches</b>: at check-in each pilot states an intention: "…for the PAR to the ship, <b>full stop</b>" (FS) or "…<b>request multiple practice PARs</b>" (PRAC; shown in the side panel). A practice aircraft gets no deck call. At <b>one mile</b> instead: jets "<b>one mile, execute climb outs, go silver</b>" (pilot: "Lightning two one"; climbs to 1,200 ft, left turn to ${hdg3(CLIMB_JET.hdg)}); helicopters "<b>one mile, enter starboard delta, go green</b>" (pilot: "Nighthawk three two five"; climbs to 1,000 ft, right turn to ${hdg3(CLIMB_HELO.hdg)}). After its practice approach it departs the pattern; every approach is a different aircraft.</li>
    <li>Full stop: after the ball call (or "going green") there is <b>no more talking</b>. The aircraft lands on its own.</li></ol>
    <p>If you need to wave it off: "<b>wave off, wave off, take angels two, fly base recovery course ${BRC_SAY}</b>". No deck call (or spot clearance) by half a mile means a <b>fouled deck</b> and the pilot waves off.</p>`],
   3: ['4. Sample script', `<div class="say">"Lightning two one, ${FAC} final, how do you hear me, wheels should be down, report see me." <i>(pilot: "Lightning two one, loud and clear, wheels down, will report see you")</i><br>"Well right of course, come right heading ${sayDigits(hdg3(BRC - 10))}, nine and a half miles." <i>("Lightning two one")</i><br>"Slightly right of course, come right heading ${BRC_SAY}." <i>("Lightning two one")</i><br>"Approaching glidepath." <i>("Lightning two one")</i><br>"Begin descent." <i>("Lightning two one")</i><br>"Do not acknowledge further transmissions." <i>("Lightning two one", then silent)</i><br>"On course, on glidepath, seven miles."<br>"On course, slightly above glidepath."<br>"On course, on glidepath, five miles."<br>"On course, on glidepath, four miles."<br><i>(pilot, at 2 miles: "Lightning two one, see you")</i><br>"On course, on glidepath, one and a half miles."<br>"On course, on glidepath, three-quarter mile, call the ball." <i>(pilot: "Lightning two one, ball, state four point nine": cleared to land)</i><br><i>(no more calls: it lands)</i></div>
    <p>For a helicopter, the deck call at one mile is "<b>One mile, go green.</b>" <i>(pilot: "Nighthawk three two five, going green": cleared to land)</i>.</p>
-   <p><b>Practice approach</b> (pilot checked in with "request multiple practice PARs"): the same talk-down, but at one mile: jet "<b>One mile, execute climb outs, go silver.</b>" <i>("Lightning two one": climbs to 1,200, left to ${hdg3(CLIMB_JET.hdg)})</i>; helicopter "<b>One mile, enter starboard delta, go green.</b>" <i>("Nighthawk three two five": climbs to 1,000, right to ${hdg3(CLIMB_HELO.hdg)})</i>. It comes back for another PAR; the last one starts "…this will be a full stop".</p>
+   <p><b>Practice approach</b> (pilot checked in with "request multiple practice PARs"): the same talk-down, but at one mile: jet "<b>One mile, execute climb outs, go silver.</b>" <i>("Lightning two one": climbs to 1,200, left to ${hdg3(CLIMB_JET.hdg)})</i>; helicopter "<b>One mile, enter starboard delta, go green.</b>" <i>("Nighthawk three two five": climbs to 1,000, right to ${hdg3(CLIMB_HELO.hdg)})</i>. It then departs; the next approach is a different aircraft.</p>
    <p>Pilots react to glidepath calls: "slightly above" makes them descend a bit faster, "slightly below" a bit slower, and "on glidepath" brings them back to normal. Heading calls are the only way to move them sideways.</p>
    <p><b>ASR (surveillance) approach</b>: no glidepath; the pilot holds altitude until told to descend to the <b>MDA (470 ft)</b> at the final approach fix and reaches it by the missed approach point (¾ mile). Announce it <b>no later than 4 miles (rotary, incl. MV-22B) / 5 miles (fixed wing)</b>; pilot: "(callsign)". Each scripted call is graded within ±0.3 mile.</p>
    <div class="say"><b>Rotary wing</b><br>(≥4 mi) "Nighthawk three two five, this will be a surveillance approach."<br>(4 mi) "Nighthawk three two five, four miles. Prepare to descend in one mile."<br>(3 mi) "Nighthawk three two five, three miles. Descend to your minimum descent altitude. Minimum descent altitude four seven zero." <i>("Nighthawk three two five")</i><br>(2 mi) "Nighthawk three two five, two miles, on course."<br>(1 mi) "Nighthawk three two five, one mile, on course."<br>(¾ mi) "Nighthawk three two five, surveillance minimums, on course, if mother not in sight, execute missed approach." <i>(stable: "Mother in sight" and lands; otherwise executes the missed approach)</i></div>

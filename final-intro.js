@@ -394,7 +394,7 @@ const CORE = [
     good: 'The same happens if it is unstable close in, or if you stop talking for too long: the pilot assumes lost communications and waves off.',
     enter() { const g = G(); g.ac = g.ac.filter(x => x.phase === 'missed'); F.refreshPanel(true); } },
   { id: 'ship', sec: 'ship', type: 'call', cs: 'LTNG23',
-    say: () => `<p>The ship turns now and then, and the final course turns with it. The aircraft doesn't move in the sky, so as the BRC swings, its target moves on your scope. I'll start a small starboard turn, three degrees, with ${tel('LTNG23')} on final. Watch the banner and the target.</p>`,
+    say: () => `<p>The ship turns now and then, and the final course turns with it. The aircraft doesn't move in the sky, so as the BRC swings, its target moves on your scope. I'll start a small starboard turn, five degrees, with ${tel('LTNG23')} on final. Watch the banner and the target.</p>`,
     tasks: [
       { task: 'Mother is turning. Broadcast it: <b>99, mother is in starboard turn, standby for new BRC</b>.', hint: '99, mother is in starboard turn, standby for new BRC.',
         ship: 'turn', post() { const s = G().ship; return s && s.gotTurn ? null : 'the 99 turn call while the ship is turning (port or starboard)'; },
@@ -407,7 +407,7 @@ const CORE = [
           return [courseChk(p, a), !h ? `the heading back to the course (come left heading ${say3(rel(-10))})` : (d <= -5 && d >= -20 && h.dir !== 'R') ? null : `a left heading 5 to 20 degrees left of the new BRC ${say3(F.BRC)}, like come left heading ${say3(rel(-10))}`]; } }],
     good: 'Two 99 calls each turn, then put it back on the new course. Each 99 call is worth ten points.',
     enter(api) { const g = G(); put('LTNG23', { r: 6.5, yft: 0, z: 2000 }); g.ship.phase = null; g.ship.endT = null;
-      F.shipInstCmd({ dir: 'starboard', deg: 3 }); ready = false;
+      F.shipInstCmd({ dir: 'starboard', deg: 5 }); ready = false;
       run(() => G().ship.phase === 'turn', { scale: 1 }, () => { goNow('Mother is turning.'); }); } },
   { id: 'grading', sec: 'ship', type: 'info',
     say: () => { const g = G(), r = (g.results || []).find(x => x.cs === L21); return `<p>Every call is graded. In the log, green lines with a star are points, amber lines are warnings, and red lines cost points.</p>
