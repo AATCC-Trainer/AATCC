@@ -3697,9 +3697,9 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
   });
   canvas.addEventListener('pointerleave', () => { tb.textContent = dash; });
   const tick = () => {
-    const t = (typeof G !== 'undefined' && G && isFinite(G.t)) ? G.t : 0, W = (typeof G !== 'undefined' && G && G.wind) || { dir: 250, spd: 25, gust: 0 }, secs = 36000 + Math.floor(t);
-    const hh = Math.floor(secs / 3600) % 24, mm = Math.floor(secs / 60) % 60, ss = secs % 60;
-    const txt = 'Time: ' + String(hh).padStart(2, '0') + String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0') + '\nFREQ SILVER · FB ' + h3z(FB()) + ' DWH ' + h3z(DWH()) + ' BRC ' + h3z(TBRC) + ' ' + fmtMV() + '\n' + String(W.dir === 0 ? 360 : W.dir).padStart(3, '0') + String(W.spd).padStart(2, '0') + (W.gust ? 'G' + String(W.spd + W.gust).padStart(2, '0') : '') + 'KT 2NM -SN BKN007 AA 29.92';
+    const t = (typeof G !== 'undefined' && G && isFinite(G.t)) ? G.t : 0, W = (typeof G !== 'undefined' && G && G.wind) || { dir: 250, spd: 25, gust: 0 }, secs = Math.max(0, Math.floor(t));   // v127: session clock from 0:00 (was a 10:00 time-of-day base shown as HHMM:SS, e.g. 1000:03)
+    const hh = Math.floor(secs / 3600), mm = Math.floor(secs / 60) % 60, ss = secs % 60;
+    const txt = 'Time: ' + (hh ? hh + ':' + String(mm).padStart(2, '0') : String(mm)) + ':' + String(ss).padStart(2, '0') + '\nFREQ SILVER · FB ' + h3z(FB()) + ' DWH ' + h3z(DWH()) + ' BRC ' + h3z(TBRC) + ' ' + fmtMV() + '\n' + String(W.dir === 0 ? 360 : W.dir).padStart(3, '0') + String(W.spd).padStart(2, '0') + (W.gust ? 'G' + String(W.spd + W.gust).padStart(2, '0') : '') + 'KT 2NM -SN BKN007 AA 29.92';
     if (ib.textContent !== txt) ib.textContent = txt;
   };
   const safeTick = () => { try { tick(); } catch (e) { console.error('info block', e); } };
