@@ -60,7 +60,7 @@ td.gr{white-space:normal;min-width:140px;max-width:220px}
 <h2>Summary by controller <small id="sumNote" style="font-size:12px;color:var(--dim)"></small></h2>
 <div id="cards"></div>
 <h2>Sessions <small id="cnt" style="font-size:12px;color:var(--dim)"></small></h2>
-<div class="tw"><table><thead><tr><th>Date</th><th>Controller</th><th>Position</th><th>Start</th><th>End</th><th>Training time</th><th>Wall time</th><th>Paused</th><th>Grade</th><th>Score</th><th>Worked</th><th>Landed</th><th>Ended</th><th></th></tr></thead><tbody id="tb"></tbody></table><div id="empty" hidden>No sessions match. Run a scope (Marshal, Approach, Final, Departure, Instructor) and they show up here.</div></div>
+<div class="tw"><table><thead><tr><th>Date</th><th>Controller</th><th>Position</th><th>Scenario</th><th>Start</th><th>End</th><th>Training time</th><th>Wall time</th><th>Paused</th><th>Grade</th><th>Score</th><th>Worked</th><th>Landed</th><th>Ended</th><th></th></tr></thead><tbody id="tb"></tbody></table><div id="empty" hidden>No sessions match. Run a scope (Marshal, Approach, Final, Departure, Instructor) and they show up here.</div></div>
 </div></main>
 <script>
 (() => {
@@ -82,7 +82,7 @@ td.gr{white-space:normal;min-width:140px;max-width:220px}
     const list = all(); fillUsers(list); const rows = filtered(list);
     $('cnt').textContent = `${rows.length} of ${list.length} · newest first`;
     $('empty').hidden = rows.length > 0;
-    $('tb').innerHTML = rows.map(s => `<tr data-id="${esc(s.id)}"><td>${esc(s.date)}</td><td style="color:#ffd27a">${esc(s.user)}</td><td class="${SC[s.sim] || ''}">${esc(s.sim)}</td><td>${esc(s.startTime || '')}</td><td>${esc(s.endTime || '…')}</td>`
+    $('tb').innerHTML = rows.map(s => `<tr data-id="${esc(s.id)}"><td>${esc(s.date)}</td><td style="color:#ffd27a">${esc(s.user)}</td><td class="${SC[s.sim] || ''}">${esc(s.sim)}</td><td>${esc(s.scenario || '—')}</td><td>${esc(s.startTime || '')}</td><td>${esc(s.endTime || '…')}</td>`
       + `<td class="n">${dur(s.active)}</td><td class="n">${dur(s.wall)}</td><td class="n">${dur(s.paused)}</td><td class="gr">${esc(s.grade || '—')}</td><td class="n">${s.score == null ? '—' : esc(s.score)}</td>`
       + `<td class="n">${s.worked || 0}</td><td class="n">${s.landed == null ? '—' : esc(s.landed)}</td><td class="st-${s.status === 'open' ? 'open' : esc(s.ended)}" title="${esc(s.note || '')}">${s.status === 'open' ? 'in progress' : esc(s.ended || '')}</td>`
       + `<td><button class="x" type="button" data-del="${esc(s.id)}" title="Delete this session">✕</button></td></tr>`).join('');
@@ -94,8 +94,8 @@ td.gr{white-space:normal;min-width:140px;max-width:220px}
   }
   const csvq = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   $('bCsv').onclick = () => {
-    const rows = filtered(all()), H = ['id', 'controller', 'sim', 'date', 'start', 'end', 'training_s', 'training_min', 'wall_s', 'paused_s', 'sim_s', 'grade', 'grade_pct', 'score', 'worked', 'landed', 'ended', 'note', 'level', 'wave_offs', 'crashes', 'sep_losses', 'calls_good', 'calls_bad'];
-    const out = [H.join(',')].concat(rows.map(s => [s.id, s.user, s.sim, s.date, s.startTime, s.endTime || '', s.active, ((s.active || 0) / 60).toFixed(1), s.wall, s.paused, s.simTime, s.grade, s.gradePct, s.score, s.worked, s.landed, s.status === 'open' ? 'in progress' : s.ended, s.note, s.level, s.waveOffs, s.crashes, s.sepLoss, s.callsGood, s.callsBad].map(csvq).join(',')));
+    const rows = filtered(all()), H = ['id', 'controller', 'sim', 'date', 'start', 'end', 'training_s', 'training_min', 'wall_s', 'paused_s', 'sim_s', 'grade', 'grade_pct', 'score', 'worked', 'landed', 'ended', 'note', 'level', 'wave_offs', 'crashes', 'sep_losses', 'calls_good', 'calls_bad', 'scenario'];
+    const out = [H.join(',')].concat(rows.map(s => [s.id, s.user, s.sim, s.date, s.startTime, s.endTime || '', s.active, ((s.active || 0) / 60).toFixed(1), s.wall, s.paused, s.simTime, s.grade, s.gradePct, s.score, s.worked, s.landed, s.status === 'open' ? 'in progress' : s.ended, s.note, s.level, s.waveOffs, s.crashes, s.sepLoss, s.callsGood, s.callsBad, s.scenario].map(csvq).join(',')));
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out.join('\r\n') + '\r\n'], { type: 'text/csv' }));
     const d = new Date(); a.download = `aatcc-log-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.csv`;
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);

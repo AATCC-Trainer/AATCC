@@ -3,7 +3,7 @@
    - One Pause: Pause / Resume (button, P key, Instructor) on any linked scope pauses / resumes all of them; sim speed (1x / 3x) follows too.
    - One clock: the scope that started the group is the time master; it sends its sim time every second and the others follow (within ~0.5 s).
    - Shared traffic (Marshal <-> Approach): each scope sends its own aircraft; the other draws them as other-controller targets with a data block.
-   Messages: ls-hello {src,on,run} · ls-start {src,diff,id} · ls-pause {src,p} · ls-scale {src,s} · ls-time {src,t,p,s,id} · ls-tfc {src,ac[]}.
+   Messages: ls-hello {src,on,run} · ls-start {src,diff,id,scn} · ls-pause {src,p} · ls-scale {src,s} · ls-time {src,t,p,s,id} · ls-tfc {src,ac[]}.
    The guided intro and standalone scopes never send or follow any of this. */
 (function () {
   if (!('BroadcastChannel' in window)) return;
@@ -30,7 +30,7 @@
   function started(diff, opts) {   // page hook: end of startGame
     if (applying || busy() || (opts && opts.intro)) return; const g = G(); if (!g || g.intro) return;
     g.lsId = PAGE + '-' + Date.now(); g.lsMaster = PAGE;
-    if (linked()) post({ type: 'ls-start', diff, id: g.lsId });
+    if (linked()) post({ type: 'ls-start', diff, id: g.lsId, scn: g.scn ? g.scn.id : '' });   // v133: the linked scopes run the same scenario ('' = free play)
     if (O.afterStart && linked()) try { O.afterStart(); } catch (e) {}
     label();
   }
@@ -45,6 +45,7 @@
     if (m.type === 'ls-start') {
       if (run()) { if (g && !g.lsMaster) g.lsMaster = m.src; return; }   // already running: keep going, follow its clock
       if (g && g.intro) return;
+      if (m.scn != null && window.SCN) try { SCN.forceNext(m.scn); } catch (e) {}   // v133: same scenario as the scope that pressed Start
       apply(() => { const d = document.querySelector(`.diff[data-d="${m.diff}"]`); if (d) d.click(); O.start(m.diff); });
       const g2 = G(); if (g2) { g2.lsMaster = m.src; g2.lsId = m.id; if (O.afterStart) try { O.afterStart(); } catch (e) {} }
       try { O.log && O.log(`Linked start from ${nm(m.src)}: all linked scopes running together.`); } catch (e) {}
@@ -98,7 +99,7 @@
       ctx.beginPath(); ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x - 4, y + 4); ctx.stroke();   // other-controller target
       const h = a.hdg * Math.PI / 180; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.sin(h) * 14, y - Math.cos(h) * 14); ctx.stroke();
       const al = String(Math.round((a.alt || 0) / 100)).padStart(3, '0');
-      ctx.fillText(a.cs + ' ' + (a.src === 'MARSHAL' ? 'MAR' : 'APP'), x + 8, y - 8); ctx.fillText(al + ' ' + String(Math.round((a.gs || 0) / 10)).padStart(2, '0'), x + 8, y + 4);
+      ctx.fillText(a.cs + ' ' + (a.src === 'MARSHAL' ? 'MAR' : 'APP') + (a.tag ? ' ' + a.tag : ''), x + 8, y - 8); ctx.fillText(al + ' ' + String(Math.round((a.gs || 0) / 10)).padStart(2, '0'), x + 8, y + 4);
     }
     ctx.restore();
   }

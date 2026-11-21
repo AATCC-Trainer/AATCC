@@ -9,6 +9,7 @@
    - Active time counts only wall seconds while the sim is running and NOT paused (pause button, tutorial or settings open); paused and wall time
      are kept too. Saved every 15 s ("open" with a heartbeat) so a crash still keeps the time; stale open sessions are closed on the
      next load. Sessions with under 15 s of active time are discarded.
+   v133: also keeps the scenario name ("4. Emergency aircraft mid-flow" or "Free play") on Marshal / Approach sessions.
    v132: also keeps level / wave-offs / crashes / separation losses / call counts the scopes already track (read-only), plus
    exportFile / importFile (training-log backup, merge by session id; never gate or passcode data) and rename() for the dashboard.
    Storage: 'aatccLog.users' [names], 'aatccLog.cur' name, 'aatccLog.sessions' [session], 'aatccLog.box' {x, y} picker position. */
@@ -67,6 +68,7 @@
   function extra(G) {   // v132 (read-only, additive): level and counters the scopes already keep, for the Trainee dashboard
     const o = {}, n = v => typeof v === 'number' && isFinite(v) ? v : null;
     try { if (G.d && typeof G.d.name === 'string') o.level = G.d.name.slice(0, 30); } catch (e) {}
+    try { if (G.scn && G.scn.name) o.scenario = `${G.scn.n}. ${G.scn.name}`.slice(0, 60); else if (PAGE === 'Marshal' || PAGE === 'Approach') o.scenario = 'Free play'; } catch (e) {}   // v133: scenario name
     o.waveOffs = n(G.missed); o.crashes = n(G.crashes); o.sepLoss = n(G.sepLoss); o.callsGood = n(G.callsGood); o.callsBad = n(G.callsBad);
     return o;
   }

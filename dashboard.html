@@ -61,7 +61,7 @@ td.n{text-align:right;color:var(--at-strong)}
 <h2>Guided intros</h2>
 <div class="intro" id="intro"></div>
 <h2>Recent sessions <small class="at-muted" style="font-size:12px;font-weight:normal" id="rcN"></small></h2>
-<div class="tw"><table><thead><tr><th>Date</th><th>Position</th><th>Level</th><th>Training time</th><th>Grade</th><th>Landed</th><th>Wave-offs</th><th>Ended</th></tr></thead><tbody id="rc"></tbody></table><div class="empty" id="rcE" hidden></div></div>
+<div class="tw"><table><thead><tr><th>Date</th><th>Position</th><th>Level / scenario</th><th>Training time</th><th>Grade</th><th>Landed</th><th>Wave-offs</th><th>Ended</th></tr></thead><tbody id="rc"></tbody></table><div class="empty" id="rcE" hidden></div></div>
 <p style="margin:8px 0 0"><a href="logsheet.html">Open the full Log Sheet →</a></p>
 <h2>Quick start</h2>
 <div class="quick">
@@ -170,7 +170,7 @@ td.n{text-align:right;color:var(--at-strong)}
     // recent
     const rec = mine.filter(s => s.sim !== 'Instructor').slice(-10).reverse(), SC = { Marshal: 'red', Approach: 'slv', Final: 'prp', 'Final Intro': 'prp', Departure: 'tel' };
     $('rcN').textContent = rec.length ? `last ${rec.length}` : '';
-    $('rc').innerHTML = rec.map(s => `<tr><td>${esc(fmtDate(s.date))} <span class="at-muted">${esc((s.startTime || '').slice(0, 5))}</span></td><td class="${SC[s.sim] || ''}">${esc(s.sim === 'Final' ? 'Final (PAR)' : s.sim)}</td><td>${esc(s.level || '—')}</td><td class="n">${dur(s.active)}</td>`
+    $('rc').innerHTML = rec.map(s => `<tr><td>${esc(fmtDate(s.date))} <span class="at-muted">${esc((s.startTime || '').slice(0, 5))}</span></td><td class="${SC[s.sim] || ''}">${esc(s.sim === 'Final' ? 'Final (PAR)' : s.sim)}</td><td>${esc(s.level || '—')}${s.scenario && s.scenario !== 'Free play' ? `<br><span class="at-muted" style="font-size:12px">${esc(s.scenario)}</span>` : ''}</td><td class="n">${dur(s.active)}</td>`
       + `<td>${typeof s.gradePct === 'number' ? s.gradePct + '%' : '—'}</td><td class="n">${s.landed == null ? '—' : esc(s.landed)}</td><td class="n">${s.waveOffs == null ? '—' : esc(s.waveOffs)}</td><td>${s.status === 'open' ? 'in progress' : esc(s.ended || '')}</td></tr>`).join('');
     $('rcE').hidden = rec.length > 0; $('rcE').textContent = who === 'Guest' && !list.length ? 'No sessions yet. Your first session shows up here as soon as you run a scope for 15 seconds or more.' : `No sessions logged for ${who} on this computer yet. Run a scope with "${who}" picked in the Controller box.`;
   }

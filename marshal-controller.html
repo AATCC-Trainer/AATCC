@@ -10,6 +10,7 @@
 <script src="hnd.js"></script>
 <script src="scope-widgets.js"></script>
 <script src="link-sync.js"></script>
+<script src="scenarios.js"></script>
 <script src="freq-box.js"></script>
 <script src="traininglog.js"></script>
 <script src="splat-t.js"></script>
@@ -2040,7 +2041,7 @@ function csByDigits(pre, live) {   // first choice: the callsign number ("... 42
    merged per aircraft into ONE reply, callsign first ("Eagle four eight, angels six, F-18"); plain acknowledgements collapse to
    the callsign-only readback. Replies that do not start with the callsign (e.g. check-in style lines) are passed through as is. */
 const TXC = { depth: 0, q: [] };
-function pilotSay(...args) { if (TXC.depth > 0 && !window.__INST_SILENT) { TXC.q.push(args); return; } return pilotSay0(...args); }
+function pilotSay(...args) { if (args[0] && args[0].nordo && window.SCN) { SCN.nordoQuiet(args[0]); return; }   /* v133: NORDO aircraft never transmit */ if (TXC.depth > 0 && !window.__INST_SILENT) { TXC.q.push(args); return; } return pilotSay0(...args); }
 function txFlush() {
   const q = TXC.q; TXC.q = []; if (!q.length) return;
   const by = new Map(); for (const x of q) { const k = x[0] || null; if (!by.has(k)) by.set(k, []); by.get(k).push(x); }
@@ -2259,6 +2260,7 @@ function undoLastTx(cs) {
 window.__correction = { splitCorrection, undoLastTx, parse: (t, k) => parseSpeech(t, k), cmdStr: c => cmdStr(c), handle: (t, src) => handleTranscript(t, src || 'voice'), get G() { return G; }, appCtl: a => appCtl(a), isHelo: a => isHelo(a), select: a => selectAc(a) };
 /* ---- data block extras: accept letters (A, B, C ... in accept order), short callsigns, GSP ground speed toggle ---- */
 const dbName = a => a.ltr && window.Shorthand ? a.ltr + ' ' + Shorthand.shortCs(a.cs) : a.cs;   // 'A LT21' once accepted
+const dbNameT = a => dbName(a) + (a.scnTag ? ' ' + a.scnTag : '');   // v133: scenario tag (EMER / FUEL / NORDO) on the data block
 function syncLetters() { if (G && window.Shorthand) Shorthand.assignLetters(G, a => !!a.accepted && a.phase !== 'gone', x => x.phase !== 'gone'); }
 function gspExec(q) {   // typed 'GSP' (scope keyboard command, never a radio call): one global toggle, ground speed on EVERY data block (also later arrivals); a letter / callsign before it is ignored
   if (!G || G.over) return;
@@ -2531,6 +2533,7 @@ if ($('eatForm')) {
 function startGame(diff, opts) {
   Sound.ensure(); startOv.classList.add('hidden'); endOv.classList.add('hidden'); helpOv.classList.add('hidden');
   uiPaused = false; newGame(diff, opts || {}); initVoiceStatus();
+  scnStart();   // v133: scenario (or free play) for this run
   let seen = false; try { seen = localStorage.getItem('mc_tut_seen') === '1'; } catch (e) {}
   if (!opts && diff === 'training' && !seen) openTutorial(0);
   if (MC && (!opts || (!opts.skipEatPrompt && opts.eatRef == null))) mcOpenEatPrompt();
@@ -2604,6 +2607,8 @@ function endGame() {
     $('endTable').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
     $('endList').innerHTML = '<table class="st">' + G.results.map(r => `<tr><td>${esc(r.cs)} · ${r.landed ? ph('on deck', 'landed') : r.practice ? 'practice approach' : esc(r.reason)}<br><span style="color:var(--dim);font-size:11px">tolerance ${r.tol}% · ${r.good} good / ${r.bad} bad calls · ${r.missedRange} missed range calls</span></td><td></td></tr>`).join('') + '</table>';
   }
+  if (G.scn && window.SCN) { try { $('endTable').innerHTML += SCN.endRows().map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join(''); } catch (e) { console.error('scenario rows', e); } }
+  try { window.SCN && SCN.endCard(); } catch (e) {}
   try { gradeSections(); } catch (e) { console.error('grade sections', e); }
   endOv.classList.remove('hidden');
 }
@@ -3137,7 +3142,7 @@ const MA = { on: localStorage.getItem('stingerMA') !== '0', ch: null, peerT: 0, 
     const id = 'MA-' + a.cs + '-' + Date.now();
     const ac = { cs: a.cs, type: a.type, helo: isHelo(a), e: +a.e.toFixed(4), n: +a.n.toFixed(4), alt: Math.round(a.alt), tgtAlt: Math.round(a.tgtAlt != null ? a.tgtAlt : a.alt), hdg: Math.round(norm(a.hdg)) || 360,
       tgtHdg: Math.round(norm(a.tgtHdg != null ? a.tgtHdg : a.hdg)) || 360, ias: Math.round(a.ias), sq: a.lead ? true : a.sq !== false, priStart: !!a.priStart, priCut: !!a.priCut,
-      hnd: !!a.hndAcc, state: +appState(a).toFixed(2), souls: a.souls || 1, appCount: APP_MAX_PARS - 1, coneArm: !!a.coneArm, tbrc: TBRC, mv: MV };
+      hnd: !!a.hndAcc, state: +appState(a).toFixed(2), souls: a.souls || 1, appCount: APP_MAX_PARS - 1, coneArm: !!a.coneArm, tbrc: TBRC, mv: MV, code: a.code, scnEv: window.SCN ? SCN.payload(a) : undefined };
     const m = { type: 'ma-handoff', id, src: this.self, to: this.peer, ac };
     a.maPend = { id, t0: Date.now() }; this.post(m);
     const tm = setInterval(() => { if (!a.maPend || a.maPend.id !== id) return clearInterval(tm);
@@ -3180,9 +3185,22 @@ if (window.HND) HND.init({ self: 'MARSHAL', peer: 'APPROACH', MA, G: () => G, al
   transfer: a => {   // a formation wingman follows its lead the normal way (checks in on Silver a few seconds later)
     a.sector = null; try { MAR.cancel(a, 'handoff'); } catch (e) {} a.hoffFreq = 'silver'; a.button = 'silver'; a.st = 'purple'; a.phase = 'withApp'; a.hoTagT = G.t; a.onFinal = false; a.turnDir = null;
     maSilver(a); a.inForm = false; log('sys', `${a.cs} switching Silver (Approach); off Marshal frequency.`); try { refreshPanel(true); } catch (e) {} } });
+/* v133 scenarios (scenarios.js): this page's hooks. A scenario replaces the level's arrival schedule (G.sched); Free play = unchanged. */
+const SCN_A = { page: 'MARSHAL', G: () => G, log: (k, t) => log(k, t), alive, FAC: () => FAC, isHelo, isHeloType: t => !!(TYPES[t] && TYPES[t].helo), rng: a => appRng(a),
+  say: (a, t, s) => pilotSay(a, t, s, false, false, true),
+  onFreq: a => !a.lead || !a.inForm,
+  recovered: a => !alive(a) || a.phase !== 'app' || a.st === 'mfinal' || a.st === 'purple' || !!(a.mar && a.mar.eatDone) || !!a.maPend,
+  fullStop: a => { a.appCount = APP_MAX_PARS - 1; },
+  lowFuel: a => { const b = appFuelSpec(a)[1], f = Math.max(0.2, Math.round(b * 12 / 100) / 10); a.fuel0 = f + b * (G.t - a.launchT) / 60000; const t = f.toFixed(1), [w, d] = t.split('.'); return { t, s: NUMW[+w] + ' point ' + NUMW[+d] }; },
+  pickCs: (helo, type) => { const pool = AIRLINES.filter(x => x.types.some(t => TYPES[t] && !!TYPES[t].helo === helo && (!type || t === type))); const P = pool.length ? pool : AIRLINES.filter(x => x.types.some(t => TYPES[t] && !!TYPES[t].helo === helo));
+    const usedN = usedCsNums(); for (let i = 0; i < 40; i++) { const al = pick(P), num = csNum(al, usedN), cs = al.icao + num; if (!G.ac.some(x => x.cs === cs)) return { cs, type: type && al.types.includes(type) ? type : al.types.find(t => TYPES[t] && !!TYPES[t].helo === helo) }; } return null; },
+  shipTurn: (dir, deg, inSec) => { if (shipFollowing() || G.ship || !SHIP_TURNS_ON) return false; shipTurnSchedule(dir, deg, inSec); return true; },
+  shipTurns: v => { SHIP_TURNS_ON = v == null ? (() => { try { return localStorage.getItem(SHIP_TURNS_KEY) === '1'; } catch (e) { return false; } })() : !!v; syncShipTurnsUI(); try { shipStatePush(); } catch (e) {} },
+  refresh: () => refreshPanel(true) };
+function scnStart() { if (!window.SCN) return; let sc = null; try { sc = SCN.takeStart(); } catch (e) {} try { SCN.begin(SCN_A, sc, { linked: !!(window.LS && LS.linked()) }); } catch (e) { console.error('scenario', e); } }
 /* v128 linked group: one Start / Pause / clock with the other linked scopes, shared Marshal <-> Approach traffic (link-sync.js) */
 if (window.LS) LS.init({ G: () => G, on: () => !!(MA.on || linkChoice), start: () => $('bStart').onclick(), setPaused, setScale, log: t => log('sys', t),
-  traffic: () => G.ac.filter(a => alive(a) && a.phase === 'app' && !a.hnd).map(a => ({ cs: a.cs, e: +(a.dispE != null ? a.dispE : a.e).toFixed(3), n: +(a.dispN != null ? a.dispN : a.n).toFixed(3), alt: Math.round(a.alt || 0), hdg: Math.round(a.hdg || 0), gs: Math.round(a.gs || a.ias || 0) })),
+  traffic: () => G.ac.filter(a => alive(a) && a.phase === 'app' && !a.hnd).map(a => ({ cs: a.cs, tag: a.scnTag || undefined, e: +(a.dispE != null ? a.dispE : a.e).toFixed(3), n: +(a.dispN != null ? a.dispN : a.n).toFixed(3), alt: Math.round(a.alt || 0), hdg: Math.round(a.hdg || 0), gs: Math.round(a.gs || a.ias || 0) })),
   ownCs: () => G.ac.filter(alive).map(a => a.cs).concat(window.HND && HND._in ? [...HND._in.values()].map(x => x.cs) : []),
   afterStart: () => { if (G && G.eatAwait) { G.eatAwait = false; log('sys', 'Linked start: the clock runs with the other scopes; type the start / recovery minute in the box when ready.'); } } });
 MA.takeFn = s => {   // v126: an Approach aircraft handed to Marshal (typed HND R): same position / altitude / heading / speed; checks in on Red
@@ -3190,6 +3208,7 @@ MA.takeFn = s => {   // v126: an Approach aircraft handed to Marshal (typed HND 
   a.phase = 'app'; a.e = +s.e || 0; a.n = +s.n || 0; a.pars = 0; a.armed = false; a.turnDir = null;
   a.hdg = norm(+s.hdg || BRC); a.tgtHdg = norm(+s.tgtHdg || a.hdg); a.alt = +s.alt || 5000; a.tgtAlt = +s.tgtAlt || a.alt; a.ias = a.tgtSpd = +s.ias || (isHelo(a) ? 120 : 250);
   a.trail = []; a.trailT = 0; a.lastTx = G.t; a.fuel0 = +s.state || 3; a.launchT = G.t; a.souls = +s.souls || 1; a.sq = s.sq !== false; a.fromApp = true;
+  if (s.code) a.code = s.code; if (s.scnEv && window.SCN && SCN.A) SCN.carry(a, s.scnEv);   // v133: scenario event travels with the aircraft
   G.ac.push(a); mcRegisterGrade(a); appCheckIn(a, false); a.needAlt = false; a.identified = true; a.rcDone = true;
   if (s.hnd) { a.accepted = true; const l = window.HND && HND.pendLtr(a.cs); if (l && !G.ac.some(x => x !== a && x.ltr === l && alive(x))) a.ltr = l; }
   log('sys', `${a.cs} (${a.type}) handed off from Approach: checking in on Red, ${fmtAlt(a.alt)}.`); try { refreshPanel(true); } catch (e) {} return true;
@@ -3229,9 +3248,10 @@ const schedPending = () => instPlan().filter(e => !e.done).sort((x, y) => x.at -
 const schedNext = () => schedPending()[0] || null;
 function schedSpawn(e) {   // one schedule entry checks in now
   const seen = new Set(G.ac.map(a => a.uid)); e.done = true;
+  const sp = !e.cs && G.scn && window.SCN && e.kind !== 'flight' ? SCN.spec(e) : null;   // v133: scenario entry (type / helo / event)
   if (e.kind === 'flight') mcSpawnFlight(e.rel);
-  else if (e.kind === 'cca') { G.parSpawned = true; mcParArrive(); }
-  else mcArrive(e.cs ? { cs: e.cs, type: e.type } : {});   // Instructor-added single arrival (10 NM, angels 5)
+  else if (e.kind === 'cca') { G.parSpawned = true; mcParArrive(sp || undefined); }
+  else mcArrive(e.cs ? { cs: e.cs, type: e.type } : sp ? Object.assign({ rel: e.rel }, sp) : {});   // Instructor-added single arrival (10 NM, angels 5)
   e.out = G.ac.filter(a => !seen.has(a.uid)).map(a => ({ cs: a.cs, type: a.type, tag: a.lead ? 'WING' : a.flight ? 'LEAD' : '' }));
   G.mcWave = G.sched.filter(x => x.done).length;
   if (!schedNext() && G.nextArr == null) G.nextArr = G.t + rand(240, 300);
@@ -3274,6 +3294,7 @@ function mcArrive(spec = {}) {
   { const f = appFuelSpec(a); a.fuel0 = f[0] * rand(0.45, 0.7); a.launchT = G.t; a.souls = Math.round(rand(f[2], f[3])); }
   if (spec.lead) { a.lead = spec.lead; a.inForm = true; a.sq = false; }   // wingman: no squawk, flies formation on the leader
   if (spec.flight) { a.flight = spec.flight; a.wingCs = spec.wing || null; }
+  if (spec.scnEv && window.SCN) SCN.pre(a, spec.scnEv);   // v133: scenario event aircraft (NORDO: silent check-in)
   G.ac.push(a); mcRegisterGrade(a); appCheckIn(a, false); a.needAlt = false; a.identified = true; a.rcDone = true;
   return a;
 }
@@ -3281,12 +3302,14 @@ window.__mcArrive = mcArrive;
 /* Wave 2 single CCA arrival: one aircraft (random jet or helo, distinct callsign word) checks in 6 NM from the right (East / 080-100 radial),
    flying the CCA pattern with Approach phraseology ("request CCA approach"); "go purple/copper" → Final, "go silver" → Approach, "contact final" → Final. Permanent: Marshal=Red, Approach=Silver, Final=Purple/Copper. */
 const MC_PAR_ARR = { rng: 6, rel: [80, 100] };   // 6 NM from the right (BRC + 80..100 => ~090° East)
-function mcParArrive() {
-  const helo = Math.random() < 0.5, words = G.ac.map(x => x.cs.replace(/\d+$/, ''));
+function mcParArrive(spec) {
+  spec = spec || {};
+  const helo = spec.type && TYPES[spec.type] ? !!TYPES[spec.type].helo : Math.random() < 0.5, words = G.ac.map(x => x.cs.replace(/\d+$/, ''));
   const pool = AIRLINES.filter(x => x.types.some(t => TYPES[t] && !!TYPES[t].helo === helo) && !words.includes(x.icao));
   const al = pick(pool.length ? pool : AIRLINES.filter(x => x.types.some(t => TYPES[t] && !!TYPES[t].helo === helo)));
   const usedN = usedCsNums(), pn = csNum(al, usedN);
-  const a = makeAc({ cs: al.icao + pn, type: al.types.find(t => TYPES[t] && !!TYPES[t].helo === helo) });
+  const a = makeAc(spec.cs ? { cs: spec.cs, type: spec.type } : { cs: al.icao + pn, type: al.types.find(t => TYPES[t] && !!TYPES[t].helo === helo) });
+  if (spec.scnEv && window.SCN) SCN.pre(a, spec.scnEv);
   const R = MC_PAR_ARR.rng, b = norm(BRC + rand(...MC_PAR_ARR.rel)); a.e = R * Math.sin(b * DEG); a.n = R * Math.cos(b * DEG);
   a.phase = 'app'; a.pars = 0; a.armed = false; a.turnDir = null; a.parArr = true; a.appCount = APP_MAX_PARS - 1;   // one CCA/PAR recovery, full stop
   a.hdg = a.tgtHdg = Math.round(norm(b + 180));   // inbound toward mother
@@ -4055,6 +4078,7 @@ window.__MAR = MAR; window.__brc = () => BRC; window.__setBRC = v => setBRC(v); 
 function appStep(dt) {
   G.t += dt; coneArmTick(); v95Tick(dt);
   shipTurnStep();
+  if (G.scn && window.SCN) SCN.tick();   // v133: scenario events, scripted ship turns, goal tracking
   const want = APP_COUNT[G.d.key || ''] || (G.d.name === 'Training' ? 4 : G.d.name === 'Normal' ? 6 : 8);
   if (G.nextLaunch == null) G.nextLaunch = 10;   // first launch (and check-in) at 10 s sim time
   if (MC) mcArrivals(want);
@@ -4158,7 +4182,7 @@ function appStep(dt) {
       if (a.pars >= APP_MAX_PARS) pilotSay(a, `${FAC} Final, ${a.tel}, this will be a full stop.`, `${FAC} Final, ${a.telSay}, this will be a full stop.`);
       if (G.selected === a) selectAc(null);
     } else if (Math.abs(a.e) > (G.viewE || APP_RANGE) + 3 || Math.abs(a.n) > (G.viewN || APP_RANGE) + 3) {   // rectangular scope: leaves 3 NM beyond the displayed edge
-      a.phase = 'gone'; a.removeAt = G.t; G.missed++;
+      a.phase = 'gone'; a.removeAt = G.t; G.missed++; a.leftAir = true; if (G.scn && window.SCN) SCN.left(a);   // v133: not a recovery for the scenario goal check
       log('warn', `${a.cs} left the airspace at ${Math.round(rng)} NM.`);
     }
   }
@@ -4399,7 +4423,7 @@ function appPanel() {
   $('scopeStatus').textContent = `${MC ? 'MARSHAL' : 'APPROACH'} · ${SHIP_NAME.toUpperCase()} · RED · FB ${BRC3} · ${APP_RANGE} NM · WIND ${String(G.wind.dir === 0 ? 360 : G.wind.dir).padStart(3, '0')}/${G.wind.spd}KT · ${G.d.name.toUpperCase()} · ${G.paused ? 'PAUSED (P to resume)' : G.scale + 'x'} · T+${mmss(G.t)}${pttDown ? ' · ● TRANSMITTING' : ''}`;
   
   const list = G.ac.filter(appCtl).sort((p, q) => appRng(p) - appRng(q));
-  const html = list.map((x, i) => `<div class="strip${x === G.selected ? ' sel' : ''}" data-uid="${x.uid}"><span>${x.ltr || i + 1}</span><span>${x.cs} ${x.type}</span><span>${appRng(x).toFixed(0)}NM ${String(Math.round(x.alt / 100)).padStart(3, '0')}</span><span>${hdg3(Math.round(x.hdg))}${G.gsp ? ' ' + Math.round(x.gs) + 'KT' : ''}</span></div>`).join('');   // speed only after GSP
+  const html = list.map((x, i) => `<div class="strip${x === G.selected ? ' sel' : ''}" data-uid="${x.uid}"><span>${x.ltr || i + 1}</span><span>${x.cs} ${x.type}${x.scnTag ? ' <b style="color:#ff6b6b">' + x.scnTag + '</b>' : ''}</span><span>${appRng(x).toFixed(0)}NM ${String(Math.round(x.alt / 100)).padStart(3, '0')}</span><span>${hdg3(Math.round(x.hdg))}${G.gsp ? ' ' + Math.round(x.gs) + 'KT' : ''}</span></div>`).join('');   // speed only after GSP
   if (stripsEl.innerHTML !== html) stripsEl.innerHTML = html;
 }
 /* AATCC-style PPI (SPN-43 air search look): black scope, green phosphor, 2 s sweep, TPX-42 style beacon blocks. Visual only. */
@@ -4505,7 +4529,7 @@ function drawApp(now) {
     const bx = Q[0] + 14 + (a.dbx || 0), by = Q[1] - 22 + (a.dby || 0);
     if (a.dbx || a.dby) { ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(Q[0], Q[1]); ctx.lineTo(bx - 2, by + 4); ctx.stroke(); ctx.globalAlpha = 1; }   // leader line to a moved data block
     if (a.phase !== 'app') a.hitR = null;   // v120: handed-off tag: display only
-    const l1 = (a.st === 'purple' || a.phase === 'withFinal' || a.phase === 'withApp' || hoTag(a) || (a.st === 'mfinal' && a.hoffFreq)) ? dbName(a) + ' ' + freqTag(a.hoffFreq || a.button || (a.phase === 'withApp' ? 'silver' : 'purple')) : dbName(a), l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')}${G.gsp ? ' ' + String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0') : ''} ${a.code}`;   // ground speed only after GSP
+    const l1 = (a.st === 'purple' || a.phase === 'withFinal' || a.phase === 'withApp' || hoTag(a) || (a.st === 'mfinal' && a.hoffFreq)) ? dbNameT(a) + ' ' + freqTag(a.hoffFreq || a.button || (a.phase === 'withApp' ? 'silver' : 'purple')) : dbNameT(a), l2 = `${String(Math.round((a.paint ? a.paint.alt : a.alt) / 100)).padStart(3, '0')}${G.gsp ? ' ' + String(Math.round((a.paint ? a.paint.gs : a.gs) / 10)).padStart(2, '0') : ''} ${a.code}`;   // ground speed only after GSP
     ctx.fillStyle = col; if ((a.hoff || a.hnd) && !((now / 350 | 0) % 2)) ctx.globalAlpha = a.hnd ? 0.12 : 0.3; ctx.fillText(l1, bx, by); ctx.fillText(l2, bx, by + 12); ctx.globalAlpha = 1;
     { const tags = (a.identified ? ' ID' : '');   // ownership / handoff tags
       if (a.hnd) { if ((now / 350 | 0) % 2) { ctx.fillStyle = 'rgba(255,235,120,1)'; ctx.fillText(' HNDOFF', bx + ctx.measureText(l1).width, by); ctx.fillStyle = col; } }   // v126 automated handoff pending
@@ -4621,7 +4645,7 @@ const SHIP_LAT = 32.5, SHIP_LON = -117.4;
     const t = (typeof G !== 'undefined' && G && isFinite(G.t)) ? G.t : 0, W = (typeof G !== 'undefined' && G && G.wind) || { dir: 250, spd: 25, gust: 0 }, secs = Math.max(0, Math.floor(t));   // v127: session clock from 0:00 (was a 10:00 time-of-day base shown as HHMM:SS, e.g. 1000:03)
     const hh = Math.floor(secs / 3600), mm = Math.floor(secs / 60) % 60, ss = secs % 60;
     // v105: REF / 1ST EAT line removed from the data block (user request)
-    const txt = 'Time: ' + (hh ? hh + ':' + String(mm).padStart(2, '0') : String(mm)) + ':' + String(ss).padStart(2, '0') + '\nFREQ RED · FB ' + h3z(FB()) + ' DWH ' + h3z(DWH()) + ' BRC ' + h3z(TBRC) + ' ' + fmtMV() + '\n' + String(W.dir === 0 ? 360 : W.dir).padStart(3, '0') + String(W.spd).padStart(2, '0') + (W.gust ? 'G' + String(W.spd + W.gust).padStart(2, '0') : '') + 'KT 2NM -SN BKN007 AA 29.92';
+    const txt = 'Time: ' + (hh ? hh + ':' + String(mm).padStart(2, '0') : String(mm)) + ':' + String(ss).padStart(2, '0') + '\nFREQ RED · FB ' + h3z(FB()) + ' DWH ' + h3z(DWH()) + ' BRC ' + h3z(TBRC) + ' ' + fmtMV() + '\n' + String(W.dir === 0 ? 360 : W.dir).padStart(3, '0') + String(W.spd).padStart(2, '0') + (W.gust ? 'G' + String(W.spd + W.gust).padStart(2, '0') : '') + 'KT ' + ((G && G.scn && G.scn.sc.cond.metar) || '2NM -SN BKN007') + ' AA 29.92';   // v133: a scenario sets its own weather line
     if (ib.textContent !== txt) ib.textContent = txt;
   };
   const safeTick = () => { try { tick(); } catch (e) { console.error('info block', e); } };

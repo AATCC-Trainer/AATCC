@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head>
-<script src="gate.js"></script><script src="report.js"></script><script src="splat-t.js"></script><script src="rendezvous.js"></script><script src="freq-box.js"></script><script src="traininglog.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="gate.js"></script><script src="report.js"></script><script src="splat-t.js"></script><script src="rendezvous.js"></script><script src="freq-box.js"></script><script src="traininglog.js"></script><script src="scenarios.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Instructor · AATCC Trainer</title><meta name="theme-color" content="#0b0d0b"><link rel="icon" type="image/png" sizes="192x192" href="approach-192.png">
 <style>
 :root{--g:#c8f5cd;--gd:#4f8a5a;--gdd:#1f3524;--bg:#0b0d0b;--amber:#ffbf3c;--red:#ff5a6e;--cyan:#2ee6e6;--dim:#7d9a80;--panel2:#121a14;--hov:#1a281d;--silver:#c9ced6;--purple:#b48cff;--copper:#e0915a;--green:#6dff8c}
@@ -104,6 +104,7 @@ td{padding:3px 4px;border-top:1px solid #142418;vertical-align:top}tr.act{cursor
   <div class="grp"><label class="lbl" title="Show the rendezvous points (yellow)" style="display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="rdvChk" checked>RDV</label></div>
  </div>
  <div id="sess" aria-label="Session controls"><span class="sLbl">Session</span><span id="clock" class="clk" title="Session time of the linked scopes">T+--:--</span>
+  <select id="scnSel" title="Scenario for Marshal and Approach on the next Start / Restart" style="max-width:220px"><option value="*">Scenario: each scope's own</option><option value="">Free play (level traffic)</option></select>
   <button id="bRestartSims" title="Start the linked scopes together, or restart them as a new session (same level and settings)">▶ Start</button><button id="bPause" title="Pause or resume every linked scope">❚❚ Pause</button>
   <span class="seg" title="Session speed for every linked scope"><button id="sp1" class="on">1x</button><button id="sp3">3x</button></span><span id="sessLvl"></span>
   <span class="sep"></span><span class="sLbl">Scopes</span>
@@ -541,6 +542,7 @@ async function restartSims() {
   const running = anyRunning(), op = running ? 'restart' : 'start';
   if (running && !confirm('Restart the linked scopes as a new session? The current session is discarded (same level and settings).')) return;
   restarting = true; $('bRestartSims').disabled = true; try { window.SplatT && SplatT.clear(); } catch (e) {}
+  scnPush();   // v133: the chosen scenario goes to Marshal and Approach before they start
   const post = to => { try { ch.postMessage({ type: 'inst-cmd', to, op, id: ++cmdId }); } catch (e) {} };
   log('i', `Instructor: ${op} ${tg.map(x => x[0] + x.slice(1).toLowerCase()).join(' + ')}`);
   /* v131: scopes in a linked group start each other (link-sync). Starting Marshal here would roll a new BRC that the others, already started by
@@ -563,6 +565,14 @@ async function restartSims() {
   setTimeout(() => { restarting = false; }, 1500);
 }
 $('bRestartSims').onclick = () => { restartSims(); };
+/* v133: scenario box. "Each scope's own" leaves the scopes' pickers alone; anything else sets Marshal and Approach ('scn-set') for the next Start / Restart. */
+(function () { const sel = $('scnSel'); if (!sel || !window.SCN) { if (sel) sel.style.display = 'none'; return; }
+  sel.innerHTML += SCN.SCENARIOS.map(s => `<option value="${s.id}">${SCN.optTxt(s)}</option>`).join('');
+  let v = '*'; try { v = localStorage.getItem('aatccScn.inst') || '*'; } catch (e) {} if ([...sel.options].some(o => o.value === v)) sel.value = v;
+  sel.onchange = () => { try { localStorage.setItem('aatccScn.inst', sel.value); } catch (e) {} scnPush();
+    const s = SCN.byId(sel.value); log('i', sel.value === '*' ? 'Scenario: each scope uses its own choice.' : `Scenario for the next Start: ${s ? s.n + '. ' + s.name : 'Free play'}.`); sel.blur(); };
+})();
+function scnPush() { const sel = $('scnSel'); if (!sel || sel.value === '*') return; try { ch.postMessage({ type: 'scn-set', src: 'INSTRUCTOR', id: sel.value }); } catch (e) {} }
 /* ---------- next aircraft check-in: Auto (each sim's own timer) or Manual (the sims hold their timed check-ins until the Instructor sends one) ---------- */
 const CI_SRC = ['MARSHAL', 'APPROACH'];
 const ciRun = s => links().includes(s) && live(s) && I.src[s].running;
