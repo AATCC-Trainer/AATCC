@@ -9,7 +9,7 @@ const F = window.__FIN;
 if (!F || !window.IntroEngine) return;
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const LS = 'aatccFinalIntro', KEYS = { core: 'aatccFinalIntro.core', adv: 'aatccFinalIntro.adv' };
+const LS = 'aatccFinalIntro', KEYS = { core: 'aatccFinalIntro.core.v2', adv: 'aatccFinalIntro.adv' };   // v122: core steps changed (17 + 18 merged, DNA moved), so old saved positions are dropped
 const meta = () => { try { return JSON.parse(localStorage.getItem(LS) || '{}') || {}; } catch (e) { return {}; } };
 const setMeta = o => { try { localStorage.setItem(LS, JSON.stringify(Object.assign(meta(), o))); } catch (e) {} };
 const prog = sec => { try { return JSON.parse(localStorage.getItem(KEYS[sec]) || 'null'); } catch (e) { return null; } };
@@ -23,10 +23,11 @@ const ac = cs => G() && G().ac.find(x => x.cs === cs && F.alive(x));
 const pa = a => a.pA || a;
 const tel = cs => F.telephony(cs).text;
 const say3 = h => F.hdg3(h);
-let runT = null, keepT = null, eng = null, sec = null, sub = 0, held = null, ready = true, runBase = 1, windHdg = null;
+let runT = null, keepT = null, eng = null, sec = null, sub = 0, held = null, ready = true, runBase = 1, windHdg = null, PAUSED = false;
 /* v109: sim speed for the guided intro (1x / 2x / 3x), multiplies every run segment; remembered */
 let SPD = (() => { try { const v = +localStorage.getItem('aatccFinalIntro.spd'); return [1, 2, 3].includes(v) ? v : 1; } catch (e) { return 1; } })();
 function setSpd(v) { SPD = [1, 2, 3].includes(v) ? v : 1; try { localStorage.setItem('aatccFinalIntro.spd', String(SPD)); } catch (e) {} const g = G(); if (g && runT) g.scale = runBase * SPD;
+  const lb = document.querySelector('#fiSpd span'); if (lb) lb.textContent = `Sim speed ${SPD}x (keys 1 2 3)`;
   document.querySelectorAll('#fiSpd button').forEach(b => b.classList.toggle('on', +b.dataset.s === SPD)); }
 function speedBar() {
   if (!eng) return; const d = document.createElement('div'); d.className = 'fiSpd'; d.id = 'fiSpd';
@@ -35,13 +36,19 @@ function speedBar() {
   eng.root.insertBefore(d, eng.root.querySelector('.nav')); setSpd(SPD);
 }
 function stopRun() { clearInterval(runT); runT = null; }
+document.addEventListener('keydown', e => {   // v122: 1 / 2 / 3 set the intro's sim speed (the page leaves these keys to the intro)
+  if (!FI.active || FI.mode !== 'intro' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return; const tag = (e.target && e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return; if (/^[123]$/.test(e.key)) { e.preventDefault(); setSpd(+e.key); } });
 function freeze() { stopRun(); if (G()) { F.setPaused(true); G().scale = 1; } }
+/* v122: Pause (Aero's panel button or P) holds the scope too; a running segment picks up where it was on Resume */
+function onPause(on) { PAUSED = !!on; const g = G(); if (!g) return; if (PAUSED) F.setPaused(true); else if (runT) { g.scale = runBase * SPD; F.setPaused(false); } }
 function run(cond, opt, done) {   // run the sim until cond() (or timeout), then freeze
   stopRun(); const g = G(); if (!g) return;
-  runBase = (opt && opt.scale) || 1; g.scale = runBase * SPD; F.setPaused(false);
+  runBase = (opt && opt.scale) || 1; g.scale = runBase * SPD; F.setPaused(PAUSED);
   const t0 = g.t, lim = (opt && opt.simTimeout) || 400;
   runT = setInterval(() => {
     if (G() !== g || g.over) return stopRun();
+    if (PAUSED) return;
     let ok = false; try { ok = cond(); } catch (e) {}
     if (ok || g.t - t0 > lim) { freeze(); if (done) done(ok); }
   }, 60);
@@ -119,6 +126,7 @@ function markPt(fn, label, ring) {
 const ringE = (cs, label) => markPt(() => { const a = ac(cs); return a && a.hitE ? { x: a.hitE.x, y: a.hitE.y, top: F.L.eTop } : null; }, label || tel(cs));
 const ringA = (cs, label) => markPt(() => { const a = ac(cs); return a && a.hitA ? { x: a.hitA.x, y: a.hitA.y, top: F.L.aTop } : null; }, label || tel(cs));
 const markGp = (r, label) => markPt(() => ({ x: F.xr(r), y: F.ez(F.gpAlt(r)), top: F.L.eTop }), label || 'Glidepath', false);
+const markSafe = (r, label) => markPt(() => ({ x: F.xr(r), y: F.ez(r * F.NM_FT * Math.tan(F.LIM.lowerSafeDeg * Math.PI / 180)), top: F.L.eTop }), label, false);   // v122: the (undrawn) lower safety limit
 const markCourse = (r, label) => markPt(() => ({ x: F.xr(r), y: F.ay(0), top: F.L.aTop }), label || 'Course line', false);
 function markRange(r, label) {
   const w = $('scopeWrap'); if (!w) return;
@@ -168,43 +176,42 @@ body.introOn #layBar{display:none}
 
 /* ---------------- steps ---------------- */
 const SEC_CORE = [
-  { id: 'brief', name: 'Brief' }, { id: 'scope', name: 'The scope' }, { id: 'contact', name: 'Contact and line-up' }, { id: 'gp', name: 'Glidepath' },
-  { id: 'talk', name: 'Talk-down' }, { id: 'deck', name: 'Deck and landing' }, { id: 'wrong', name: 'When it goes wrong' }, { id: 'ship', name: 'Ship turns and grading' },
+  { id: 'brief', name: 'Brief' }, { id: 'scope', name: 'The scope', short: 'Scope' }, { id: 'contact', name: 'Contact and line-up', short: 'Contact' }, { id: 'gp', name: 'Glidepath' },
+  { id: 'talk', name: 'Talk-down', short: 'Talk' }, { id: 'deck', name: 'Deck and landing', short: 'Deck' }, { id: 'wrong', name: 'When it goes wrong', short: 'Wrong' }, { id: 'ship', name: 'Ship turns and grading', short: 'Ship' },
 ];
-const SEC_ADV = [{ id: 'prac', name: 'Practice approaches' }, { id: 'ng', name: 'No-gyro' }, { id: 'asr', name: 'Surveillance (ASR)' }];
+const SEC_ADV = [{ id: 'prac', name: 'Practice approaches', short: 'Practice' }, { id: 'ng', name: 'No-gyro' }, { id: 'asr', name: 'Surveillance (ASR)', short: 'ASR' }];
 const L21 = 'LTNG21';
 const CORE = [
   { id: 'welcome', sec: 'brief', type: 'info',
     say: `<p>Hi, I'm <span class="k">Aero</span>. I'll walk you through Final Controller on the real PAR scope, one step at a time.</p>
       <p>You talk an aircraft down to the USS Wasp: you watch its position on the scope and tell the pilot where it is and how to fix it. Each call you make, I check first. If it's right, the pilot hears it. If not, I'll tell you what to change.</p>
-      <p>Type your calls in the box on the right and press Enter, or hold the talk button or the Space bar and speak. The scope stays frozen while we talk.</p>
-      <p>Use <span class="k">Sim speed</span> to run the scope at 1x, 2x or 3x. The amber markers show what I'm talking about, and I'll tell you when to click Next.</p>`,
+      <p>Type your calls in the box on the right and press Enter, or hold the talk button or the Space bar and speak. The scope stays frozen while we talk. The amber markers show what I'm talking about, and I'll tell you when to click Next.</p>`,
     enter() { const g = G(); g.ac = []; F.refreshPanel(true); } },
   { id: 'arrive', sec: 'brief', type: 'watch', cs: L21,
-    say: `<p>In a moment your first aircraft checks in. Listen for its callsign, range, altitude, heading, and what it wants. I'll stop talking so you can hear it.</p>`,
+    say: `<p>In a moment your first aircraft checks in. Listen for its callsign, range, altitude, heading, and what it wants.</p>`,
     task: 'Listen to the check-in.',
     enter(api) { const g = G(); g.ac = []; F.refreshPanel(true);
       let n = 0, m = 0, on = false;   // v109: Aero speaks first; the aircraft checks in once Aero has finished
-      const t = setInterval(() => { n++;
-        if (!on) { if ((n > 8 && !api.talking) || n > 400) { on = true; put(L21, { r: 8.6, yft: 760, hdg: rel(-20), talk: true, contacted: false }); ringA(L21, tel(L21)); ringE(L21, tel(L21)); markEl('readout', 'Its data'); } return; }
-        if (++m > 50 || (m > 12 && !F.ttsBusy())) { clearInterval(t); api.succeed(`That was <span class="k">${tel(L21)}</span>: eight miles, level two thousand, heading ${say3(rel(-20))}, for the PAR to the ship, full stop. Its data block shows the same.`); } }, 100);
+      const t = setInterval(() => { if (PAUSED) return; n++;
+        if (!on) { if ((n > 8 && !api.talking) || n > 400) { on = true; put(L21, { r: 9.4, yft: 1700, hdg: rel(-20), talk: true, contacted: false }); ringA(L21, tel(L21)); ringE(L21, tel(L21)); markEl('readout', 'Its data'); } return; }
+        if (++m > 50 || (m > 12 && !F.ttsBusy())) { clearInterval(t); api.succeed(`That was <span class="k">${tel(L21)}</span>: ${MILES[Math.round((ac(L21) || { r: 9 }).r)]} miles, level two thousand, heading ${say3(rel(-20))}, for the PAR to the ship, full stop. Its data block shows the same.`); } }, 100);
       return () => clearInterval(t); } },
   { id: 'elev', sec: 'scope', type: 'info', cs: L21,
     say: `<p>The top panel is the <span class="k">elevation</span> display: height against range. The sloping line is the <span class="k">glidepath</span>, coming down to the ship at the left.</p>
       <p>A target above the line is above the glidepath, below the line is below it. Right now ${tel(L21)} is level at two thousand feet, under the glidepath. It flies level until it meets the line.</p>`,
-    enter() { put(L21, { r: 8.4, yft: 720, hdg: rel(-20) }); hlScope('elev'); } },
+    enter() { put(L21, { r: 9.2, yft: 1650, hdg: rel(-20) }); hlScope('elev'); } },
   { id: 'az', sec: 'scope', type: 'info', cs: L21,
     say: `<p>The bottom panel is the <span class="k">azimuth</span> display: left and right of the final course. The centre line is the course to the ship.</p>
       <p>Each target has a short tick. Course line through the middle of the tick means <span class="k">on course</span>. Between the middle and the end means <span class="k">slightly</span> left or right. Touching the end means left or right of course. Not touching at all means <span class="k">well</span> left or right.</p>
       <p>The amber ticks are examples. From the left: well left, left, slightly left, on course, slightly right, right, and well right of course. Above the line is right of course, below it is left.</p>`,
-    enter() { put(L21, { r: 8.4, yft: 720, hdg: rel(-20) }); hlScope('az');
+    enter() { put(L21, { r: 9.2, yft: 1650, hdg: rel(-20) }); hlScope('az');
       F.setDemo([['well', 'L', 'well\nleft'], ['plain', 'L', 'left'], ['slightly', 'L', 'slightly\nleft'], ['on', 'R', 'on\ncourse'], ['slightly', 'R', 'slightly\nright'], ['plain', 'R', 'right'], ['well', 'R', 'well\nright']]
         .map(([cat, side, label], i) => ({ r: 0.8 + i * 1.1, cat, side, label }))); } },
   { id: 'servo', sec: 'scope', type: 'watch', cs: L21, skip: true, noServo: true,
     say: `<p>So far I have been moving the <span class="k">servo</span> for you. On the real scope a target only shows inside the servo band, the brighter strip you move with the mouse or your finger.</p>
       <p>I've cleared the bands, so the target is hidden now.</p>`,
     task: 'Click and hold on the <b>elevation</b> display at the target\'s height to move the band there, then do the same on the <b>azimuth</b> display. You can drag to follow it.',
-    enter(api) { put(L21, { r: 8.35, yft: 710, hdg: rel(-20) });
+    enter(api) { put(L21, { r: 9.15, yft: 1640, hdg: rel(-20) });
       if (!F.servoOn()) { api.succeed('Servo mode is off in your settings, so targets always show. You can skip this one.'); return; }
       F.servoClear(); hlScope('elev'); hlScope('az');
       const t = setInterval(() => { const v = F.servoSees(ac(L21)); if (v.E && v.A) { clearInterval(t); api.succeed('There it is on both displays. In Regular Training you keep the bands on the target yourself. For the rest of this intro I will keep them on it for you.'); } }, 150);
@@ -216,7 +223,7 @@ const CORE = [
       const ok = F.courseCat(a) === c || (F.courseAccepts(a, c) && c !== 'on' && F.courseCat(a) !== 'on');
       return { t, ok, why: ok ? `Yes: ${liveCourse(a)}.` : `Look again at where the course line crosses the tick. I see ${liveCourse(a)}.` }; }); },
     good: 'You call what you see, every few seconds.',
-    enter() { put(L21, { r: 8.3, yft: 700, hdg: rel(-20) }); hlScope('az'); } },
+    enter() { put(L21, { r: 9.1, yft: 1620, hdg: rel(-20) }); hlScope('az'); } },
   { id: 'gpQ', sec: 'scope', type: 'choice', cs: L21,
     say: `<p>Now the elevation display.</p>`,
     q: () => `Where is ${tel(L21)} against the glidepath?`,
@@ -224,81 +231,77 @@ const CORE = [
       { t: 'Below the glidepath, flying level to meet it', ok: true, why: 'Right.' },
       { t: 'On the glidepath', ok: false, why: 'Not yet: it is level at two thousand feet, and the glidepath is higher at this range.' }],
     good: `Before it meets the glidepath you don't give glidepath calls. You'll tell it when it's getting close.`,
-    enter() { put(L21, { r: 8.3, yft: 700, hdg: rel(-20) }); hlScope('elev'); } },
+    enter() { put(L21, { r: 9.1, yft: 1620, hdg: rel(-20) }); hlScope('elev'); } },
   { id: 'side', sec: 'scope', type: 'info', cs: L21,
     say: `<p>On the right: the <span class="k">readout</span> for the selected aircraft (range, height, heading), the surveillance view, and the <span class="k">log</span>, which shows every call, every reply and your points.</p>
       <p>Above them is the talk button and the type box. Typed and spoken calls are treated the same.</p>`,
-    enter() { put(L21, { r: 8.3, yft: 700, hdg: rel(-20) }); hlEl('readout', 'log', 'micBox', 'cmdForm'); } },
+    enter() { put(L21, { r: 9.1, yft: 1620, hdg: rel(-20) }); hlEl('readout', 'log', 'micBox', 'cmdForm'); } },
   { id: 'intent', sec: 'contact', type: 'choice', cs: L21,
     say: `<p>Before your first call, think about what the pilot asked for.</p>`,
     q: `What did ${'Lightning 21'} ask for at check-in?`,
     opts: [{ t: 'A full stop: land on the ship', ok: true, why: 'Yes, full stop.' }, { t: 'Practice approaches', ok: false, why: 'Not this time; practice aircraft say "request multiple practice PARs". That is in the Advanced section.' },
       { t: 'A no-gyro approach', ok: false, why: 'No; you decide that one, and it is in the Advanced section.' }],
     good: 'A full stop ends with a deck call and a landing.',
-    enter() { put(L21, { r: 8.3, yft: 700, hdg: rel(-20), contacted: false }); } },
+    enter() { put(L21, { r: 9.1, yft: 1620, hdg: rel(-20), contacted: false }); } },
   { id: 'contactCall', sec: 'contact', type: 'call', cs: L21,
-    say: `<p>Your first call to it is the <span class="k">contact call</span>.</p>`,
+    say: () => `<p>First, the <span class="k">BRC</span>, the base recovery course: the ship's heading, and the final course you line every aircraft up on. Right now it is BRC ${say3(F.BRC)}. ${tel(L21)} is well right of it, cutting in.</p><p>Your first call to it is the <span class="k">contact call</span>.</p>`,
     task: () => `Make the contact call to ${tel(L21)}: callsign, <b>Gator Final</b>, ask how it hears you, remind it the wheels should be down, and ask it to report seeing you.`,
     hint: () => `${tel(L21)}, Gator Final, how do you hear me, wheels should be down, report see me.`,
-    check(p, a, text) { return [csChk(p, a), /\bgator\s+final\b/i.test(text) ? null : '"Gator Final"', need(p, 'hear', '"how do you hear me"'), need(p, 'gear', '"wheels should be down"'), need(p, 'reportSee', '"report see me"')]; },
+    check(p, a, text) { return [csChk(p, a), /\b(?:gator\s+)?final\b/i.test(text) || /\bgator\s+final\b/i.test(p.norm || '') ? null : '"Gator Final" (your self-ID, right after the callsign)', need(p, 'hear', '"how do you hear me"'), need(p, 'gear', '"wheels should be down"'), need(p, 'reportSee', '"report see me"')]; },
     good: 'Loud and clear. That full contact call scores a bonus point. From now on the pilot reads back with just the callsign.',
-    enter() { put(L21, { r: 8.2, yft: 690, hdg: rel(-20), contacted: false, gear: false }); } },
+    enter() { put(L21, { r: 9.0, yft: 1600, hdg: rel(-20), contacted: false, gear: false }); } },
   { id: 'turnQ', sec: 'contact', type: 'choice', cs: L21,
     say: () => `<p>${tel(L21)} is right of course on heading ${say3(rel(-20))}, so it is cutting back toward the course line at twenty degrees. If you leave it, it will shoot through the line.</p>`,
     q: 'To ease it onto the course, which way do you turn it?',
-    opts: () => [{ t: `Come right, heading ${say3(rel(-10))}`, ok: true, why: 'Yes: a smaller cut toward the line, so it eases in instead of overshooting.' },
-      { t: `Come left, heading ${say3(rel(-30))}`, ok: false, why: 'That makes the cut steeper; it would overshoot the course faster.' },
+    opts: () => [{ t: `Turn right, heading ${say3(rel(-10))}`, ok: true, why: 'Yes: a smaller cut toward the line, so it eases in instead of overshooting.' },
+      { t: `Turn left, heading ${say3(rel(-30))}`, ok: false, why: 'That makes the cut steeper; it would overshoot the course faster.' },
       { t: 'No turn, just keep calling its position', ok: false, why: 'Position calls alone do not move it sideways. Headings are the only way to move it left or right.' }],
-    enter() { put(L21, { r: 8.0, yft: 640, hdg: rel(-20) }); } },
+    enter() { put(L21, { r: 8.8, yft: 1500, hdg: rel(-20) }); } },
   { id: 'lineup', sec: 'contact', type: 'call', cs: L21,
     say: `<p>Heading corrections always go with a course call: say where it is, then the turn.</p>`,
     tasks: [
-      { task: () => `Tell ${tel(L21)} where it is on course, then <b>come right heading ${say3(rel(-10))}</b>.`,
-        hint: () => `${cap(liveCourse(ac(L21)))}, come right heading ${say3(rel(-10))}.`,
-        check(p, a) { const h = has(p, 'hdg'); return [courseChk(p, a), !h ? `the turn (come right heading ${say3(rel(-10))})` : (h.v === rel(-10) && h.dir !== 'L') ? null : `the heading: right ${say3(rel(-10))}`]; },
+      { task: () => `Tell ${tel(L21)} where it is on course, then <b>turn right heading ${say3(rel(-10))}</b>.`,
+        hint: () => `${cap(liveCourse(ac(L21)))}, turn right heading ${say3(rel(-10))}.`,
+        check(p, a) { const h = has(p, 'hdg'); return [courseChk(p, a), !h ? `the turn (turn right heading ${say3(rel(-10))})` : (h.v === rel(-10) && h.dir !== 'L') ? null : `the heading: right ${say3(rel(-10))}`]; },
         then(next) { eng.feedback('info', 'Watch it ease toward the course line. I will stop the scope when it is nearly on.'); run(() => Math.abs(ac(L21).yft) < 140 || F.courseCat(ac(L21)) === 'on', { scale: 3 }, next); } },
       { task: () => `Nearly on course. Call its position and turn it onto the final course: <b>heading ${say3(F.BRC)}</b>.`,
-        hint: () => `${cap(liveCourse(ac(L21)))}, come right heading ${say3(F.BRC)}.`,
+        hint: () => `${cap(liveCourse(ac(L21)))}, turn right heading ${say3(F.BRC)}.`,
         check(p, a) { const h = has(p, 'hdg'); return [courseChk(p, a), !h ? `the turn (heading ${say3(F.BRC)})` : h.v === F.BRC ? null : `the heading: ${say3(F.BRC)}, the final course`]; } }],
     good: 'Lined up. Small corrections from here: five degrees or less close in.',
-    enter() { put(L21, { r: 7.9, yft: 620, hdg: rel(-20) }); } },
+    enter() { put(L21, { r: 8.7, yft: 1450, hdg: rel(-20) }); } },
+  { id: 'dna', sec: 'contact', type: 'call', cs: L21,
+    say: `<p>It's established on the final course. From here you talk almost non-stop: course calls now, glidepath calls soon. So the pilot stops answering. Tell it now, on its own, as soon as it is on the course line.</p>`,
+    task: 'Say <b>do not acknowledge further transmissions</b>.', hint: 'Do not acknowledge further transmissions.',
+    check(p) { return [need(p, 'dna', '"do not acknowledge further transmissions"')]; },
+    good: 'From now on the pilot stays quiet, so you will not hear readbacks. That is normal: only "see you", the deck call reply and emergencies still get an answer.',
+    enter() { let a = ac(L21); if (!a || a.phase !== 'final' || Math.abs(a.yft) > 250 || F.ttiGp(a) < 30) a = put(L21, { r: 7.5, yft: 20 }); a.tgtHdg = F.BRC; } },
   { id: 'gpWatch', sec: 'gp', type: 'watch', cs: L21,
     say: `<p>Now watch the elevation display. ${tel(L21)} is level at two thousand feet and the glidepath comes down to meet it.</p>`,
     task: 'Watch it close on the glidepath.',
-    enter(api) { const a = ac(L21) && ac(L21).phase === 'final' && ac(L21).r > 6.8 ? ac(L21) : put(L21, { r: 7.5, yft: 40 }); a.tgtHdg = F.BRC; hlScope('elev');
+    enter(api) { const a = ac(L21) && ac(L21).phase === 'final' && F.ttiGp(ac(L21)) > 26 ? ac(L21) : put(L21, { r: 7.4, yft: 20, dna: true }); a.tgtHdg = F.BRC; hlScope('elev');
       run(() => F.ttiGp(ac(L21)) <= 24, { scale: 3 }, () => api.succeed('Close now: about twenty seconds from the glidepath.')); } },
   { id: 'appr', sec: 'gp', type: 'call', cs: L21,
     say: `<p>Ten to thirty seconds before it meets the glidepath, warn the pilot.</p>`,
     task: 'Say <b>approaching glidepath</b>.', hint: 'Approaching glidepath.',
     check(p) { return [need(p, 'approachingGp', '"approaching glidepath"')]; },
     good: 'Good timing. That earns a bonus point.',
-    enter() { const a = ac(L21); if (!a || a.phase !== 'final' || F.ttiGp(a) > 30 || F.ttiGp(a) < 10) { const r = 2000 / F.gpAlt(1) + 0.5; put(L21, { r, yft: 30 }); } } },
+    enter() { const a = ac(L21); if (!a || a.phase !== 'final' || F.ttiGp(a) > 30 || F.ttiGp(a) < 10) { const r = 2000 / F.gpAlt(1) + 0.5; put(L21, { r, yft: 30, dna: true }); } } },
   { id: 'begin', sec: 'gp', type: 'call', cs: L21, wait: true,
     say: `<p>When the target reaches the glidepath line, the pilot needs your call to start down. I'll run the scope until it gets there.</p>`,
     task: 'It is on the glidepath. Say <b>begin descent</b>.', hint: 'Begin descent.',
     check(p) { return [need(p, 'beginDescent', '"begin descent"')]; },
     good: 'Descending. It will now follow your glidepath calls.',
-    enter(api) { let a = ac(L21); if (!a || a.phase !== 'final' || F.ttiGp(a) > 32) a = put(L21, { r: 2000 / F.gpAlt(1) + 0.3, yft: 30 });
+    enter(api) { let a = ac(L21); if (!a || a.phase !== 'final' || F.ttiGp(a) > 32) a = put(L21, { r: 2000 / F.gpAlt(1) + 0.3, yft: 30, dna: true });
       ready = false; run(() => F.gpAlt(ac(L21).r) <= ac(L21).z + 12, { scale: 3 }, () => { goNow('It is on the glidepath now.'); }); } },
-  { id: 'dna', sec: 'gp', type: 'call', cs: L21,
-    say: `<p>On the glidepath you talk almost non-stop, so the pilot stops answering. Tell it right after begin descent, on its own.</p>`,
-    task: 'Say <b>do not acknowledge further transmissions</b>.', hint: 'Do not acknowledge further transmissions.',
-    check(p) { return [need(p, 'dna', '"do not acknowledge further transmissions"')]; },
-    good: 'From now on the pilot stays quiet, so you will not hear readbacks. That is normal.',
-    enter() { const a = ac(L21); if (!a || a.phase !== 'descent') put(L21, { r: 6.1, phase: 'descent' }); } },
-  { id: 'rhythm', sec: 'talk', type: 'watch', cs: L21,
+  { id: 'combo', sec: 'talk', type: 'call', cs: L21, wait: true,
     say: `<p>Now the talk-down. Every few seconds: the course, then the glidepath. Once every mile add the range, like <span class="ex">On course, on glidepath, five miles.</span></p>
-      <p>Watch both displays for a few seconds while it comes down.</p>`,
-    task: 'Watch the target on both displays.',
-    enter(api) { let a = ac(L21); if (!a || a.phase !== 'descent' || a.r < 5.3 || a.r > 5.8) a = put(L21, { r: 5.6, phase: 'descent', dna: true, yft: a ? a.yft : 0 });
-      run(() => ac(L21).r <= 5.05, { scale: 1, simTimeout: 60 }, () => api.succeed('Five miles. Your turn.')); } },
-  { id: 'combo', sec: 'talk', type: 'call', cs: L21,
-    say: `<p>Put it together.</p>`,
-    task: 'Give the course, the glidepath and the range in one call.',
+      <p>Watch both displays while it comes down. I'll stop the scope at five miles, then you put it all together in one call.</p>`,
+    task: 'Five miles. Give the course, the glidepath and the range in one call.',
     hint: () => { const a = ac(L21); return `${cap(liveCourse(a))}, ${liveGp(a)}, ${MILES[Math.round(a.r)]} miles.`; },
     check(p, a) { return [courseChk(p, a), gpChk(p, a), rangeChk(p, a)]; },
     good: 'That is the rhythm: course, glidepath, and the range every mile.',
-    enter() { const a = ac(L21); if (!a || a.phase !== 'descent' || Math.abs(a.r - 5) > 0.3) put(L21, { r: 5.0, phase: 'descent', dna: true, yft: 30 }); hlScope('elev'); hlScope('az'); } },
+    enter(api) { let a = ac(L21); if (!a || a.phase !== 'descent' || a.r < 5.2 || a.r > 6.5) a = put(L21, { r: 5.6, phase: 'descent', dna: true, yft: a ? Math.max(-60, Math.min(60, a.yft)) : 0 }); hlScope('elev'); hlScope('az');
+      ready = false; run(() => ac(L21).r <= 5.05, { scale: 1, simTimeout: 90 }, () => { goNow('Your turn.'); }); } },
   { id: 'trendQ', sec: 'talk', type: 'choice', cs: L21,
     say: `<p>Sometimes the target keeps moving the same way, sweep after sweep.</p>`,
     q: 'It is on the glidepath but each sweep shows it a little higher. What do you add?',
@@ -314,7 +317,8 @@ const CORE = [
     check(p, a) { return [courseChk(p, a), gpChk(p, a)]; },
     then(done) { run(() => false, { scale: 3, simTimeout: 9 }, () => done()); },
     good: 'Watch it settle back toward the line: your position call is all the pilot needs. Below the glidepath works the same way.',
-    enter() { const r = 4.5; let dz = 60; for (let d = 30; d <= 220; d += 5) { const t = { r, z: F.gpAlt(r) + d }; if (F.gpCat(t) === 'slightly' && F.gpAccepts(t, 'slightly') && !F.gpAccepts(t, 'on') && !F.gpAccepts(t, 'plain')) { dz = d; break; } }
+    enter() { const r = 4.5, okD = []; for (let d = 10; d <= 400; d += 5) { const t = { r, z: F.gpAlt(r) + d }; if (F.gpCat(t) === 'slightly' && F.gpAccepts(t, 'slightly') && !F.gpAccepts(t, 'on') && !F.gpAccepts(t, 'plain')) okD.push(d); }
+      const dz = okD.length ? okD[Math.floor(okD.length * 0.6)] : 90;   // v122: well inside the "slightly above" band, so the tick is visibly off the line
       put(L21, { r, phase: 'descent', dna: true, dz }); hlScope('elev'); } },
   { id: 'wind', sec: 'talk', type: 'call', cs: L21, wait: true,
     say: `<p>Wind pushes the aircraft sideways. I've added a crosswind from the right, and I'll run the scope so you can watch it drift left of course on the azimuth display.</p>
@@ -360,16 +364,18 @@ const CORE = [
       a.yft = Math.max(-60, Math.min(60, a.yft)); a.tgtHdg = F.BRC; a.hdg = F.BRC;
       ready = false; run(() => ac(L21).r <= 0.78, { scale: 3 }, () => { goNow('Three-quarter mile.'); }); } },
   { id: 'sinker', sec: 'wrong', type: 'call', cs: 'LTNG22', wait: true,
-    say: () => `<p>A new jet, ${tel('LTNG22')}, is on the glidepath at three miles. Some aircraft keep sinking even after your glidepath calls. Watch the elevation display.</p>`,
-    task: () => `It is sinking below the glidepath. Give the full <b>low altitude alert</b>: the alert, the callsign, check your altitude immediately, and the altimeter.`,
+    say: () => `<p>A new jet, ${tel('LTNG22')}, is on the glidepath at three miles. Some aircraft keep sinking even after your glidepath calls. Watch the elevation display.</p>
+      <p>Under the glidepath is the <span class="k">lower safety limit</span>; I've marked it. A little low is a normal glidepath call. Once the target goes <b>past the lower safety limit</b>, you give a <span class="k">low altitude alert</span>.</p>
+      <p>The alert ends with the <span class="k">altimeter</span> setting: the local air pressure, here 29.92 inches, said "two niner niner two". The pilot sets it so the altimeter shows the right height, so it always goes with a low altitude alert.</p>`,
+    task: () => `It is past the lower safety limit. Give the full <b>low altitude alert</b>: the alert, the callsign, check your altitude immediately, and the altimeter, two niner niner two.`,
     hint: () => `Low altitude alert, ${tel('LTNG22')}, check your altitude immediately, altimeter two niner niner two.`,
     check(p, a, text) { const t = ' ' + String(text).toLowerCase() + ' ';
-      return [need(p, 'laa', '"low altitude alert"'), csChk(p, a), /check (?:your )?altitude immediately/.test(t) ? null : '"check your altitude immediately"', (F.altimeterOk(text) || F.altimeterOk(p.raw || '')) ? null : '"altimeter two niner niner two"']; },
+      return [need(p, 'laa', '"low altitude alert"'), csChk(p, a), /check (?:your |the )?altitude/.test(t) ? null : '"check your altitude immediately"', (F.altimeterOk(text) || F.altimeterOk(p.raw || '')) ? null : '"altimeter two niner niner two"']; },
     post(a) { return a.sinkOn ? 'the full alert: all four parts' : null; },
     then(done) { run(() => false, { scale: 3, simTimeout: 8 }, () => done()); },
     good: 'The pilot climbs back to the glidepath on its own. A low altitude alert always goes out in full, even after "do not acknowledge".',
     enter(api) { const a = put('LTNG22', { r: 3.3, phase: 'descent', dna: true, sinkR: 3.15 }); hlScope('elev');
-      ready = false; run(() => F.gpAlt(ac('LTNG22').r) - ac('LTNG22').z > 70, { scale: 2, simTimeout: 60 }, () => { goNow('It is sinking. Call it now.'); }); } },
+      ready = false; run(() => F.elevAngle(ac('LTNG22')) < F.LIM.lowerSafeDeg, { scale: 2, simTimeout: 90 }, () => { goNow('It is past the lower safety limit. Call it now.'); }); } },
   { id: 'waveoff', sec: 'wrong', type: 'call', cs: 'LTNG22',
     say: () => `<p>Now it has gone well left close in. That is unsafe: wave it off. The wave-off is said twice, then the altitude in angels and the base recovery course.</p>`,
     task: () => `Wave off ${tel('LTNG22')}: <b>take angels two</b>, fly base recovery course ${say3(F.BRC)}.`,
@@ -378,7 +384,7 @@ const CORE = [
     post(a) { return a.phase === 'missed' ? null : 'the wave-off (it did not go around)'; },
     then(done) { run(() => false, { scale: 3, simTimeout: 8 }, () => done()); },
     good: 'Waving off. A wave-off costs no points: an unsafe approach is never worth saving.',
-    enter() { put('LTNG22', { r: 1.3, phase: 'descent', dna: true, yft: -520, hdg: rel(-6) }); hlScope('az'); } },
+    enter() { put('LTNG22', { r: 1.4, phase: 'descent', dna: true, yft: -1000, hdg: rel(-8) }); hlScope('az'); } },
   { id: 'selfQ', sec: 'wrong', type: 'choice',
     say: '<p>One more safety rule.</p>',
     q: 'A full-stop jet reaches half a mile and you never gave the deck call. What does the pilot do?',
@@ -388,19 +394,20 @@ const CORE = [
     good: 'The same happens if it is unstable close in, or if you stop talking for too long: the pilot assumes lost communications and waves off.',
     enter() { const g = G(); g.ac = g.ac.filter(x => x.phase === 'missed'); F.refreshPanel(true); } },
   { id: 'ship', sec: 'ship', type: 'call', cs: 'LTNG23',
-    say: () => `<p>The ship turns now and then, and the final course turns with it. I'll start a starboard turn of ten degrees with ${tel('LTNG23')} on final. Watch the banner.</p>`,
+    say: () => `<p>The ship turns now and then, and the final course turns with it. The aircraft doesn't move in the sky, so as the BRC swings, its target moves on your scope. I'll start a small starboard turn, three degrees, with ${tel('LTNG23')} on final. Watch the banner and the target.</p>`,
     tasks: [
       { task: 'Mother is turning. Broadcast it: <b>99, mother is in starboard turn, standby for new BRC</b>.', hint: '99, mother is in starboard turn, standby for new BRC.',
         ship: 'turn', post() { const s = G().ship; return s && s.gotTurn ? null : 'the 99 turn call while the ship is turning (port or starboard)'; },
-        then(next) { eng.feedback('info', 'Watch the course line swing. I will stop when the ship is steady.'); run(() => { const s = G().ship; return s.phase !== 'turn' && s.phase !== 'warn' && s.endT != null; }, { scale: 1 }, next); } },
+        then(next) { eng.feedback('info', 'Watch the target slide right of course as the final course swings to the new BRC. I will stop when the ship is steady.'); run(() => { const s = G().ship; return s.phase !== 'turn' && s.phase !== 'warn' && s.endT != null; }, { scale: 1 }, next); } },
       { task: () => `Mother is steady. Broadcast the new BRC: <b>99, mother is steady, new BRC ${say3(F.shipBrcT())}</b>.`, hint: () => `99, mother is steady, new BRC ${say3(F.shipBrcT())}.`,
         ship: 'steady', post() { const s = G().ship; return s && s.gotSteady ? null : `the 99 steady call with the new BRC ${say3(F.shipBrcT())}`; } },
-      { task: () => `The course moved but ${tel('LTNG23')} kept its old heading. Turn it onto the new final course: <b>heading ${say3(F.BRC)}</b>.`,
-        hint: () => `${cap(liveCourse(ac('LTNG23')))}, come right heading ${say3(F.BRC)}.`,
-        check(p, a) { const h = has(p, 'hdg'); return [!h ? `the heading (${say3(F.BRC)})` : h.v === F.BRC ? null : `the new final course ${say3(F.BRC)}`]; } }],
-    good: 'Two 99 calls each turn, then fix the heading. Each 99 call is worth ten points.',
+      { task: () => `The final course swung with the ship, so ${tel('LTNG23')} is now ${liveCourse(ac('LTNG23'))} of the new course, still on its old heading. Call its position and turn it back toward the new course: <b>come left heading ${say3(rel(-10))}</b>.`,
+        hint: () => `${cap(liveCourse(ac('LTNG23')))}, come left heading ${say3(rel(-10))}.`,
+        check(p, a) { const h = has(p, 'hdg'), d = h ? ((h.v - F.BRC + 540) % 360) - 180 : null;
+          return [courseChk(p, a), !h ? `the heading back to the course (come left heading ${say3(rel(-10))})` : (d <= -5 && d >= -20 && h.dir !== 'R') ? null : `a left heading 5 to 20 degrees left of the new BRC ${say3(F.BRC)}, like come left heading ${say3(rel(-10))}`]; } }],
+    good: 'Two 99 calls each turn, then put it back on the new course. Each 99 call is worth ten points.',
     enter(api) { const g = G(); put('LTNG23', { r: 6.5, yft: 0, z: 2000 }); g.ship.phase = null; g.ship.endT = null;
-      F.shipInstCmd({ dir: 'starboard', deg: 10 }); ready = false;
+      F.shipInstCmd({ dir: 'starboard', deg: 3 }); ready = false;
       run(() => G().ship.phase === 'turn', { scale: 1 }, () => { goNow('Mother is turning.'); }); } },
   { id: 'grading', sec: 'ship', type: 'info',
     say: () => { const g = G(), r = (g.results || []).find(x => x.cs === L21); return `<p>Every call is graded. In the log, green lines with a star are points, amber lines are warnings, and red lines cost points.</p>
@@ -480,7 +487,7 @@ const ADV = [
 
 /* v109: what Aero points at in each step */
 const MARKS = {
-  welcome: () => { markEl('cmdForm', 'Type your calls here'); markEl('micBox', 'Or hold to talk'); markEl('fiSpd', 'Sim speed'); },
+  welcome: () => { markEl('cmdForm', 'Type your calls here'); markEl('micBox', 'Or hold to talk'); },
   elev: () => { markGp(6.6, 'Glidepath'); ringE(L21); },
   az: () => { markCourse(9.4, 'Course line'); ringA(L21); },
   courseQ: () => ringA(L21, 'Read this tick'),
@@ -493,15 +500,14 @@ const MARKS = {
   gpWatch: () => { ringE(L21, 'Level at 2,000 ft'); markGp(5, 'Glidepath'); },
   appr: () => { ringE(L21, 'Nearly on the glidepath'); },
   begin: () => { ringE(L21); markGp(5, 'Glidepath'); },
-  dna: () => { ringE(L21, 'Descending'); },
-  rhythm: () => { ringE(L21, 'Glidepath call'); ringA(L21, 'Course call'); markRange(5, '5 miles'); },
+  dna: () => { ringA(L21, 'On the course line'); markCourse(5, 'Course line'); },
   combo: () => { ringE(L21, 'Glidepath'); ringA(L21, 'Course'); markRange(5, '5 miles'); },
   trendQ: () => { ringE(L21, 'Each sweep a little higher'); },
   adjust: () => { ringE(L21, 'Off the glidepath'); markGp(3, 'Glidepath'); },
   wind: () => { ringA(L21, 'Drifting'); markCourse(6.5, 'Course line'); },
   deckQ: () => { markRange(0.75, '¾ mile'); ringE(L21); },
   ball: () => { markRange(0.75, '¾ mile'); ringE(L21, 'Glidepath'); ringA(L21, 'Course'); },
-  sinker: () => { ringE('LTNG22', 'Sinking'); markGp(5, 'Glidepath'); },
+  sinker: () => { ringE('LTNG22', 'Sinking'); markGp(5, 'Glidepath'); markSafe(1.7, 'Lower safety limit'); },
   waveoff: () => { ringA('LTNG22', 'Well left, close in'); markCourse(4, 'Course line'); },
   selfQ: () => { markRange(0.5, '½ mile'); },
   ship: () => { markEl('shipBanner', 'Ship turn'); markCourse(8.5, 'Final course'); ringA('LTNG23'); },
@@ -536,6 +542,7 @@ FI.gate = function (p, text) {
   eng.hush();
   if (!st || st.type !== 'call' || eng.solved) { eng.feedback('info', st && st.type === 'done' ? 'The guided part is finished. Pick what to do next.' : 'No radio call needed for this step. Press Next when you are ready.'); return false; }
   if (!ready) { eng.feedback('info', 'Not yet: wait until I stop the scope.'); return false; }
+  if (PAUSED) { eng.feedback('info', 'Paused. Press Resume first.'); return false; }
   if (t.ship) { eng.fail(heardMsg(p, ['a 99 call (start with "99, mother")'])); return false; }
   if (p.cmds && p.cmds.some(c => c.k === 'adjDescent')) { eng.fail(heardMsg(p, ['leave out the rate of descent: only tell the pilot where it is (course, glidepath, range)'])); return false; }
   const a = cur();
@@ -595,12 +602,13 @@ function launch(which, opts) {
     speechFix: s => s.replace(/\b99\b/g, 'niner niner').replace(/\bF-35B\b/g, 'F thirty-five B').replace(/\b(Lightning|Knight|Nighthawk|Gunfighter|Viper|Venom|Ridge|Charger)\s+(\d{2,3})\b/g, (m, w, d) => w + ' ' + IntroEngine.sayDigits(d)),
     task: st => { const t = tasksOf(st)[st === (eng && eng.step) ? sub : 0]; return t ? val(t.task) : val(st.task); },
     hint: st => { const t = tasksOf(st)[st === (eng && eng.step) ? sub : 0]; return t ? val(t.hint) : null; },
-    onEnter(st, api) { clearHL(); sub = 0; held = null; ready = true; freeze();
+    onEnter(st, api) { clearHL(); sub = 0; held = null; ready = true; PAUSED = false; freeze();
       if (st.tasks) setSub(0);
       if (st.type === 'done') setMeta(which === 'adv' ? { advDone: true } : { coreDone: true });
       const c = st.enter ? st.enter(api) : null; F.refreshPanel(true); if (MARKS[st.id]) try { MARKS[st.id](api); } catch (e) { console.error(e); } return c; },
     onLeave(st) { stopRun(); clearHL(); sub = 0; if (st.leave) try { st.leave(); } catch (e) {} },
     onSkip(st) { stopRun(); },
+    onPause(on) { onPause(on); },
     onExit() { exitToStart('train'); },
     nextCue: 'Click <b>Next</b> when you\'re ready.',
     renderDone(st, el) { doneButtons(el, which); } });

@@ -19,10 +19,17 @@ const CSS = `
 @keyframes ieBar{0%,100%{height:3px}50%{height:12px}}
 .ie .sec{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ie .who button{min-height:26px;padding:2px 7px;font-size:11px}
-.ie .prog{display:flex;gap:3px}
-.ie .prog .seg{flex:1;height:7px;border:1px solid var(--gdd,#1f3524);border-radius:3px;position:relative;overflow:hidden}
-.ie .prog .seg i{position:absolute;left:0;top:0;bottom:0;background:#2f7a3c;width:0;transition:width .3s}
-.ie .prog .seg.cur{border-color:#9dffad;box-shadow:0 0 6px rgba(120,255,140,.35)}
+.ie .prog{display:flex;gap:3px;align-items:stretch}
+.ie .prog .seg{flex:1;min-width:0;height:26px;border:1px solid var(--gdd,#1f3524);border-radius:4px;position:relative;overflow:hidden;font-size:11px;color:var(--dim,#7d9a80);display:flex;align-items:center;justify-content:center;cursor:default}
+.ie .prog .seg i{position:absolute;left:0;top:0;bottom:0;background:#123a1b;width:0;transition:width .3s}
+.ie .prog .seg span{position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 3px}
+.ie .prog .seg .no{opacity:.7;margin-right:2px}
+.ie .prog .seg.cur{border:2px solid #9dffad;color:#eaffee;font-weight:bold;box-shadow:0 0 10px rgba(120,255,140,.35)}.ie .prog .seg.cur i{background:#1d6a2c}
+.ie .prog .seg.done{color:var(--ok,#6dff8a);border-color:#2f7a3c}.ie .prog .seg.done i{background:#123a1b}
+.ie .secNow{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--dim,#7d9a80)}
+.ie .secNow .snName{font-size:14px;letter-spacing:2px;color:#d8ffde;font-weight:bold}.ie .secNow .snStep{margin-left:auto;color:var(--amber,#ffbf3c)}
+.ie .bPause.on{border-color:#ffbf3c;color:#ffbf3c;background:#2a2410}
+.ie.paused .say{opacity:.75}
 .ie .say{font-size:14px;line-height:1.45;color:#d8ffde}
 .ie .say p{margin:0 0 7px}.ie .say p:last-child{margin:0}
 .ie .say .k,.ie .k{color:var(--amber,#ffbf3c)}
@@ -111,8 +118,8 @@ function create(cfg) {
   const steps = cfg.steps, secs = cfg.sections || [];
   const root = document.createElement('div'); root.className = 'ie'; root.id = cfg.id || 'aeroBox';
   root.innerHTML = `<div class="who"><span class="av">A</span><b>AERO</b><span class="bars"><i></i><i></i><i></i></span><span class="sec"></span>
-      <button type="button" class="bMute"></button><button type="button" class="bExit">${esc(cfg.exitLabel || 'Exit to training')}</button></div>
-    <div class="prog"></div><div class="say"></div><div class="tk"></div><div class="fb"></div><div class="cue"></div>
+      <button type="button" class="bPause" title="Pause Aero and the scope (P)">❚❚ Pause</button><button type="button" class="bMute"></button><button type="button" class="bExit">${esc(cfg.exitLabel || 'Exit to training')}</button></div>
+    <div class="prog"></div><div class="secNow"><span class="snLbl"></span><span class="snName"></span><span class="snStep"></span></div><div class="say"></div><div class="tk"></div><div class="fb"></div><div class="cue"></div>
     <div class="nav"><button type="button" class="bBack">Back</button><button type="button" class="bRep">Repeat</button><span class="no"></span><button type="button" class="next">Next</button></div>`;
   (cfg.mount || document.body).prepend(root);
   const q = c => root.querySelector(c);
@@ -140,6 +147,7 @@ function create(cfg) {
   }
   function speak(html) {
     if (!TTS || muted || !html || dead) return;
+    if (paused) { pq.push(...chunks(html, cfg.speechFix)); return; }   // v122: held until Resume
     sq.push(...chunks(html, cfg.speechFix));
     if (busy) return; busy = true; const g = gen, wait = Math.max(0, 150 - (performance.now() - lastCancel));
     setTimeout(() => { if (g === gen) nextChunk(); }, wait);
@@ -150,9 +158,23 @@ function create(cfg) {
     if (sq.length) { busy = true; const g = gen; setTimeout(() => { if (g === gen) nextChunk(); }, 400); }
   }
   function hush() {
+    pq = [];
     const had = busy || sq.length; gen++; sq = []; busy = false; setTalking(false); curC = null;
     if (had && TTS) try { speechSynthesis.cancel(); lastCancel = performance.now(); } catch (e) {}
   }
+  /* v122: Pause stops Aero mid-sentence (the sentence is replayed from its start on Resume) and tells the host to hold the scope */
+  let paused = false, pq = [];
+  const bPause = q('.bPause');
+  function setPause(on, quiet) {
+    on = !!on; if (on === paused) return; 
+    if (on) { const rest = (curC ? [curC] : []).concat(sq); hush(); pq = rest.map(c => Object.assign({}, c, { waited: 0 })); paused = true; }
+    else { paused = false; const rest = pq; pq = []; if (rest.length && !quiet && !muted) { sq = rest; busy = true; const g = gen; setTimeout(() => { if (g === gen) nextChunk(); }, 150); } }
+    root.classList.toggle('paused', paused); bPause.classList.toggle('on', paused); bPause.textContent = paused ? '▶ Resume' : '❚❚ Pause'; bPause.title = paused ? 'Resume Aero and the scope (P)' : 'Pause Aero and the scope (P)';
+    if (cfg.onPause) try { cfg.onPause(paused, api); } catch (e) { console.error(e); }
+  }
+  bPause.onclick = () => setPause(!paused);
+  const onKey = e => { if (dead || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return; const t = e.target, tag = t && t.tagName; if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return; if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setPause(!paused); } };
+  document.addEventListener('keydown', onKey);
   function setMute(m) { muted = !!m; try { localStorage.setItem(LS_MUTE, m ? '1' : '0'); } catch (e) {} bMute.textContent = m ? 'Unmute' : 'Mute'; bMute.title = m ? 'Unmute Aero' : 'Mute Aero'; if (m) hush(); }
   setMute(muted);
   bMute.onclick = () => setMute(!muted);
@@ -162,15 +184,22 @@ function create(cfg) {
   const val = (v, st) => typeof v === 'function' ? v(st, api) : v;
   function drawProg() {
     elProg.innerHTML = '';
-    secs.forEach(sc => {
-      const mine = steps.filter(s => s.sec === sc.id), n = mine.length || 1, d = mine.filter(s => res[s.id]).length;
-      const seg = document.createElement('div'); seg.className = 'seg' + (steps[idx] && steps[idx].sec === sc.id ? ' cur' : ''); seg.title = sc.name;
-      seg.innerHTML = `<i style="width:${Math.round(100 * d / n)}%"></i>`; elProg.appendChild(seg);
+    // v122: same strip as intro.html: one labelled box per section, filled by position (steps behind you are done), full + green when finished
+    const st = steps[idx], allDone = st && st.type === 'done';
+    secs.forEach((sc, si) => {
+      const ids = steps.map((s, j) => s.sec === sc.id && s.type !== 'done' ? j : -1).filter(j => j >= 0), n = ids.length || 1;
+      const d = allDone ? n : ids.filter(j => j < idx || (j === idx && solved)).length;
+      const seg = document.createElement('div'); seg.className = 'seg' + (st && st.sec === sc.id && !allDone ? ' cur' : '') + (d >= n ? ' done' : ''); seg.title = sc.name;
+      seg.innerHTML = `<i style="width:${d >= n ? 100 : Math.round(100 * d / n)}%"></i><span><span class="no">${si + 1}</span>${esc(sc.short || sc.name)}</span>`; elProg.appendChild(seg);
     });
-    const st = steps[idx], sc = st && secs.find(x => x.id === st.sec);
-    elSec.textContent = sc ? sc.name : '';
+    const sc = st && secs.find(x => x.id === st.sec), si = sc ? secs.indexOf(sc) : -1;
+    elSec.textContent = '';
+    const mineS = sc ? steps.filter(s => s.sec === sc.id && s.type !== 'done') : [];
+    q('.snLbl').textContent = allDone ? 'ALL SECTIONS DONE' : sc && secs.length > 1 ? `SECTION ${si + 1} OF ${secs.length}` : '';
+    q('.snName').textContent = allDone ? 'COMPLETE' : sc ? sc.name.toUpperCase() : '';
+    q('.snStep').textContent = !allDone && mineS.length > 1 && mineS.indexOf(st) >= 0 ? `Step ${mineS.indexOf(st) + 1} of ${mineS.length} in this section` : '';
     const real = steps.filter(s => s.type !== 'done'), k = real.indexOf(st);
-    elNo.textContent = k >= 0 ? `Step ${k + 1} of ${real.length}` : '';
+    elNo.textContent = k >= 0 ? `Step ${k + 1} of ${real.length} overall` : '';
   }
   /* v109: when Next is ready, Aero says so (spoken once, and shown above the Next button) */
   const cueHtml = () => cfg.nextCue ? val(cfg.nextCue, steps[idx]) : '';
@@ -189,8 +218,8 @@ function create(cfg) {
     if (opt && opt.auto) setTimeout(() => { if (steps[idx] === st) next(); }, opt.auto);
   }
   function fail(html) { fails++; feedback('bad', html); speak(html); const st = steps[idx]; if (fails >= 2 && st) showHint(); }
-  const hintOf = st => cfg.hint ? cfg.hint(st, api) : val(st.hint, st);
-  const taskOf = st => cfg.task ? cfg.task(st, api) : val(st.task, st);
+  const hintOf = st => { try { return cfg.hint ? cfg.hint(st, api) : val(st.hint, st); } catch (e) { return ''; } };
+  const taskOf = st => { try { return cfg.task ? cfg.task(st, api) : val(st.task, st); } catch (e) { return ''; } };   // v122: a task that reads the scene may run before the step has built it
   function showHint() { const st = steps[idx]; const h = q('.hintBox'); const t = st && hintOf(st); if (h && t) { h.innerHTML = `Say: <span class="ex">${t}</span>`; h.style.display = ''; } }
   function renderTask(html) { const t = q('.tkTask'); if (t) { t.innerHTML = html; t.style.display = html ? '' : 'none'; } }
 
@@ -199,6 +228,7 @@ function create(cfg) {
     i = Math.max(0, Math.min(steps.length - 1, i | 0));
     if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
     if (steps[idx] && cfg.onLeave) try { cfg.onLeave(steps[idx], api); } catch (e) { console.error(e); }
+    if (paused) setPause(false, true);
     hush(); idx = i; fails = 0; solved = false; save();
     const st = steps[i];
     elSay.innerHTML = val(st.say, st) || ''; elTk.innerHTML = ''; feedback('', '');
@@ -226,6 +256,7 @@ function create(cfg) {
     }
     drawProg();
     if (cfg.onEnter) try { cleanup = cfg.onEnter(st, api) || null; } catch (e) { console.error(e); }
+    if (st.type === 'call' || st.type === 'watch') { const tt = q('.tkTask'), tk = taskOf(st); if (tt) { tt.innerHTML = tk || ''; tt.style.display = tk ? '' : 'none'; } }   // v122: the task reads the scene the step just built (e.g. "slightly above glidepath")
     if (!(opts && opts.silent)) {
       let narr = elSay.innerHTML;
       if (st.type === 'choice') narr += `<p>${val(st.q, st)}</p>`; else if ((st.type === 'call' || st.type === 'watch') && taskOf(st) && st.sayTask !== false && !st.wait) narr += `<p>${taskOf(st)}</p>`;
@@ -240,8 +271,8 @@ function create(cfg) {
   q('.bExit').onclick = () => { if (cfg.onExit) cfg.onExit(api); };
 
   function load() { if (!cfg.storeKey) return null; try { return JSON.parse(localStorage.getItem(cfg.storeKey) || 'null'); } catch (e) { return null; } }
-  function destroy() { if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; } if (steps[idx] && cfg.onLeave) try { cfg.onLeave(steps[idx], api); } catch (e) {} hush(); dead = true; root.remove(); }
-  const api = { root, show, next, succeed, fail, feedback, speak, hush, yieldVoice, setNext, renderTask, showHint, destroy, load, setMute,
+  function destroy() { document.removeEventListener('keydown', onKey); if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; } if (steps[idx] && cfg.onLeave) try { cfg.onLeave(steps[idx], api); } catch (e) {} hush(); dead = true; root.remove(); }
+  const api = { root, show, next, succeed, fail, feedback, speak, hush, yieldVoice, setNext, renderTask, showHint, destroy, load, setMute, setPause, get paused() { return paused; },
     get idx() { return idx; }, get talking() { return busy || sq.length > 0; }, get step() { return steps[idx]; }, get solved() { return solved; }, get fails() { return fails; }, get res() { return res; }, steps };
   const saved = load();
   if (saved && saved.res) res = saved.res;

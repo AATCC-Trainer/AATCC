@@ -34,7 +34,13 @@ const KEEP = new Set(['angles', 'angle', 'angel', 'angus', 'ankles', 'people', '
 const NW = '(?:\\d+|zero|oh|one|won|two|to|too|three|tree|four|for|fore|five|fife|six|seven|eight|ate|nine|niner)';
 const ALIASES = [
   // v102: self-ID "Gator" and its recognizer near-misses, only right before a position name (so a plain "later" is untouched)
+  // v122: "Final" self-ID near-misses ("gator file", "gator finals", "gator fine all", "data final") -> "gator final"
+  [/\b(?:gaiters?|gaters?|gators?|gator's|gator s|gaitor|gayter|gator|later|alligator|data|greater|navigator|cater|gate or)\s*,?\s+(?:finals?|files?|fine\s+all|find\s+all|finale|vinyl|spinal|binal|final's)\b/g, 'gator final'],
   [/\b(?:gaiters?|gaters?|gators?|gator's|gator s|gaitor|gayter|gator|later|alligator)\s*,?\s+(marshal+|marshall|martial|approach(?:es)?|final)\b/g, 'gator $1'],
+  // v122: low altitude alert near-misses
+  [/\b(?:low|lo|lower|load|lowe)\s+(?:attitude|altitudes|latitude|altitude)\s+(?:alert|alerts|a\s+lert|allert|a\s+lot|alerted)\b/g, 'low altitude alert'],
+  [/\bcheck\s+(your\s+|the\s+)?(?:attitude|latitude|altitudes)\b/g, 'check $1altitude'],
+  [/\b(?:all\s+to\s+meter|alter\s+meter|alt\s+meter|altimeters|all\s+timer|alt\s+emitter|ultimate\s+her)\b/g, 'altimeter'],
   // permanent frequency colors: never "blue"
   [/\bgo(?:\s+to)?\s+(?:blue|blew)\b/g, 'go silver'],
   [/\b(?:goal|gold|go\s+on|grow)\s+(silver|red|purple|copper)\b/g, 'go $1'],

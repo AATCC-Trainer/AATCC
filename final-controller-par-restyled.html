@@ -818,6 +818,11 @@ function setBRC(b) {
   b = Math.round(norm(+b)) || 360; if (b === BRC) return false;
   const old = BRC;
   BRC = b; RWY = BRC; BRC_OFF = BRC - 270; BRC3 = hdg3(BRC); BRC_SAY = sayDigits(BRC3);
+  if (G && !G.over && G.ac && isShip()) {   // v122: mother turning: the final course swings about the ship, the aircraft stay where they are in space,
+    const d = angDiff(b, old) * DEG, cd = Math.cos(d), sd = Math.sin(d);   // so each target moves on the scope relative to the new BRC (starboard turn -> targets shift right of course)
+    for (const a of G.ac) { if (!alive(a) || !PAR_PHASES.includes(a.phase) || a.r == null || a.yft == null) continue;
+      const R0 = a.r * NM_FT, y0 = a.yft; a.r = (R0 * cd - y0 * sd) / NM_FT; a.yft = R0 * sd + y0 * cd; }
+  }
   RWY_NUM = String(Math.round(BRC / 10) || 36).padStart(2, '0'); RWY_SAY = sayDigits(RWY_NUM);
   CLIMB_JET.hdg = norm(BRC - 90) || 360; CLIMB_HELO.hdg = norm(BRC + 90) || 360;
   if (G && G.wind) G.wind.dir = Math.round(norm(G.wind.dir - old + BRC)) || 360;
@@ -1617,7 +1622,7 @@ function laaParts(raw) {
   t = t.replace(/\b(\d)\s+(?=\d\b)/g, '$1').replace(/\s+/g, ' ');
   return {
     alert: /\blow altitude alerts?\b/.test(t),
-    check: /\bcheck (?:your )?altitude immediately\b/.test(t),
+    check: /\bcheck (?:your |the )?altitude(?: immediately)?\b/.test(t),   // v122: "check altitude" / "check your altitude" also count
     alt: /\baltimeter (?:setting )?(?:is )?2992\b/.test(t) || altimeterOk(raw)
   };
 }
@@ -1948,7 +1953,7 @@ function suggestCall(a) {
   const parts = [], say = [];
   const add = (t, s) => { parts.push(t); say.push(s || t); };
   const dev = elevDev(a), az = azDeg(a);
-  if (G.d.hints && a.sinkOn && gpSide(a) === 'below' && gpCat(a) !== 'on')
+  if (G.d.hints && a.sinkOn && gpSide(a) === 'below' && elevAngle(a) < LIM.lowerSafeDeg)   // v122: only once it is past the lower safety limit
     return { text: `Low altitude alert, ${a.tel}, ${LAA_SAY}`, say: `Low altitude alert, ${a.telSay}, ${LAA_SAY}`, laa: true };
   if (a.phase === 'visual') {   // (no safety-limit wave-off hint)
     if (isShip()) return { text: '(Ball call made. No more calls: it lands on its own.)', say: '' };   // v110: no talking after the ball
@@ -1965,7 +1970,7 @@ function suggestCall(a) {
         if (gap <= 110) return solo('begin descent');
         if (!a.apprCalled && (isShip() ? (ttiGp(a) >= APPR_WIN[0] + 0.5 && ttiGp(a) <= APPR_WIN[1]) : gap <= 420)) return solo('approaching glidepath');
       }
-      if (a.phase === 'descent' && !a.dna && !a.asr) return solo('do not acknowledge further transmissions');
+      if ((a.phase === 'final' || a.phase === 'descent') && !a.dna && !a.asr && courseCat(a) === 'on' && Math.abs(angDiff(a.hdg, RWY)) <= 6) return solo('do not acknowledge further transmissions');   // v122: once it is lined up on the final course
     }
     // azimuth
     const gsFt = Math.max(60, a.gs) * 1.68781;
@@ -2531,7 +2536,7 @@ const TUT = [
    <p>The readout gives exact numbers: range, height above/below the glidepath in feet, left/right of course in feet and degrees, groundspeed and heading.</p>`],
   ['3. The talk-down, step by step', `<ol><li><b>Contact</b>: "Lightning two one, this is your final controller, how do you hear me?"</li>
    <li><b>Line up</b> with small heading changes (2–5°): "turn left heading ${sayDigits(hdg3(BRC - 2))}", then say where it is: "slightly right of course".</li>
-   <li>As the glidepath comes down to the aircraft: "<b>approaching glidepath</b>", then, as a separate call when it reaches the glidepath, "<b>begin descent</b>", then on its own "<b>do not acknowledge further transmissions</b>". Pilots answer every call with their callsign until then; after one last callsign ack they stay quiet.</li>
+   <li>As the glidepath comes down to the aircraft: "<b>approaching glidepath</b>", then, as a separate call when it reaches the glidepath, "<b>begin descent</b>". Once the aircraft is lined up on the final course, on its own: "<b>do not acknowledge further transmissions</b>". Pilots answer every call with their callsign until then; after one last callsign ack they stay quiet.</li>
    <li>Every few seconds give course and glidepath calls: "on course", "slightly above glidepath"… and a <b>range call every mile</b>: "four miles from touchdown".</li>
    <li>Around 4–5 miles: "<b>check gear down</b>". Before DH: "<b>runway ${RWY_SAY}, cleared to land, wind …</b>".</li>
    <li>At 0.6 NM: "<b>at decision height</b>", then "<b>over landing threshold</b>", then "<b>contact tower</b>".</li></ol>
@@ -2572,7 +2577,7 @@ const TUT_SHIP = {
    <p><b>Ship turns</b> (solo: about every 10 minutes of sim time; linked: when Approach turns the ship): the side panel shows <b>SHIP TURN IN 5 · PORT/STARBOARD</b>, then <b>MOTHER IN PORT/STARBOARD TURN</b> while the ship turns at about 1°/s (BRC, FB = BRC − magvar and DWH update live), then <b>MOTHER STEADY — NEW BRC ___</b>. The final course line moves with the ship, so aircraft already on final drift off it: correct them. Broadcast "<b>ninety-nine, mother is in port turn, standby for new BRC</b>" during the turn and "<b>ninety-nine, mother is steady, new BRC is one seven three</b>" once steady (no readback).</p>`],
   2: ['3. The talk-down, step by step', `<ol><li><b>Contact</b> (+1 bonus when complete): "Lightning two one, ${FAC} final, how do you hear me, wheels should be down, report see me." Pilot: "Lightning two one, loud and clear, wheels down, will report see you."</li>
    <li><b>Line up</b>: say where it is, then a turn: "well right of course, <b>come right heading ${sayDigits(hdg3(BRC - 10))}</b>", then onto the BRC: "come right heading ${BRC_SAY}".</li>
-   <li>As the glidepath comes down to the aircraft, <b>10 to 30 seconds before it meets it</b>: "<b>approaching glidepath</b>" (+1 bonus), then, as a separate call when it reaches the glidepath, "<b>begin descent</b>" (the pilot only starts down on this call), then on its own "<b>do not acknowledge further transmissions</b>". Until you say that, the pilot answers every call with just the callsign ("Lightning two one"); it acks that call once more and then stays quiet (except "see you", the deck calls and emergencies).</li>
+   <li>As the glidepath comes down to the aircraft, <b>10 to 30 seconds before it meets it</b>: "<b>approaching glidepath</b>" (+1 bonus), then, as a separate call when it reaches the glidepath, "<b>begin descent</b>" (the pilot only starts down on this call). Once it is lined up on the final course, say on its own "<b>do not acknowledge further transmissions</b>". Until you say that, the pilot answers every call with just the callsign ("Lightning two one"); it acks that call once more and then stays quiet (except "see you", the deck calls and emergencies).</li>
    <li>Every few seconds: "on course, on glidepath", "slightly above glidepath"… and a <b>range every mile</b>: "four miles", "one and a half miles". At <b>2 miles</b> the pilot reports "<b>Lightning two one, see you</b>" (no reply needed; "roger" is fine).</li>
    <li><b>Sinker:</b> on some approaches the aircraft starts sinking below the glidepath and glidepath calls won't stop it. Only "<b>Low altitude alert, Lightning two one, check your altitude immediately, altimeter two niner niner two</b>" does (pilot: "Lightning two one, climbing.", even after "do not acknowledge"); it then climbs back to the glidepath.</li>
    <li>If you didn't say "wheels should be down" on contact: "<b>check wheels down</b>". No separate landing clearance is needed: the deck call exchange below clears the aircraft to land ("deck is clear, cleared to land spot seven" is still accepted).</li>
@@ -2976,7 +2981,7 @@ window.__FIN = {
   YMAX, NM_FT, FAC, SHIP_NAME, PAR_PHASES, OUT_PHASES, ASR_MDA, APPR_WIN, SEE_YOU_R,
   ttsBusy: () => !!(ttsCur || ttsQ.length || pttDown), startOv, endOv, helpOv,
   setPhr,
-  servoOn, servoClear, laaParts, altimeterOk, xr, ez, ay, demoYft,
+  servoOn, servoClear, laaParts, altimeterOk, xr, ez, ay, demoYft, elevAngle, LIM, GP_TAN,
   setDemo(list) { DEMO = Array.isArray(list) ? list : []; },
   servoTo(a) {   // intro: park both servo bands on the aircraft's painted target (they slew there at the normal rate)
     if (!servoOn() || !a) return; const ye = ez(paintE(a).z), ya = ay(clamp(paintA(a).yft, -YMAX, YMAX));
