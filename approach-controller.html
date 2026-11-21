@@ -9,6 +9,7 @@
 <script src="shorthand.js"></script>
 <script src="hnd.js"></script>
 <script src="scope-widgets.js"></script>
+<script src="link-sync.js"></script>
 <script src="freq-box.js"></script>
 <script src="traininglog.js"></script>
 <script src="splat-t.js"></script>
@@ -2106,9 +2107,9 @@ $('cmdForm').addEventListener('submit', e => { e.preventDefault(); const v = $('
 $('cmdInput').addEventListener('keydown', e => { if (e.key === 'Escape') $('cmdInput').blur(); });
 
 /* ===================== panel ===================== */
-function setScale(s) { s = s === 3 ? 3 : 1; if (!G) return; G.scale = s; $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 3); }
+function setScale(s) { s = s === 3 ? 3 : 1; if (!G) return; G.scale = s; $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 3); if (window.LS) LS.scale(s); }
 const savedScale = () => { try { localStorage.removeItem('ac_simSpeed'); } catch (e) {} return 1; };   // always start at 1x like Marshal (3x is not remembered)
-function setPaused(p) { if (!G) return; G.paused = p; $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p); }
+function setPaused(p) { if (!G) return; G.paused = p; $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p); if (window.LS) LS.paused(p); }
 function selectAc(a) { if (!G) return; G.selected = a; refreshPanel(true); }
 let lastPanel = 0;
 function readoutText(a) {
@@ -2269,6 +2270,7 @@ function startGame(diff, opts) {
   uiPaused = false; newGame(diff, opts || {}); initVoiceStatus();
   let seen = false; try { seen = localStorage.getItem('fcpar_tut_seen') === '1'; } catch (e) {}
   if (!opts && diff === 'training' && !seen) openTutorial(0);
+  if (window.LS) LS.started(diff, opts);   // v128: linked Start
 }
 let linkChoice = localStorage.getItem('stingerLink') === '1';
 const paintLink = () => { $('bLinkOn').classList.toggle('on', linkChoice); $('bLinkOff').classList.toggle('on', !linkChoice); };
@@ -2929,6 +2931,10 @@ setTimeout(() => MA.init(), 0);
 if (window.HND) HND.init({ self: 'APPROACH', peer: 'MARSHAL', MA, G: () => G, alive, tel: a => telephony(a.cs).text, log: (k, t) => log(k, t), sound: () => Sound.chirp && Sound.chirp(),
   canHand: a => a.phase === 'app' && a.st !== 'dep' && a.st !== 'marWait' && !!a.accepted,
   transfer: a => { a.sector = null; a.hoffFreq = 'red'; a.button = 'red'; a.hoTagT = G.t; if (MA.handoff(a)) log('sys', `${a.cs} switching Red (Marshal); off Approach frequency.`); try { refreshPanel(true); } catch (e) {} } });
+/* v128 linked group: one Start / Pause / clock with the other linked scopes, shared Marshal <-> Approach traffic (link-sync.js) */
+if (window.LS) LS.init({ G: () => G, on: () => !!(MA.on || linkChoice), start: () => $('bStart').onclick(), setPaused, setScale, log: t => log('sys', t),
+  traffic: () => G.ac.filter(a => alive(a) && a.phase === 'app' && !a.hnd).map(a => ({ cs: a.cs, e: +(a.dispE != null ? a.dispE : a.e).toFixed(3), n: +(a.dispN != null ? a.dispN : a.n).toFixed(3), alt: Math.round(a.alt || 0), hdg: Math.round(a.hdg || 0), gs: Math.round(a.gs || a.ias || 0) })),
+  ownCs: () => G.ac.filter(alive).map(a => a.cs).concat(window.HND && HND._in ? [...HND._in.values()].map(x => x.cs) : []) });
 $('bMAOn').onclick = () => { MA.setOn(true); try { shipReq(); } catch (e) {} }; $('bMAOff').onclick = () => { MA.setOn(false); try {  } catch (e) {} };
 
 setTimeout(() => LINK.setOn(LINK.on), 0);
@@ -3597,7 +3603,8 @@ function drawApp(now) {
     const tw = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width);
     a.hitR = appCtl(a) ? { x: Q[0], y: Q[1], bx: bx - 2, by: by - 12, bw: tw + 4, bh: 28 } : null;   // blip or data text selects
   }
-  if (window.HND) HND.draw(ctx, P, now, FONT(11));   // v126: incoming handoffs (flashing) from the linked scope
+  if (window.HND) HND.draw(ctx, P, now, FONT(11));
+  if (window.LS) LS.drawTraffic(ctx, P, FONT(11));   // v128: the other linked scope's aircraft (other-controller targets)   // v126: incoming handoffs (flashing) from the linked scope
 }
 
 /* ---------- SPLAT-T (splat-t.js): hover a target + T = range/bearing line, T again = hold, C = clear ---------- */

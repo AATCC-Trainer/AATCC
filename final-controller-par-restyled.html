@@ -7,6 +7,7 @@
 <script src="bg-clock.js"></script>
 <script src="pilot-voice.js"></script>
 <script src="shorthand.js"></script>
+<script src="link-sync.js"></script>
 <script src="freq-box.js"></script>
 <script src="traininglog.js"></script>
 <meta charset="utf-8">
@@ -2416,8 +2417,8 @@ $('cmdForm').addEventListener('submit', e => { e.preventDefault(); const v = $('
 $('cmdInput').addEventListener('keydown', e => { if (e.key === 'Escape') $('cmdInput').blur(); });
 
 /* ===================== panel ===================== */
-function setScale(s) { s = s === 3 ? 3 : 1; if (S.simSpeed !== s) { S.simSpeed = s; saveSettings(); } $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 3); if (G) G.scale = s; }
-function setPaused(p) { if (!G) return; p = !!p; const was = !!G.paused; G.paused = p; $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p);
+function setScale(s) { s = s === 3 ? 3 : 1; if (S.simSpeed !== s) { S.simSpeed = s; saveSettings(); } $('bS1').classList.toggle('on', s === 1); $('bS2').classList.toggle('on', s === 3); if (G) G.scale = s; if (window.LS && G && !G.intro) LS.scale(s); }
+function setPaused(p) { if (!G) return; p = !!p; const was = !!G.paused; G.paused = p; $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p); if (window.LS && !G.intro) LS.paused(p);
   /* v111: a game pause (not the guided intro's freezes) also freezes radio: open mic dropped, pilot voice held, input blocked until Resume */
   const game = p && !G.intro; document.body.classList.toggle('gamePaused', game); const pb = $('pauseOv'); if (pb) pb.classList.toggle('hidden', !game);
   if (game && !was) { if (pttDown) { pttDown = false; $('ptt').classList.remove('live'); try { Sound.unkey(); } catch (e) {} curUtter = null; try { rec && rec.abort(); } catch (e) {} setMic('idle', 'Paused'); }
@@ -2551,6 +2552,7 @@ function startGame(diff, opts) {
   uiPaused = false; newGame(diff, opts || {}); initVoiceStatus();
   let seen = false; try { seen = localStorage.getItem('fcpar_tut_seen') === '1'; } catch (e) {}
   if (!opts && diff === 'training' && !seen) openTutorial(0);
+  if (window.LS && !(opts && opts.intro)) LS.started(diff, opts);   // v128: linked Start (never from the guided intro)
 }
 $('bStart').onclick = () => startGame(chosenDiff);
 // v92 Instructor Start / Restart: a fresh sim at the same level and settings (linked: Marshal's / Approach's BRC)
@@ -2562,6 +2564,8 @@ function instRestart(op) {
   startGame(restart ? lastDiff : chosenDiff, {});
   return { ok: true, msg: (restart ? 'restarted' : 'started') + (typeof BRC !== 'undefined' ? ' · final course ' + String(Math.round(BRC) % 360 || 360).padStart(3, '0') : '') };
 }
+/* v128 linked group with Marshal / Approach: one Start / Pause / clock (link-sync.js); standalone and the intro are unaffected */
+if (window.LS) LS.init({ G: () => G, busy: () => !!((window.FinalIntro && FinalIntro.active) || (G && G.intro)), on: () => !!(LINK.on || (document.getElementById('linkChk') || {}).checked), start: () => $('bStart').onclick(), setPaused, setScale, log: t => log('sys', t) });
 $('bTut').onclick = () => openTutorial(0);
 $('bAgain').onclick = () => startGame(lastDiff);
 $('bMenu').onclick = () => { endOv.classList.add('hidden'); startOv.classList.remove('hidden'); };

@@ -634,7 +634,7 @@ function exitToStart(card) {
 /* ---------------- solo approach with Aero watching ---------------- */
 let watchT = null, lastTip = 0;
 function soloWatch() {
-  teardown(); begin('watch');
+  teardown(); begin('watch'); FI.active = true;   // v128: set before the start so a linked group never sees this practice run
   F.startGame('training', { arrivals: 1, brc: 360, shipTurns: false, noHints: true, wind: { dir: 360, spd: 3, gust: 0 } });
   document.body.classList.add('aeroWatch');
   FI.active = true; FI.mode = 'watch';
