@@ -9,6 +9,7 @@
 .hero .at-muted{margin-top:8px;font-size:13px}
 .start{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:22px 0 4px;padding:18px 20px;border:1px solid #6b5420;border-radius:var(--at-radius);background:#141206;text-decoration:none;color:var(--at-text)}
 .start:hover{border-color:var(--at-amber);background:#1a1606}
+.start.dash{margin-top:12px;border-color:var(--at-line2);background:var(--at-panel)}.start.dash:hover{border-color:var(--at-accent);background:var(--at-hov)}.start.dash b,.start.dash .go{color:var(--at-accent)}
 .start>div{flex:1 1 380px}.start b{display:block;font-size:18px;color:#ffd27a}.start span.d{font-size:13px;color:var(--at-text)}.start .go{margin-left:auto;color:#ffd27a;font-weight:bold;white-space:nowrap}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
 a.card{display:flex;flex-direction:column;gap:6px;min-height:150px;padding:16px 16px 14px;box-sizing:border-box;border:1px solid var(--at-line);border-left:4px solid var(--c,var(--at-line2));border-radius:var(--at-radius);background:var(--at-panel);color:var(--at-text);text-decoration:none}
@@ -30,12 +31,13 @@ a.card:focus-visible{outline:2px solid var(--at-accent);outline-offset:2px}
 .act{font:14px var(--at-font)}
 </style></head><body class="at-doc">
 <div class="at-bar"><a class="at-brand" href="index.html"><span class="at-mark"></span><span class="at-name">AATCC Trainer</span></a><span class="at-page">Home</span><span class="at-sp"></span>
-<nav class="at-nav"><a class="at-btn" href="help.html">? Help</a><button class="at-btn" id="bHelp" type="button">⚙ Settings</button></nav></div>
+<nav class="at-nav"><a class="at-btn" href="dashboard.html">My Dashboard</a><a class="at-btn" href="help.html">? Help</a><button class="at-btn" id="bHelp" type="button">⚙ Settings</button></nav></div>
 <main class="at-wrap">
 <section class="hero"><h1>Amphibious air traffic control training</h1>
 <p>Radar scopes for practicing AATCC aboard USS Wasp: check aircraft in at Marshal, vector them on Approach and talk them down on the Final PAR, by voice or by typing. Open each position in its own tab and link them to run a full recovery together.</p>
 <p class="at-muted">A training aid. Not for operational use.</p></section>
 <a class="start" href="intro.html" target="_blank" rel="opener"><div><b>New here? Start the guided Intro</b><span class="d">About 20 minutes with Aero: the radar scope, the flow of a recovery and the radio calls, then you bring one aircraft aboard yourself.</span></div><span class="go">Start ▸</span></a>
+<a class="start dash" href="dashboard.html"><div><b>My dashboard</b><span class="d">Your progress: what to practice next, time and grades for each position, intro progress and recent sessions.</span></div><span class="go">Open ▸</span></a>
 <h2>Positions</h2>
 <div class="grid">
 <a class="card c-red" href="marshal-controller.html" target="_blank" rel="opener"><span class="t">Marshal</span><span class="f">RED FREQUENCY</span><span class="d">Check arrivals in, assign marshal holding and expected approach times, then hand them to Approach or Final.</span><span class="go">Open Marshal →</span></a>

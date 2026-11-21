@@ -7,7 +7,7 @@
    Load it right after gate.js so its key guard runs before the page's own key handlers and errors are captured from the start. */
 (function () {
   if (window.AATCCReport) return;
-  var SITE_VERSION = 'v131';
+  var SITE_VERSION = 'v132';
   var errs = [], MAXE = 20;
   function pushErr(s) { s = String(s || '').replace(/\s+/g, ' ').slice(0, 300); if (!s) return; var t = new Date(); errs.push(('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2) + '  ' + s); if (errs.length > MAXE) errs.shift(); }
   window.addEventListener('error', function (e) { if (e && e.message) pushErr(e.message + (e.filename ? ' (' + String(e.filename).split('/').pop() + ':' + (e.lineno || 0) + ')' : '')); else if (e && e.target && e.target !== window && (e.target.src || e.target.href)) pushErr('Could not load ' + String(e.target.src || e.target.href).split('/').pop()); }, true);

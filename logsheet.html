@@ -44,7 +44,7 @@ td.gr{white-space:normal;min-width:140px;max-width:220px}
 <div class="wrap">
 <h1>Log Sheet</h1>
 <div class="sub">Training sessions logged by the scopes, per controller. Pick the controller with the <b>Controller ▾</b> box on any scope.</div>
-<div class="note">This log is saved in this browser on this computer only. It is not uploaded anywhere; export a CSV to keep or share it.</div>
+<div class="note">This log is saved in this browser on this computer only. It is not uploaded anywhere. Use <b>Export my training log</b> to back it up or move it to another computer (then <b>Import</b> it there), or export a CSV to share it. See your progress on <a href="dashboard.html">My Dashboard</a>.</div>
 <div class="bar">
 <label class="f">Controller<select id="fUser"></select></label>
 <label class="f">Position<select id="fSim"><option value="">All positions</option><option>Marshal</option><option>Approach</option><option>Final</option><option>Final Intro</option><option>Departure</option><option>Instructor</option></select></label>
@@ -52,8 +52,10 @@ td.gr{white-space:normal;min-width:140px;max-width:220px}
 <label class="f">To<input type="date" id="fTo"></label>
 <button class="btn" id="bReset" type="button">Clear filters</button>
 <button class="btn" id="bCsv" type="button">⬇ Export CSV</button>
+<button class="btn" id="bExp" type="button" title="Download a backup of your sessions and intro progress (JSON) to import on another computer">⬇ Export my training log</button>
+<label class="btn" for="fImp" title="Merge a training-log backup into this computer's log (sessions already here are skipped)">⬆ Import…</label><input type="file" id="fImp" accept=".json,application/json" hidden>
 <button class="btn warn" id="bClear" type="button">Clear all…</button>
-</div></div></header>
+</div><div id="bkMsg" style="font-size:12.5px;min-height:1.3em;margin-top:6px"></div></div></header>
 <main><div class="wrap">
 <h2>Summary by controller <small id="sumNote" style="font-size:12px;color:var(--dim)"></small></h2>
 <div id="cards"></div>
@@ -92,8 +94,8 @@ td.gr{white-space:normal;min-width:140px;max-width:220px}
   }
   const csvq = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   $('bCsv').onclick = () => {
-    const rows = filtered(all()), H = ['id', 'controller', 'sim', 'date', 'start', 'end', 'training_s', 'training_min', 'wall_s', 'paused_s', 'sim_s', 'grade', 'grade_pct', 'score', 'worked', 'landed', 'ended', 'note'];
-    const out = [H.join(',')].concat(rows.map(s => [s.id, s.user, s.sim, s.date, s.startTime, s.endTime || '', s.active, ((s.active || 0) / 60).toFixed(1), s.wall, s.paused, s.simTime, s.grade, s.gradePct, s.score, s.worked, s.landed, s.status === 'open' ? 'in progress' : s.ended, s.note].map(csvq).join(',')));
+    const rows = filtered(all()), H = ['id', 'controller', 'sim', 'date', 'start', 'end', 'training_s', 'training_min', 'wall_s', 'paused_s', 'sim_s', 'grade', 'grade_pct', 'score', 'worked', 'landed', 'ended', 'note', 'level', 'wave_offs', 'crashes', 'sep_losses', 'calls_good', 'calls_bad'];
+    const out = [H.join(',')].concat(rows.map(s => [s.id, s.user, s.sim, s.date, s.startTime, s.endTime || '', s.active, ((s.active || 0) / 60).toFixed(1), s.wall, s.paused, s.simTime, s.grade, s.gradePct, s.score, s.worked, s.landed, s.status === 'open' ? 'in progress' : s.ended, s.note, s.level, s.waveOffs, s.crashes, s.sepLoss, s.callsGood, s.callsBad].map(csvq).join(',')));
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out.join('\r\n') + '\r\n'], { type: 'text/csv' }));
     const d = new Date(); a.download = `aatcc-log-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.csv`;
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
@@ -101,6 +103,10 @@ td.gr{white-space:normal;min-width:140px;max-width:220px}
   $('tb').onclick = e => { const b = e.target.closest('[data-del]'); if (!b) return; const s = all().find(x => x.id === b.dataset.del);
     if (s && confirm(`Delete this session?\n${s.user} · ${s.sim} · ${s.date} ${s.startTime} · ${dur(s.active)}`)) { TL.del(s.id); render(); } };
   $('bClear').onclick = () => { const n = all().length; if (!n) return; if (confirm(`Clear ALL ${n} logged sessions on this computer? This cannot be undone. (Export a CSV first to keep a copy.)`)) { TL.clear(); render(); } };
+  const bk = (t, ok) => { const m = $('bkMsg'); m.textContent = t; m.style.color = ok ? 'var(--g)' : '#ff8a9a'; };   // v132 backup
+  $('bExp').onclick = () => { const o = TL.exportFile(); bk(`Exported ${o.sessions} session${o.sessions === 1 ? '' : 's'} and intro progress. Import the file on another computer to move your log.`, true); };
+  $('fImp').onchange = e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+    TL.importFile(f).then(r => { bk(`Imported: ${r.added} new session${r.added === 1 ? '' : 's'}${r.dup ? `, ${r.dup} already here (skipped)` : ''}${r.users ? `, ${r.users} new name${r.users === 1 ? '' : 's'}` : ''}${r.intro ? ', intro progress updated' : ''}.`, true); render(); }).catch(er => bk(er.message || 'Import failed.', false)); };
   $('bReset').onclick = () => { ['fUser', 'fSim', 'fFrom', 'fTo'].forEach(i => $(i).value = ''); render(); };
   ['fUser', 'fSim', 'fFrom', 'fTo'].forEach(i => $(i).addEventListener('change', render));
   addEventListener('storage', e => { if (e.key && e.key.indexOf('aatccLog.') === 0) render(); });

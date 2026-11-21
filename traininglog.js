@@ -9,6 +9,8 @@
    - Active time counts only wall seconds while the sim is running and NOT paused (pause button, tutorial or settings open); paused and wall time
      are kept too. Saved every 15 s ("open" with a heartbeat) so a crash still keeps the time; stale open sessions are closed on the
      next load. Sessions with under 15 s of active time are discarded.
+   v132: also keeps level / wave-offs / crashes / separation losses / call counts the scopes already track (read-only), plus
+   exportFile / importFile (training-log backup, merge by session id; never gate or passcode data) and rename() for the dashboard.
    Storage: 'aatccLog.users' [names], 'aatccLog.cur' name, 'aatccLog.sessions' [session], 'aatccLog.box' {x, y} picker position. */
 (function () {
   'use strict';
@@ -59,7 +61,14 @@
     const userPause = (intro ? document.body.classList.contains('gamePaused') : !!G.paused) || visible('helpOv') || visible('setOv');   // pause button, tutorial or settings open
     return { ok: true, running: !G.over, paused: userPause, simT: +G.t || 0, ref: G, over: !!G.over, end: !!G.over && visible('endOv'), intro,
       score: typeof G.score === 'number' ? G.score : null, landed: typeof G.landed === 'number' ? G.landed : null,
-      cs: Array.isArray(G.ac) ? G.ac.filter(a => a && a.cs && !a.holdWave && a.phase !== 'queue').map(a => a.cs) : [] };
+      cs: Array.isArray(G.ac) ? G.ac.filter(a => a && a.cs && !a.holdWave && a.phase !== 'queue').map(a => a.cs) : [],
+      x: extra(G) };
+  }
+  function extra(G) {   // v132 (read-only, additive): level and counters the scopes already keep, for the Trainee dashboard
+    const o = {}, n = v => typeof v === 'number' && isFinite(v) ? v : null;
+    try { if (G.d && typeof G.d.name === 'string') o.level = G.d.name.slice(0, 30); } catch (e) {}
+    o.waveOffs = n(G.missed); o.crashes = n(G.crashes); o.sepLoss = n(G.sepLoss); o.callsGood = n(G.callsGood); o.callsBad = n(G.callsBad);
+    return o;
   }
   /* ---------------- session tracking ---------------- */
   const TAB = Math.random().toString(36).slice(2, 8);
@@ -92,6 +101,7 @@
     if (st.paused) S.paused += dt; else if (st.running) S.active += dt;
     if (st.score != null) S.score = st.score; if (st.landed != null) S.landed = st.landed;
     for (const c of st.cs || []) if (!S.cs.includes(c)) S.cs.push(c);
+    if (st.x) for (const k in st.x) if (st.x[k] != null) S[k] = st.x[k];   // v132: level, waveOffs, crashes, sepLoss, callsGood, callsBad
   }
   function poll() {
     let st; try { st = state(); } catch (e) { return; }
@@ -177,9 +187,71 @@
     document.addEventListener('click', e => { if (box && !box.contains(e.target)) box.classList.remove('open'); });
     document.body.appendChild(box); paint(); place(); addEventListener('resize', place);
   }
+  /* ---------------- v132: backup (export / import) so a trainee can move their history to another computer ----------------
+     Only training progress: the log (users, current controller, sessions) and the guided-intro progress. Never settings, and never
+     the passcode gate ('aatccGate') or anything else with gate / pass in its name. */
+  const BK_KEYS = [K.users, K.cur, K.ses, 'aatccIntro.v3', 'aatccIntroName', 'aatccFinalIntro', 'aatccFinalIntro.core.v2', 'aatccFinalIntro.adv'];
+  const BK_KIND = 'aatcc-training-backup';
+  const okKey = k => BK_KEYS.includes(k) && !/gate|pass/i.test(k);
+  function exportData() {
+    closeStale(); const data = {};
+    for (const k of BK_KEYS) { if (!okKey(k)) continue; try { const v = localStorage.getItem(k); if (v == null) continue; try { data[k] = JSON.parse(v); } catch (e) { data[k] = v; } } catch (e) {} }
+    return { kind: BK_KIND, app: 'AATCC Trainer', format: 1, exported: new Date().toISOString(), sessions: sessions().length, data };
+  }
+  function exportFile() {
+    const o = exportData(), d = new Date(), a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(o, null, 1)], { type: 'application/json' }));
+    a.download = `aatcc-training-log-${ymd(d)}.json`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+    return o;
+  }
+  const raw = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const setRaw = (k, v) => { try { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); } catch (e) {} };
+  function importData(o) {   // merge, never replace: sessions de-duplicated by id; intro progress keeps whichever is further along
+    if (!o || o.kind !== BK_KIND || !o.data || typeof o.data !== 'object') throw new Error('This file is not an AATCC Trainer training-log backup.');
+    const d = o.data, r = { added: 0, dup: 0, users: 0, intro: false };
+    if (Array.isArray(d[K.ses])) {
+      const all = sessions(), byId = new Map(all.map(s => [s.id, s]));
+      for (const s of d[K.ses]) {
+        if (!s || typeof s !== 'object' || typeof s.id !== 'string' || typeof s.sim !== 'string') continue;
+        const c = Object.assign({}, s, s.status === 'open' ? { status: 'closed', ended: s.ended || 'stopped', note: s.note || 'imported while in progress' } : {});
+        const h = byId.get(c.id);
+        if (!h) { byId.set(c.id, c); r.added++; }
+        else { r.dup++; if ((h.status === 'open' && c.status !== 'open') || (c.active || 0) > (h.active || 0)) byId.set(c.id, Object.assign(c, { user: h.user })); }   // keep this computer's name (it may have been renamed)
+      }
+      wr(K.ses, Array.from(byId.values()).sort((a, b) => (a.t0 || 0) - (b.t0 || 0)));
+    }
+    if (Array.isArray(d[K.users])) { const u = users(); for (const n of d[K.users]) if (typeof n === 'string' && n.trim() && n !== 'Guest' && !u.includes(n)) { u.push(n.slice(0, 40)); r.users++; } wr(K.users, u); }
+    for (const s of Array.isArray(d[K.ses]) ? d[K.ses] : []) { const u = users(); if (s && typeof s.user === 'string' && s.user !== 'Guest' && s.user.trim() && !u.includes(s.user)) { wr(K.users, u.concat(s.user)); r.users++; } }
+    if (cur() === 'Guest' && typeof d[K.cur] === 'string' && d[K.cur].trim() && d[K.cur] !== 'Guest') wr(K.cur, d[K.cur]);
+    if (!String(raw('aatccIntroName') || '').trim() && typeof d.aatccIntroName === 'string' && d.aatccIntroName.trim()) setRaw('aatccIntroName', d.aatccIntroName.slice(0, 24));
+    for (const k of ['aatccIntro.v3', 'aatccFinalIntro.core.v2', 'aatccFinalIntro.adv']) {   // {i, res, t}: keep the further one, union first-try results
+      const inc = d[k]; if (!inc || typeof inc !== 'object' || typeof inc.i !== 'number') continue;
+      let here = null; try { here = JSON.parse(raw(k) || 'null'); } catch (e) {}
+      if (!here || typeof here.i !== 'number') { setRaw(k, inc); r.intro = true; continue; }
+      const res = Object.assign({}, inc.res || {}, here.res || {});
+      if (inc.i > here.i) { setRaw(k, { i: inc.i, res, t: Math.max(inc.t || 0, here.t || 0) }); r.intro = true; } else setRaw(k, Object.assign({}, here, { res }));
+    }
+    if (d.aatccFinalIntro && typeof d.aatccFinalIntro === 'object') {   // done flags: once done, stays done
+      let m = {}; try { m = JSON.parse(raw('aatccFinalIntro') || '{}') || {}; } catch (e) {}
+      const n = Object.assign({}, d.aatccFinalIntro, m); if (d.aatccFinalIntro.coreDone) n.coreDone = true; if (d.aatccFinalIntro.advDone) n.advDone = true; setRaw('aatccFinalIntro', n);
+    }
+    return r;
+  }
+  function importFile(file) {
+    return new Promise((ok, no) => { if (!file) return no(new Error('No file picked.')); const fr = new FileReader();
+      fr.onload = () => { try { ok(importData(JSON.parse(String(fr.result || '')))); } catch (e) { no(e instanceof SyntaxError ? new Error('That file could not be read (not a JSON backup).') : e); } };
+      fr.onerror = () => no(new Error('That file could not be read.')); fr.readAsText(file); });
+  }
+  function rename(from, to) {   // v132 dashboard: rename a controller (and their sessions); Guest's sessions move to the new name
+    to = String(to || '').replace(/[<>"&]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40); if (!to || to === 'Guest' || to === from) return false;
+    wr(K.ses, sessions().map(s => s.user === from ? Object.assign({}, s, { user: to }) : s));
+    const u = users().filter(x => x !== from); if (!u.includes(to)) u.push(to); wr(K.users, u);
+    if (cur() === from || from === 'Guest') wr(K.cur, to);
+    return true;
+  }
   closeStale();
   if (PAGE && PAGE !== 'Logsheet') setInterval(poll, POLL_MS);   // BgClock (bg-clock.js) keeps the sims running in background tabs; the 120 s dt cap covers throttling
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
   window.TrainingLog = { K, users, cur, sessions, setUser, addUser, removeUser, closeStale, get session() { return S; }, poll, PAGE, MIN_ACTIVE,
-    del(id) { dropSession(id); }, clear() { wr(K.ses, []); } };
+    del(id) { dropSession(id); }, clear() { wr(K.ses, []); }, exportData, exportFile, importData, importFile, rename, BK_KEYS };
 })();

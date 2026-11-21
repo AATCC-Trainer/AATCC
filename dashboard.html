@@ -1,0 +1,203 @@
+<!doctype html><html lang="en"><head>
+<script src="gate.js"></script><script src="report.js"></script>
+<script src="traininglog.js"></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="approach-192.png">
+<title>My Dashboard · AATCC Trainer</title><meta name="theme-color" content="#0b0d0b">
+<link rel="stylesheet" href="aatcc-theme.css">
+<!-- v132 Trainee dashboard (Aero's file). Built only from data already saved in this browser: the training log (traininglog.js),
+     the guided-intro progress (aatccIntro.v3, aatccFinalIntro*) and the intro name. Nothing is uploaded. -->
+<style>
+.who{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin:26px 0 4px}
+.who h1{margin:0;font-size:26px}.who h1 .nm{color:#ffd27a}
+.who .ed{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.who select,.who input{font:14px var(--at-font);background:#030503;color:var(--at-strong);border:1px solid var(--at-line2);border-radius:var(--at-radius);padding:7px 9px;color-scheme:dark}
+.who input{width:200px}
+.tot{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0 4px}
+.tot div{background:var(--at-panel);border:1px solid var(--at-line);border-radius:var(--at-radius);padding:10px 14px}
+.tot b{display:block;font-size:22px;color:var(--at-strong);font-weight:bold}.tot span{font-size:12px;color:var(--at-dim)}
+.cont{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:18px 0 6px;padding:18px 20px;border:1px solid #6b5420;border-radius:var(--at-radius);background:#141206;color:var(--at-text);text-decoration:none}
+.cont:hover{border-color:var(--at-amber);background:#1a1606}
+.cont>div{flex:1 1 380px}.cont .k{font-size:12px;letter-spacing:.08em;color:var(--at-amber)}.cont b{display:block;font-size:19px;color:#ffd27a;margin:2px 0}.cont .d{font-size:13px}
+.cont .go{margin-left:auto;color:#ffd27a;font-weight:bold;white-space:nowrap}
+.pos{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.pc{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border:1px solid var(--at-line);border-left:4px solid var(--c);border-radius:var(--at-radius);background:var(--at-panel)}
+.pc .t{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:bold;color:var(--at-strong)}.pc .t .at-tag{font-weight:normal}
+.pc .rw{display:flex;justify-content:space-between;gap:10px;font-size:13px;border-bottom:1px dotted var(--at-line);padding:2px 0}.pc .rw span:last-child{color:var(--at-strong);text-align:right}
+.pc .tr{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--at-dim);min-height:34px}
+.pc .em{font-size:13px;color:var(--at-dim);padding:6px 0;flex:1}
+.pc .bt{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+svg.sp{flex:none}
+.c-red{--c:#ff5a6e}.c-slv{--c:#c9ced6}.c-prp{--c:#b48cff}.c-tel{--c:#3fd6c8}.c-ins{--c:#2ee6e6}
+.red{color:#ff5a6e}.slv{color:#c9ced6}.prp{color:#b48cff}.tel{color:#3fd6c8}.ins{color:#2ee6e6}
+.intro{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.ib{padding:12px 16px;border:1px solid var(--at-line);border-radius:var(--at-radius);background:var(--at-panel)}
+.ib .t{font-weight:bold;color:var(--at-strong)}.ib .s{font-size:13px;margin:2px 0 8px}
+.bar{height:8px;border-radius:4px;background:#030503;border:1px solid var(--at-line);overflow:hidden}.bar i{display:block;height:100%;background:var(--at-accent)}
+.ok{color:var(--at-accent)}
+.tw{overflow-x:auto;border:1px solid var(--at-line);border-radius:var(--at-radius)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 9px;border-bottom:1px solid var(--at-line);text-align:left;white-space:nowrap}th{background:var(--at-panel2);color:var(--at-accent);font-weight:normal}
+td.n{text-align:right;color:var(--at-strong)}
+.empty{color:var(--at-dim);padding:14px;font-size:13px}
+.quick{display:flex;gap:10px;flex-wrap:wrap}
+.bk{display:flex;gap:10px;flex-wrap:wrap;align-items:center}#bkMsg{font-size:13px;min-height:1.4em;margin-top:8px}
+#bkMsg.good{color:var(--at-accent)}#bkMsg.bad{color:#ff8a9a}
+</style></head><body class="at-doc">
+<div class="at-bar"><a class="at-brand" href="index.html" title="Home"><span class="at-mark"></span><span class="at-name">AATCC Trainer</span></a><span class="at-page">My Dashboard</span><span class="at-sp"></span>
+<nav class="at-nav"><a class="at-btn" href="logsheet.html">Log Sheet</a><a class="at-btn" href="help.html">? Help</a><a class="at-btn at-home" href="index.html">⌂ Home</a></nav></div>
+<main class="at-wrap">
+<div class="who">
+<h1>Welcome, <span class="nm" id="nm">Trainee</span></h1>
+<div class="ed"><label class="at-muted" for="selU" style="font-size:12px">Showing</label><select id="selU" title="Whose progress to show (the Controller name picked on the scopes)"></select>
+<button class="at-btn" id="bEdit" type="button">✎ Edit name</button>
+<span id="edBox" hidden><input id="inName" maxlength="40" placeholder="Your name"><button class="at-btn primary" id="bSave" type="button">Save</button><button class="at-btn" id="bCan" type="button">Cancel</button></span></div>
+</div>
+<p class="at-muted" style="margin:6px 0 0">Your training at a glance, from the sessions logged on this computer. Pick the same name in the <b>Controller ▾</b> box on the scopes so your sessions land here.</p>
+<div class="tot" id="tot"></div>
+<a class="cont" id="cont" href="intro.html"><div><span class="k">CONTINUE</span><b id="cT">Start the guided Intro</b><span class="d" id="cD"></span></div><span class="go" id="cG">Start ▸</span></a>
+<h2>Progress by position</h2>
+<div class="pos" id="pos"></div>
+<h2>Guided intros</h2>
+<div class="intro" id="intro"></div>
+<h2>Recent sessions <small class="at-muted" style="font-size:12px;font-weight:normal" id="rcN"></small></h2>
+<div class="tw"><table><thead><tr><th>Date</th><th>Position</th><th>Level</th><th>Training time</th><th>Grade</th><th>Landed</th><th>Wave-offs</th><th>Ended</th></tr></thead><tbody id="rc"></tbody></table><div class="empty" id="rcE" hidden></div></div>
+<p style="margin:8px 0 0"><a href="logsheet.html">Open the full Log Sheet →</a></p>
+<h2>Quick start</h2>
+<div class="quick">
+<a class="at-btn big" href="marshal-controller.html" target="_blank" rel="opener"><span class="red">●</span> Marshal</a>
+<a class="at-btn big" href="approach-controller.html" target="_blank" rel="opener"><span class="slv">●</span> Approach</a>
+<a class="at-btn big" href="final-controller-par-restyled.html" target="_blank" rel="opener"><span class="prp">●</span> Final (PAR)</a>
+<a class="at-btn big" href="departure-controller.html" target="_blank" rel="opener"><span class="tel">●</span> Departure <span class="at-tag test">TEST</span></a>
+<a class="at-btn big" href="instructor-controller.html" target="_blank" rel="opener"><span class="ins">●</span> Instructor</a>
+</div>
+<h2>Back up or move your training log</h2>
+<p style="margin:0 0 10px">Your log is saved in this browser only. <b>Export</b> saves your sessions and intro progress to a file; <b>Import</b> on another computer merges it in (sessions already there are skipped). Settings and sign-in are never included.</p>
+<div class="bk"><button class="at-btn" id="bExp" type="button">⬇ Export my training log</button><label class="at-btn" for="fImp">⬆ Import…</label><input type="file" id="fImp" accept=".json,application/json" hidden></div>
+<div id="bkMsg"></div>
+<div class="at-foot">AATCC Trainer · a training aid, not for operational use · saved on this computer only · <a href="help.html#log">About the training log</a></div>
+</main>
+<script>
+(() => {
+  'use strict';
+  const TL = window.TrainingLog, $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const rd = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
+  const dur = s => { s = Math.max(0, Math.round(s || 0)); if (s > 0 && s < 60) return s + ' s'; const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m} min`; };
+  const INTRO_DONE_I = 40, INTRO_N = 40, FIN_CORE_N = 27;   // intro.html: 41 STEPS, the last is 'done' (index 40); final-intro.js: 27 core steps + done
+  const POS = [
+    { sim: 'Marshal', name: 'Marshal', cls: 'c-red', dot: 'red', href: 'marshal-controller.html', f: 'Red frequency' },
+    { sim: 'Approach', name: 'Approach', cls: 'c-slv', dot: 'slv', href: 'approach-controller.html', f: 'Silver frequency' },
+    { sim: 'Final', name: 'Final (PAR)', cls: 'c-prp', dot: 'prp', href: 'final-controller-par-restyled.html', f: 'Purple / Copper frequency' },
+    { sim: 'Departure', name: 'Departure', cls: 'c-tel', dot: 'tel', href: 'departure-controller.html', f: 'Teal frequency', test: true },
+  ];
+  const fmtDate = d => { if (!d) return '—'; const t = new Date(d + 'T12:00:00'); if (isNaN(t)) return d; const days = Math.round((new Date(new Date().toDateString()) - new Date(t.toDateString())) / 864e5);
+    return days === 0 ? 'Today' : days === 1 ? 'Yesterday' : t.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: t.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }); };
+  let who = null;
+  function all() { TL.closeStale(); return TL.sessions().filter(s => s && s.id && s.sim && (s.status !== 'open' || (s.active || 0) >= TL.MIN_ACTIVE)).sort((a, b) => (a.t0 || 0) - (b.t0 || 0)); }
+  function names(list) { return Array.from(new Set(['Guest'].concat(TL.users(), list.map(s => s.user), [TL.cur()]))).filter(Boolean); }
+  function introName() { try { return String(localStorage.getItem('aatccIntroName') || '').trim(); } catch (e) { return ''; } }
+  function spark(vals, color) {   // inline SVG sparkline, no libraries
+    const W = 120, H = 30, P = 3; if (vals.length < 2) return '';
+    const lo = Math.min(...vals), hi = Math.max(...vals), sp = hi - lo || 1;
+    const pts = vals.map((v, i) => [P + i * (W - 2 * P) / (vals.length - 1), H - P - (v - lo) / sp * (H - 2 * P)]);
+    const last = pts[pts.length - 1];
+    return `<svg class="sp" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="trend"><polyline fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" points="${pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.6" fill="${color}"/></svg>`;
+  }
+  function stats(ss) {
+    const g = ss.filter(s => typeof s.gradePct === 'number'), sum = (a, f) => a.reduce((t, s) => t + (+f(s) || 0), 0);
+    const has = k => ss.some(s => typeof s[k] === 'number');
+    return { n: ss.length, t: sum(ss, s => s.active), last: ss.length ? ss[ss.length - 1].date : null, g,
+      avg: g.length ? Math.round(sum(g, s => s.gradePct) / g.length) : null, best: g.length ? Math.max(...g.map(s => s.gradePct)) : null,
+      landed: has('landed') ? sum(ss, s => s.landed) : null, wo: has('waveOffs') ? sum(ss, s => s.waveOffs) : null };
+  }
+  function intros() {
+    const a = rd('aatccIntro.v3', null), m = rd('aatccFinalIntro', {}) || {}, c = rd('aatccFinalIntro.core.v2', null), adv = rd('aatccFinalIntro.adv', null);
+    const ai = a && typeof a.i === 'number' ? a.i : -1, aDone = ai >= INTRO_DONE_I, res = a && a.res ? Object.values(a.res) : [];
+    const ci = c && typeof c.i === 'number' ? c.i : -1, cDone = !!m.coreDone;
+    return { main: { started: ai >= 0, done: aDone, step: Math.max(0, Math.min(ai + 1, INTRO_N)), pct: aDone ? 100 : ai > 0 ? Math.round(ai / INTRO_N * 100) : 0, first: res.length ? Math.round(res.filter(x => x === 1).length / res.length * 100) : null },
+      fin: { started: ci >= 0, done: cDone, step: Math.max(0, Math.min(ci + 1, FIN_CORE_N)), pct: cDone ? 100 : ci > 0 ? Math.round(ci / FIN_CORE_N * 100) : 0, adv: !!m.advDone, advStarted: !!adv } };
+  }
+  function next(byPos, I) {
+    if (!I.main.done) return I.main.started && I.main.step > 1
+      ? { t: 'Finish the guided Intro', d: `You're on step ${I.main.step} of ${INTRO_N}. Pick up where you left off with Aero.`, href: 'intro.html', go: 'Resume ▸' }
+      : { t: 'Start the guided Intro', d: 'About 20 minutes with Aero: the radar scope, the flow of a recovery and the radio calls, then you bring one aircraft aboard yourself.', href: 'intro.html', go: 'Start ▸' };
+    if (!I.fin.done) return { t: 'Do the Final (PAR) guided intro', d: I.fin.started && I.fin.step > 1 ? `In progress: step ${I.fin.step} of ${FIN_CORE_N}. Aero walks you through the talk-down on the real PAR scope.` : 'Aero walks you through the PAR scope, the talk-down and the calls on the real Final scope.', href: 'final-controller-par-restyled.html?intro=1', go: 'Open Final ▸' };
+    const since = Date.now() - 14 * 864e5;
+    const rank = POS.filter(p => !p.test).map(p => { const ss = byPos[p.sim], rec = ss.filter(s => (s.t0 || 0) >= since), g = rec.filter(s => typeof s.gradePct === 'number');
+      return { p, n: rec.length, all: ss.length, avg: g.length ? g.reduce((t, s) => t + s.gradePct, 0) / g.length : null }; });
+    rank.sort((x, y) => x.n - y.n || (x.avg == null ? -1 : y.avg == null ? 1 : x.avg - y.avg) || x.all - y.all);
+    const r = rank[0], p = r.p;
+    const why = r.all === 0 ? `You haven't run ${p.name} yet. Start on the Training level.` : r.n === 0 ? `You haven't practiced ${p.name} in the last 2 weeks.` : r.avg != null && r.avg === Math.min(...rank.filter(x => x.avg != null).map(x => x.avg)) && rank.filter(x => x.avg != null).length > 1 ? `Your fewest recent sessions and lowest recent grade (${Math.round(r.avg)}%).` : `Your fewest sessions in the last 2 weeks (${r.n}).`;
+    return { t: `Practice ${p.name}`, d: why, href: p.href, go: `Open ${p.name} ▸`, blank: true };
+  }
+  function render() {
+    const list = all(), ns = names(list), sel = $('selU');
+    if (!who || !ns.includes(who)) who = TL.cur();
+    sel.parentNode.querySelector('label').hidden = sel.hidden = ns.length < 2; sel.innerHTML = ns.map(u => `<option${u === who ? ' selected' : ''}>${esc(u)}</option>`).join('');
+    const nm = who === 'Guest' ? (introName() || 'Trainee') : who; $('nm').textContent = nm;
+    const mine = list.filter(s => s.user === who), byPos = {}; for (const p of POS) byPos[p.sim] = mine.filter(s => s.sim === p.sim);
+    const I = intros(), introSes = mine.filter(s => s.sim === 'Final Intro');
+    // totals
+    const days = new Set(mine.map(s => s.date)).size, wk = mine.filter(s => (s.t0 || 0) >= Date.now() - 7 * 864e5);
+    const gAll = mine.filter(s => typeof s.gradePct === 'number');
+    $('tot').innerHTML = [[dur(mine.reduce((t, s) => t + (s.active || 0), 0)), 'training time'], [mine.length, mine.length === 1 ? 'session' : 'sessions'], [days, days === 1 ? 'day trained' : 'days trained'],
+      [wk.length ? dur(wk.reduce((t, s) => t + (s.active || 0), 0)) : '0 min', 'this week'], [gAll.length ? Math.round(gAll.reduce((t, s) => t + s.gradePct, 0) / gAll.length) + '%' : '—', 'average grade']]
+      .map(x => `<div><b>${esc(x[0])}</b><span>${esc(x[1])}</span></div>`).join('');
+    // continue
+    const n = next(byPos, I), c = $('cont'); c.href = n.href; if (n.blank) { c.target = '_blank'; c.rel = 'opener'; } else { c.removeAttribute('target'); c.removeAttribute('rel'); }
+    $('cT').textContent = n.t; $('cD').textContent = n.d; $('cG').textContent = n.go;
+    // positions
+    $('pos').innerHTML = POS.filter(p => !p.test || byPos[p.sim].length).map(p => {
+      const ss = byPos[p.sim], st = stats(ss), col = getComputedStyle(document.documentElement).getPropertyValue('--at-accent').trim() || '#78ff8c';
+      const head = `<span class="t"><span class="${p.dot}">●</span>${esc(p.name)}${p.test ? ' <span class="at-tag test">TEST SCOPE</span>' : ''}</span><span class="at-muted" style="font-size:12px">${esc(p.f)}</span>`;
+      const intro = p.sim === 'Final' ? `<div class="rw"><span>Guided intro</span><span>${I.fin.done ? '<span class="ok">✓ done</span>' : I.fin.started ? `step ${I.fin.step} of ${FIN_CORE_N}` : 'not started'}</span></div>` : p.test ? '' : `<div class="rw"><span>Guided intro</span><span class="at-muted">coming soon</span></div>`;
+      const btn = `<div class="bt"><a class="at-btn primary" href="${p.href}" target="_blank" rel="opener">▶ Open ${esc(p.name)}</a>${p.sim === 'Final' && !I.fin.done ? `<a class="at-btn" href="${p.href}?intro=1" target="_blank" rel="opener">Guided intro</a>` : ''}</div>`;
+      if (!st.n) return `<div class="pc ${p.cls}">${head}<div class="em">No sessions yet. Open ${esc(p.name)}, pick your name in the Controller box and press ▶ Start. Your time and grade show up here.</div>${intro}${btn}</div>`;
+      const recent = ss.slice(-10), gv = recent.filter(s => typeof s.gradePct === 'number').map(s => s.gradePct);
+      const tv = recent.map(s => Math.round((s.active || 0) / 60));
+      const tr = gv.length >= 2 ? `${spark(gv, col)}<span>grade, last ${gv.length} graded</span>` : tv.length >= 2 ? `${spark(tv, '#8fd8ff')}<span>minutes per session, last ${tv.length}</span>` : `<span>Run one more session to see a trend.</span>`;
+      return `<div class="pc ${p.cls}" data-pos="${esc(p.sim)}">${head}<div class="rw"><span>Sessions</span><span>${st.n}</span></div><div class="rw"><span>Training time</span><span>${dur(st.t)}</span></div>`
+        + `<div class="rw"><span>Last session</span><span>${esc(fmtDate(st.last))}</span></div><div class="rw"><span>Grade (avg / best)</span><span>${st.avg == null ? '—' : `${st.avg}% / ${st.best}%`}</span></div>`
+        + (st.landed != null ? `<div class="rw"><span>Landed${st.wo != null ? ' / wave-offs' : ''}</span><span>${st.landed}${st.wo != null ? ' / ' + st.wo : ''}</span></div>` : '')
+        + `${intro}<div class="tr">${tr}</div>${btn}</div>`;
+    }).join('');
+    // intros
+    const bar = pc => `<div class="bar"><i style="width:${pc}%"></i></div>`;
+    $('intro').innerHTML = `<div class="ib"><div class="t">First-mission Intro</div><div class="s">${I.main.done ? `<span class="ok">✓ Completed</span>${I.main.first != null ? ` · ${I.main.first}% right the first time` : ''}` : I.main.started ? `In progress: step ${I.main.step} of ${INTRO_N}` : 'Not started yet. About 20 minutes.'}</div>${bar(I.main.pct)}<p style="margin:10px 0 0"><a class="at-btn" href="intro.html">${I.main.done ? 'Run it again' : I.main.started ? 'Resume' : 'Start'}</a></p></div>`
+      + `<div class="ib"><div class="t">Final (PAR) guided intro</div><div class="s">${I.fin.done ? `<span class="ok">✓ Completed</span>${I.fin.adv ? ' · Advanced done' : ''}` : I.fin.started ? `In progress: step ${I.fin.step} of ${FIN_CORE_N}` : 'Not started yet. On Final\'s start screen.'}${introSes.length ? ` · ${introSes.length} session${introSes.length === 1 ? '' : 's'}, ${dur(introSes.reduce((t, s) => t + (s.active || 0), 0))}` : ''}</div>${bar(I.fin.pct)}<p style="margin:10px 0 0"><a class="at-btn" href="final-controller-par-restyled.html?intro=1" target="_blank" rel="opener">${I.fin.done ? 'Open again' : I.fin.started ? 'Resume' : 'Start'}</a></p></div>`
+      + `<div class="ib"><div class="t">Marshal and Approach intros</div><div class="s at-muted">Coming soon.</div>${bar(0)}</div>`;
+    // recent
+    const rec = mine.filter(s => s.sim !== 'Instructor').slice(-10).reverse(), SC = { Marshal: 'red', Approach: 'slv', Final: 'prp', 'Final Intro': 'prp', Departure: 'tel' };
+    $('rcN').textContent = rec.length ? `last ${rec.length}` : '';
+    $('rc').innerHTML = rec.map(s => `<tr><td>${esc(fmtDate(s.date))} <span class="at-muted">${esc((s.startTime || '').slice(0, 5))}</span></td><td class="${SC[s.sim] || ''}">${esc(s.sim === 'Final' ? 'Final (PAR)' : s.sim)}</td><td>${esc(s.level || '—')}</td><td class="n">${dur(s.active)}</td>`
+      + `<td>${typeof s.gradePct === 'number' ? s.gradePct + '%' : '—'}</td><td class="n">${s.landed == null ? '—' : esc(s.landed)}</td><td class="n">${s.waveOffs == null ? '—' : esc(s.waveOffs)}</td><td>${s.status === 'open' ? 'in progress' : esc(s.ended || '')}</td></tr>`).join('');
+    $('rcE').hidden = rec.length > 0; $('rcE').textContent = who === 'Guest' && !list.length ? 'No sessions yet. Your first session shows up here as soon as you run a scope for 15 seconds or more.' : `No sessions logged for ${who} on this computer yet. Run a scope with "${who}" picked in the Controller box.`;
+  }
+  $('selU').onchange = () => { who = $('selU').value; render(); };
+  const edit = on => { $('edBox').hidden = !on; $('bEdit').hidden = on; if (on) { const i = $('inName'); i.value = who === 'Guest' ? introName() : who; i.focus(); i.select(); } };
+  $('bEdit').onclick = () => edit(true); $('bCan').onclick = () => edit(false);
+  function saveName() {
+    const to = $('inName').value.replace(/[<>"&]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40); if (!to) return;
+    if (to === 'Guest') { alert('Pick a name other than Guest.'); return; }
+    if (who === 'Guest') {
+      const n = all().filter(s => s.user === 'Guest').length;
+      if (n && confirm(`Move the ${n} session${n === 1 ? '' : 's'} logged as Guest to "${to}"?`)) TL.rename('Guest', to); else TL.addUser(to);
+    } else if (to !== who) {
+      if (TL.users().includes(to) && !confirm(`"${to}" already exists. Merge ${who}'s sessions into ${to}?`)) return;
+      TL.rename(who, to);
+    }
+    TL.setUser(to); who = to; edit(false); render();
+  }
+  $('bSave').onclick = saveName; $('inName').addEventListener('keydown', e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') edit(false); });
+  const msg = (t, c) => { const m = $('bkMsg'); m.textContent = t; m.className = c || ''; };
+  $('bExp').onclick = () => { const o = TL.exportFile(); msg(`Exported ${o.sessions} session${o.sessions === 1 ? '' : 's'} and your intro progress. Keep the file, or import it on another computer.`, 'good'); };
+  $('fImp').onchange = e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+    TL.importFile(f).then(r => { msg(`Imported: ${r.added} new session${r.added === 1 ? '' : 's'}${r.dup ? `, ${r.dup} already here (skipped)` : ''}${r.users ? `, ${r.users} new name${r.users === 1 ? '' : 's'}` : ''}${r.intro ? ', intro progress updated' : ''}.`, 'good'); who = null; render(); })
+      .catch(er => msg(er.message || 'Import failed.', 'bad')); };
+  addEventListener('storage', e => { if (!e.key || /^aatcc(Log\.|Intro|FinalIntro)/.test(e.key)) render(); });
+  addEventListener('focus', render);
+  render();
+})();
+</script>
+</body></html>
