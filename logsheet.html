@@ -3,11 +3,11 @@
 <script src="traininglog.js"></script>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="approach-192.png">
-<title>Log Sheet · AATCC Training Simulation</title><meta name="theme-color" content="#0b0d0b">
+<title>Log Sheet · AATCC Trainer</title><meta name="theme-color" content="#0b0d0b">
 <style>
-:root{--g:rgb(120,255,140);--g2:rgb(190,255,200);--dim:rgba(160,255,175,.65);--line:rgba(120,255,140,.25);--bg:#0b0d0b;--card:#0e130e}
+:root{--g:var(--at-accent);--g2:var(--at-text);--dim:rgba(160,255,175,.65);--line:rgba(120,255,140,.25);--bg:var(--at-bg);--card:var(--at-panel)}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--g2);font-family:monospace;font-size:14px;line-height:1.5}
+body{margin:0;background:var(--bg);color:var(--g2);font-family:var(--at-font);font-size:14px;line-height:1.5}
 header{position:sticky;top:0;z-index:5;background:rgba(11,13,11,.97);border-bottom:1px solid var(--line);padding:12px 16px 10px}
 .wrap{max-width:1100px;margin:0 auto}
 h1{margin:0;font-size:22px;color:var(--g);letter-spacing:1px}
@@ -15,8 +15,8 @@ h1{margin:0;font-size:22px;color:var(--g);letter-spacing:1px}
 .note{color:#ffd27a;font-size:12.5px;margin:0 0 10px}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
 label.f{display:flex;flex-direction:column;font-size:11px;color:var(--dim);gap:2px}
-select,input[type=date]{font:14px monospace;background:#030503;color:#eaffee;border:1px solid rgba(120,255,140,.55);padding:6px 8px;color-scheme:dark}
-.btn{font:14px monospace;background:#0f1a10;color:rgb(160,255,175);border:1px solid rgba(120,255,140,.55);padding:7px 12px;cursor:pointer;text-decoration:none}
+select,input[type=date]{font:14px var(--at-font);background:#030503;color:#eaffee;border:1px solid rgba(120,255,140,.55);padding:6px 8px;color-scheme:dark}
+.btn{font:14px var(--at-font);background:#0f1a10;color:rgb(160,255,175);border:1px solid rgba(120,255,140,.55);padding:7px 12px;cursor:pointer;text-decoration:none}
 .btn:hover{filter:brightness(1.25)}.btn.warn{border-color:#ff5a6e;color:#ff8a9a;background:#1a0a0d}
 main{padding:14px 16px 60px}
 h2{margin:18px 0 8px;font-size:17px;color:var(--g);border-bottom:1px solid var(--line);padding-bottom:4px}
@@ -31,14 +31,18 @@ th{position:sticky;top:0;background:#0f1a10;color:var(--g);font-weight:normal}
 td.n{text-align:right;color:#eaffee}tr:hover td{background:#0f160f}
 td.gr{white-space:normal;min-width:140px;max-width:220px}
 .st-completed{color:var(--g)}.st-stopped{color:#c9ced6}.st-switched{color:#b48cff}.st-open{color:#ffd27a}
-.x{background:none;border:1px solid rgba(255,90,110,.5);color:#ff8a9a;font:12px monospace;cursor:pointer;padding:1px 6px}
+.x{background:none;border:1px solid rgba(255,90,110,.5);color:#ff8a9a;font:12px var(--at-font);cursor:pointer;padding:1px 6px}
 #empty{color:var(--dim);padding:14px}
 .red{color:#ff5a6e}.slv{color:#c9ced6}.prp{color:#b48cff}.cop{color:#e0915a}.tel{color:#3fd6c8}.ins{color:#2ee6e6}
-.homeBtn{display:inline-block;margin:8px 0 6px;padding:12px 22px;min-height:44px;box-sizing:border-box;font:bold 17px monospace;color:rgb(160,255,175);background:#0f1a10;border:1px solid rgba(120,255,140,.7);border-radius:6px;text-decoration:none;cursor:pointer}.homeBtn:hover{background:#123a18;color:#eaffee}   /* v126: bigger Home button */
-</style></head><body>
-<header><div class="wrap">
-<a class="homeBtn" href="index.html">← Home</a>
-<h1>LOG SHEET</h1>
+.homeBtn{display:inline-block;margin:8px 0 6px;padding:12px 22px;min-height:44px;box-sizing:border-box;font:bold 17px var(--at-font);color:rgb(160,255,175);background:#0f1a10;border:1px solid rgba(120,255,140,.7);border-radius:6px;text-decoration:none;cursor:pointer}.homeBtn:hover{background:#123a18;color:#eaffee}   /* v126: bigger Home button */
+</style>
+<link rel="stylesheet" href="aatcc-theme.css">
+<style>header{padding-top:0}header .at-inhdr{margin:0 -16px 12px;position:static}</style>
+</head><body class="at-doc">
+<header>
+<div class="at-bar at-inhdr"><a class="at-brand" href="index.html" title="Home"><span class="at-mark"></span><span class="at-name">AATCC Trainer</span></a><span class="at-page">Log Sheet</span><span class="at-sp"></span><nav class="at-nav"><a class="at-btn" href="help.html">? Help</a><a class="at-btn at-home" href="index.html">← Home</a></nav></div>
+<div class="wrap">
+<h1>Log Sheet</h1>
 <div class="sub">Training sessions logged by the scopes, per controller. Pick the controller with the <b>Controller ▾</b> box on any scope.</div>
 <div class="note">This log is saved in this browser on this computer only. It is not uploaded anywhere; export a CSV to keep or share it.</div>
 <div class="bar">

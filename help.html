@@ -1,0 +1,100 @@
+<!doctype html><html lang="en"><head>
+<script src="gate.js"></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="approach-192.png">
+<title>Help and About · AATCC Trainer</title><meta name="theme-color" content="#0b0d0b">
+<link rel="stylesheet" href="aatcc-theme.css">
+<style>
+.lay{display:grid;grid-template-columns:210px 1fr;gap:28px;align-items:start}
+.toc{position:sticky;top:78px;font-size:13px}.toc b{display:block;color:var(--at-dim);font-weight:normal;letter-spacing:.06em;margin-bottom:6px}
+.toc a{display:block;padding:5px 8px;border-left:2px solid var(--at-line);color:var(--at-text);text-decoration:none}.toc a:hover{border-left-color:var(--at-accent);color:var(--at-strong);background:var(--at-panel)}
+.at-doc h1{font-size:26px;margin:26px 0 6px}
+section{scroll-margin-top:76px}section h2{margin-top:30px}
+ul,ol{padding-left:22px}li{margin:4px 0}
+.cl{display:inline-block;min-width:1.4em;text-align:center;font-weight:bold}
+.red{color:#ff5a6e}.slv{color:#c9ced6}.prp{color:#b48cff}.cop{color:#e0915a}.tel{color:#3fd6c8}
+table.k{border-collapse:collapse;margin:8px 0;font-size:13px}table.k td{padding:5px 12px 5px 0;border-bottom:1px solid var(--at-line);vertical-align:top}
+.note{border-left:3px solid var(--at-amber);background:#141206;padding:8px 12px;margin:10px 0;color:var(--at-text)}
+@media (max-width:760px){.lay{grid-template-columns:1fr}.toc{position:static}}
+</style></head><body class="at-doc">
+<div class="at-bar"><a class="at-brand" href="index.html" title="Home"><span class="at-mark"></span><span class="at-name">AATCC Trainer</span></a><span class="at-page">Help and About</span><span class="at-sp"></span>
+<nav class="at-nav"><a class="at-btn" href="playbook.html">Playbook</a><a class="at-btn at-home" href="index.html">← Home</a></nav></div>
+<main class="at-wrap"><div class="lay">
+<nav class="toc" aria-label="On this page"><b>ON THIS PAGE</b>
+<a href="#start">How to start</a><a href="#link">Linking scopes</a><a href="#cmds">Voice and typed commands</a><a href="#hnd">Typed handoffs</a><a href="#widgets">Scope widgets</a><a href="#ship">Ship turns</a><a href="#browser">Browser and microphone</a><a href="#log">Training log</a><a href="#problem">Report a problem</a><a href="#about">About</a></nav>
+<div>
+<h1>Help and About</h1>
+<p class="at-muted">Everything you need to run a session. For the radio calls themselves, see the <a href="playbook.html">Phraseology Playbook</a>.</p>
+
+<section id="start"><h2>How to start</h2>
+<ol>
+<li>Open the <a href="index.html">Home</a> page and enter the passcode. It is asked once per browser tab session; scopes opened from Home do not ask again.</li>
+<li>New to it? Run the guided <a href="intro.html">Intro</a> first. Final / PAR also has a guided intro with Aero on its start screen.</li>
+<li>Pick a position (Marshal, Approach, Final / PAR or Instructor). Each opens in its own tab.</li>
+<li>On the start screen choose a level (Training, Normal or Rush) and press <b>Start</b>. A session runs about 30 minutes.</li>
+<li>Pick your name with the <b>Controller</b> box at the top of the scope so your time and grade go into the Log Sheet.</li>
+</ol></section>
+
+<section id="link"><h2>Linking scopes</h2>
+<p>Open Marshal, Approach and Final in separate tabs of the <b>same browser on the same computer</b> and switch their link on at each start screen. When they are linked:</p>
+<ul>
+<li><b>One Start:</b> pressing Start on any linked scope starts all of them at the same level.</li>
+<li><b>One Pause:</b> Pause (the button, the <kbd>P</kbd> key or the Instructor) pauses and resumes every linked scope, and the 1x / 3x speed follows too.</li>
+<li><b>One clock:</b> all linked scopes show the same session time, counted from 0:00.</li>
+<li><b>Shared traffic:</b> Marshal and Approach each show the other's aircraft with a short data block, so you see the whole picture. An aircraft never shows twice during a handoff.</li>
+<li>Marshal hands aircraft to Approach ("go silver"); Marshal and Approach both hand aircraft to Final ("go purple" / "go copper").</li>
+<li>The Instructor connects to the linked scopes on its own; Final is always linked to it.</li>
+</ul>
+<p>If a tab says "not detected", reload it and check the link switch on its start screen.</p></section>
+
+<section id="cmds"><h2>Voice and typed commands</h2>
+<ul>
+<li><b>Voice:</b> hold <kbd>Space</kbd> (or the big Hold to Talk button), say the whole call, then let go. The pilot answers with its callsign, or "unable".</li>
+<li><b>Typed:</b> every scope also takes typed calls and short codes in its command box. Type <code>?</code> and press Enter for that position's cheat sheet.</li>
+<li>The full list of spoken calls is in the <a href="playbook.html">Phraseology Playbook</a>, and every typed code is on its <a href="playbook.html#shorthand">Shorthand</a> tab.</li>
+<li>Accepted aircraft on Marshal and Approach get a letter (<code>A</code>, <code>B</code>, …). Type the letter first to talk to it, for example <code>A fh270</code>.</li>
+<li>Scope keys on Marshal, Approach and Instructor: point at a target and press <kbd>T</kbd> for a bearing / range line, <kbd>T</kbd> again to hold it, <kbd>C</kbd> to clear.</li>
+</ul></section>
+
+<section id="hnd"><h2>Typed handoffs</h2>
+<p>Type the aircraft's letter, then <code>HND</code>, then the color letter of the frequency you are handing it to:</p>
+<table class="k">
+<tr><td><span class="cl slv">S</span></td><td><span class="slv">Silver</span> (Approach)</td></tr>
+<tr><td><span class="cl red">R</span></td><td><span class="red">Red</span> (Marshal)</td></tr>
+<tr><td><span class="cl cop">C</span></td><td><span class="cop">Copper</span> (Final, second frequency)</td></tr>
+<tr><td><span class="cl prp">P</span></td><td><span class="prp">Purple</span> (Final)</td></tr>
+<tr><td><span class="cl tel">T</span></td><td><span class="tel">Teal</span> (Departure)</td></tr>
+</table>
+<p>Automated handoffs run between a linked Marshal and Approach: <code>A HND S</code> on Marshal hands aircraft A to Approach, and <code>A HND R</code> on Approach hands it back to Marshal. For Copper, Purple and Teal, use the radio call (for example "go purple"). After <code>HND</code> the aircraft's data block shows HNDOFF and flashes until the other scope accepts it by typing the flashing letter (or <code>ACPT</code>) and Enter, or by clicking it. Type <code>A HND</code> again to cancel.</p></section>
+
+<section id="widgets"><h2>Scope widgets and arrow keys</h2>
+<ul>
+<li>On Marshal and Approach, drag a control (Scope range, Rings or RDV) from the side panel onto the radar. It becomes a small widget with ◀ ▶ arrows. Range steps 1 NM per arrow.</li>
+<li><b>Click a widget</b> to select it (gold outline). The arrow keys then change it: range by 1 NM per press, rings cycle through their steps, RDV turns on and off.</li>
+<li><kbd>Esc</kbd> or a click anywhere else lets go of it. Drag a widget by its name to move it; × or dragging it off the scope removes it. Positions are remembered on this computer.</li>
+</ul></section>
+
+<section id="ship"><h2>Ship-turn switch</h2>
+<p>Each scope has a <b>Ship turns</b> switch. When on, the ship changes its recovery course during the session, so courses and patterns move with it. It is <b>on by default for Final</b> and <b>off by default for Marshal and Approach</b>. The Instructor can also turn the ship.</p></section>
+
+<section id="browser"><h2>Browser and microphone</h2>
+<ul>
+<li>Voice needs <b>microphone permission</b> in the browser. Allow it when the browser asks. If you blocked it, turn it back on in the site settings (the icon at the left of the address bar).</li>
+<li>Speak at a normal pace in a quiet room. If the microphone does not work, you can always type the call instead.</li>
+<li>Something looks out of date? Reload the page. If that does not help, open <b>Settings</b> on the Home page and use <b>Clear cache</b>.</li>
+</ul></section>
+
+<section id="log"><h2>Training log</h2>
+<p>Every session is recorded on the <a href="logsheet.html">Log Sheet</a>: training time, level and grade per controller. The log is <b>stored in this browser on this computer only</b>. It is not uploaded anywhere and does not follow you to another computer. Use <b>Export CSV</b> to keep or share it.</p></section>
+
+<section id="problem"><h2>Report a problem</h2>
+<p>For now, send problems and ideas straight to the site owner. It helps to include:</p>
+<ul><li>which page or position, and the level you were running;</li><li>what you did, what you expected and what happened;</li><li>a screenshot if you can, and the browser you used.</li></ul></section>
+
+<section id="about"><h2>About</h2>
+<p><b>AATCC Trainer</b> is a set of browser-based radar scopes for practicing amphibious air traffic control aboard USS Wasp: Marshal, Approach, Final / PAR and an Instructor view, with simulated pilots that answer by voice.</p>
+<div class="note">This is a <b>training aid</b> and a prototype. It is not an official publication and is <b>not for operational use</b>. Procedures and phraseology are simplified for practice.</div>
+</section>
+<div class="at-foot">AATCC Trainer · Help and About · v129</div>
+</div></div></main>
+</body></html>

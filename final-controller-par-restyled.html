@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="at-scope">
 <head>
 <script src="gate.js"></script>
 <script src="phrase-match.js"></script>
@@ -12,7 +12,7 @@
 <script src="traininglog.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Final</title>
+<title>Final / PAR · AATCC Trainer</title>
 <style>
 .card .row:has(#bStart){position:sticky;bottom:-20px;z-index:3;background:inherit;padding:8px 0 10px;box-shadow:0 -10px 14px rgba(0,0,0,.45)}   /* START always visible on short screens */
 
@@ -187,8 +187,11 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
   body:not(.lay-expand):not(.lay-trans) #panel{flex:none;overflow:visible}
 }
 </style>
+<link rel="stylesheet" href="aatcc-theme.css">
 </head>
 <body>
+<div id="atBrand" aria-label="AATCC Trainer"><span class="at-mark"></span><b>AATCC Trainer</b><span>·</span><span class="at-pos">Final / PAR</span><a href="index.html" target="_blank" rel="opener" title="Open the home page in a new tab (this scope keeps running)">⌂ Home</a><a href="help.html" target="_blank" rel="opener" title="Help and About (new tab)">? Help</a></div>
+
 <div id="layBar" role="group" aria-label="Layout"><button type="button" data-lay="normal" title="Normal layout">▦ Normal</button><button type="button" data-lay="expand" title="Expand the scopes (hide side panel)">⤢ Scope</button><button type="button" data-lay="trans" title="Scopes + narrow transcript log">☰ Log</button></div>
 <div id="app">
   <div id="scopeWrap"><canvas id="scope"></canvas><div id="shipOv" style="display:none;position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:7;pointer-events:none;padding:6px 14px;border:2px solid var(--amber);color:var(--amber);background:rgba(26,18,0,.92);border-radius:6px;font-size:16px;font-weight:bold;letter-spacing:1px;white-space:nowrap;box-shadow:0 0 12px rgba(255,191,60,.4)"></div><button type="button" id="bPause2" title="Pause / Resume (P)">❚❚</button><div id="pauseOv" class="hidden"><b>PAUSED</b><span>Sim, timers and radio are frozen.</span><button type="button" id="bResume">▶ Resume</button><small>or press P</small></div></div>

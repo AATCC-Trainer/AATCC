@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="at-scope">
 <head>
 <script src="gate.js"></script>
 <script src="phrase-match.js"></script>
@@ -13,7 +13,7 @@
 <script src="rendezvous.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Departure</title>
+<title>Departure (test) · AATCC Trainer</title>
 <style>
 .card .row:has(#bStart){position:sticky;bottom:-20px;z-index:3;background:inherit;padding:8px 0 10px;box-shadow:0 -10px 14px rgba(0,0,0,.45)}   /* START always visible on short screens */
 
@@ -169,8 +169,11 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="approach-192.png">
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
+<link rel="stylesheet" href="aatcc-theme.css">
 </head>
 <body>
+<div id="atBrand" aria-label="AATCC Trainer"><span class="at-mark"></span><b>AATCC Trainer</b><span>·</span><span class="at-pos">Departure <span style="color:var(--at-amber)">(test)</span></span><a href="index.html" target="_blank" rel="opener" title="Open the home page in a new tab (this scope keeps running)">⌂ Home</a><a href="help.html" target="_blank" rel="opener" title="Help and About (new tab)">? Help</a></div>
+
 <div id="layBar" title="Layout (L cycles)"><button type="button" data-l="normal">▣ Normal</button><button type="button" data-l="expand">⤢ Expand scope</button><button type="button" data-l="transcript">☰ Scope + log</button></div>
 <div id="app">
   <div id="scopeWrap"><canvas id="scope"></canvas><div id="infoBlk" class="ib"></div><div id="tbBlk" class="ib"></div><div id="starBlk"><span class="sm"></span><span class="st">*</span><input id="starIn" spellcheck="false" autocomplete="off" autocapitalize="characters"></div><div id="shipBanner"></div></div>
