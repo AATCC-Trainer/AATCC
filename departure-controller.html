@@ -735,6 +735,7 @@ const PATTERNS = [
   [/\btake\s+speed\s+(\d{2,3})(?:\s+knots)?\b/g, m => ({ k: 'spd', v: +m[1] })],
   [/\b(?:say|state|sae)\s+(?:your\s+)?(?:fuel\s+)?state\b|\bsay\s+(?:your\s+)?fuel(?:\s+state)?\b/g, () => ({ k: 'sayState' })],
   [/\bsay\s+(?:your\s+)?(?:angels|angles|angel|altitude|alt)\b/g, () => ({ k: 'sayAngels' })],
+  [/\b(?:say|state|report|verify|confirm)\s+(?:your\s+)?(?:present\s+|current\s+)?(?:heading|headings|hitting|heating|hedding)\b(?!\s*(?:is\s+)?\d)|\bwhat(?:'s|\s+is)\s+your\s+(?:present\s+|current\s+)?heading\b(?!\s*\d)/g, () => ({ k: 'sayHdg' })],   // v125: query only, pilot reports its heading
   [/\b(?:(?:proceed|proceeding|precede|proceed\s+direct)\s+(?:to\s+|2\s+)?)?(?:sector|sectors|sektor|secter)\s+([1-4]|one|won|two|too|to|three|tree|four|for|fore)\b(?:\s*,?\s*(?:and\s+)?report(?:ing)?\s+(?:established|establish|estab?lished))?/g, m => ({ k: 'sector', v: SECTOR_NUM[m[1]] })],
   [/\b(?:(?:perform|preform|performed|performing)\s+(?:your\s+|the\s+|a\s+)?)?(?:landing|landings|lending|landin)\s+(?:checks?(?:\s*list)?|chex|checking|jacks)\b/g, () => ({ k: 'landChk' })],   // v105: + checklist / landings / lending / jacks
   [/\b(?:dirty\s+up|get\s+dirty|(?:30|thirty)\s+dirty|go\s+dirty|dirty)\b/g, () => ({ k: 'dirty' })],
@@ -826,6 +827,10 @@ const DIRBRG = { north: 360, northeast: 45, east: 90, southeast: 135, south: 180
 function parseSpeech0(raw, known = []) {
   const norm0 = normalizeSpeech(raw);
   let s = norm0.replace(/\bheading\s+(\d{3})(\d+)\b/g, 'heading $1 $2');
+  // v125: recognizer variants of "fly heading NNN": "flight/flying/fly a heading (of)", split numbers ("2 70", "27 0", "to 70"), 000 = north = 360
+  s = s.replace(/\b(?:flight|flying|fly\s+(?:a|in|on|the))\s+heading\b/g, 'fly heading').replace(/\bheading\s+of\s+(?=\d)/g, 'heading ')
+    .replace(/\bheading\s+([0-3])\s+(\d{2})\b/g, (m, x, y) => +(x + y) <= 360 ? `heading ${x}${y}` : m).replace(/\bheading\s+(\d{2})\s+(\d)\b/g, (m, x, y) => +(x + y) <= 360 ? `heading ${x}${y}` : m)
+    .replace(/\bheading\s+000\b/g, 'heading 360');
   const csr = extractCallsign(s, known);
   s = csr.s;
   // traffic advisory: "<callsign>, traffic, two o'clock, 5 miles, northbound, angels 3" -> information only, nothing is executed
@@ -858,7 +863,7 @@ function parseSpeech0(raw, known = []) {
   let left = ''; for (let i = 0; i < s.length; i++) left += used[i] ? ' ' : s[i];
   left = left.replace(/\b(runway|27|two seven|18|one eight|and|the|is|this|your|final|controller|approach|at|of|a|to|now|then|you|are|come|ship|deck|fouled|spot|for|landing|stinger|gator|wasp|99|\d)\b/g, ' ').replace(/\s+/g, ' ').trim();
   // turn/heading call with heading-like words but no usable number -> pilot asks for the heading again
-  const hdgMissing = !cmds.some(c => c.k === 'hdg' || c.k === 'climbout') && !/\b(?:runway|ship\s+s)\s+heading\b/.test(norm0) &&
+  const hdgMissing = !cmds.some(c => c.k === 'hdg' || c.k === 'climbout' || c.k === 'sayHdg') && !/\b(?:runway|ship\s+s)\s+heading\b/.test(norm0) &&
     (/\bheading\b/.test(norm0) || /\b(?:turn|come)\s+(?:left|right)\b/.test(s));
   return { raw, norm: norm0.trim(), cs: csr.cs, csUnknown: csr.unknown, cmds, leftover: left, hdgMissing };
 }
@@ -869,6 +874,7 @@ function cmdStr(c) {
     case 'traffic': return 'traffic advisory (no action)';
     case 'sayState': return 'say state';
     case 'sayAngels': return 'say angels';
+    case 'sayHdg': return 'say heading';
     case 'sector': return `proceed to sector ${c.v}, report established`;
     case 'course': return `course ${c.q || 'any'} ${c.side}`;
     case 'onCourse': return 'on course';
@@ -3466,7 +3472,7 @@ function appExecute(p, src) {
   if (p.hdgMissing) {   // turn/heading with no valid 3-digit heading: nothing changes, no grading, pilot replies 'unable'
     selectAc(a);
     log('ctl', `${a.cs}${p.cs ? '' : ' (selected)'}: "${p.raw.trim()}"${src === 'voice' ? ' 🎙' : ''}  →  heading not understood`);
-    pilotSay(a, `${a.tel}, unable.`, `${a.telSay}, unable.`, true, false, false);
+    pilotSay(a, `${a.tel}, say again heading.`, `${a.telSay}, say again heading.`, true, false, false);   // v125: number not understood: ask for it (was "unable")
     return;
   }
   selectAc(a); a.lastTx = G.t;
@@ -3498,6 +3504,10 @@ function appExecute(p, src) {
     if (c.k === 'sayState') {   // query only: fuel state in thousands of lb (decreases with time since launch)
       const f = appState(a), v = f.toFixed(1), [w, d] = v.split('.');
       pilotSay(a, `${a.tel}, state ${v}.`, `${a.telSay}, state ${sayTwo(+w)} point ${NUMW[+d]}.`);
+      marked = true; continue;
+    }
+    if (c.k === 'sayHdg') {   // v125: query only: present heading, 3 digits (north = 360)
+      const h = hdg3(Math.round(a.hdg)); pilotSay(a, `${a.tel}, heading ${h}.`, `${a.telSay}, heading ${sayDigits(h)}.`);
       marked = true; continue;
     }
     if (c.k === 'sayAngels') {   // query only: current altitude (angels at/above 1,000 ft, feet below)

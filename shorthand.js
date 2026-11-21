@@ -26,6 +26,8 @@ const angOrFt = (n, sc) => { n = parseFloat(n); if (sc === 'final') return (n < 
 const CODES = [
   // ---- headings / altitude / speed (shared) ----
   [/^h(\d{2,3})$/, SC, m => `fly heading ${h3(m[1])}`, 'h270', 'fly heading 270 (instant heading change, no turn)'],
+  [/^fh(\d{2,3})$/, SC, m => `fly heading ${h3(m[1])}`, 'fh270', 'fly heading 270 (same as h270)'],   // v125
+  [/^sh$/, MA, () => 'say heading', 'sh', 'say heading (pilot reports its present heading)'],   // v125
   [/^l(\d{2,3})$/, SC, (m, s) => `${s.sc === 'final' ? 'come' : 'turn'} left heading ${h3(m[1])}`, 'l270', 'turn left heading 270 (Final: come left)'],
   [/^r(\d{2,3})$/, SC, (m, s) => `${s.sc === 'final' ? 'come' : 'turn'} right heading ${h3(m[1])}`, 'r090', 'turn right heading 090 (Final: come right)'],
   [/^brc(\d{2,3})$/, SC, (m, s) => s.clr ? `BRC ${h3(m[1])}` : `fly base recovery course ${h3(m[1])}`, 'brc360', 'fly base recovery course 360 (BRC 360 inside a marshal clearance)'],

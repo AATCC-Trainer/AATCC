@@ -1,5 +1,5 @@
 // AATCC (Gator) trainers service worker: network-first (a normal reload always gets new files), cache fallback when offline.
-const CACHE = 'stinger-v124';
+const CACHE = 'stinger-v125';
 const PRECACHE = ['./', './index.html', './gate.js', './phrase-match.js', './warm-mic.js', './bg-clock.js', './pilot-voice.js', './shorthand.js', './splat-t.js', './rendezvous.js', './freq-box.js', './traininglog.js', './logsheet.html', './approach-controller.html', './departure-controller.html', './marshal-controller.html', './final-controller-par-restyled.html', './instructor-controller.html', './intro.html', './intro-engine.js', './final-intro.js', './playbook.html',
   './approach.webmanifest', './marshal.webmanifest', './final.webmanifest', './approach-192.png', './approach-512.png', './final-192.png', './final-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => Promise.all(PRECACHE.map(u => c.add(u).catch(() => {}))))); });
