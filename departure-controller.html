@@ -962,6 +962,9 @@ function landForbidden(e, n) {   // magnetic frame: inner water ring, final + up
   return false;
 }
 const pip = (x, y, p) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+if (window.RDV && RDV.setLand) RDV.setLand((e, n) => !!(LAND && LAND.polys && LAND.polys.length && LAND.polys.some(p => pip(e, n, p)) && !landForbidden(...t2m(e, n))),
+  () => LAND && LAND.polys && LAND.polys.length ? [LAND.seed, LAND.polys.length, LAND.syncKey || '', MV, Math.round(BRC)].join('|') : 'water');   // v126: rendezvous points never over land
+
 function landStats(polys) {   // grid sample inside the scope (true frame): area fraction, min range, bearing coverage, any forbidden hit
   const S = 1.4 * APP_RANGE_L / 40; let tot = 0, land = 0, minR = 99, bad = false; const bins = new Array(72).fill(0);
   for (let x = -APP_RANGE_L; x <= APP_RANGE_L; x += S) for (let y = -APP_RANGE_L; y <= APP_RANGE_L; y += S) {
@@ -2147,9 +2150,29 @@ function txFlush() {
     for (const x of other) pilotSay0(...x);
   }
 }
+/* v126 "break": one transmission with several parts ("Lightning 21, turn left heading 270, break, Lightning 22, take angels 5"). Each part is run
+   as its own call (graded, read back); a part without a callsign goes to the aircraft named in the part before it. "break off" (wave-off) is not a split. */
+const BREAK_SPLIT = /[\s,.;:!?-]*\b(?:break|brake)s?\b(?!\s+off\b)[\s,.;:!?-]*/i;
+function txBreak(text, src) {
+  if (!G || G.over) return null;
+  const t = String(text || ''); if (!BREAK_SPLIT.test(t)) return null;
+  const segs = t.split(new RegExp(BREAK_SPLIT.source, 'gi')).map(x => x.trim()).filter(x => /[a-z0-9]/i.test(x));
+  if (segs.length < 2) return null;
+  const prep = x => { try { if (typeof PM === 'function') x = PM(x); if (typeof MC !== 'undefined' && MC && typeof mcFixSpeech === 'function') x = mcFixSpeech(x); return typeof fixSpeech === 'function' ? fixSpeech(x) : x; } catch (e) { return x; } };
+  const known = G.ac.filter(alive).map(a => a.cs); let prev = null; const rs = [];
+  for (let seg of segs) {
+    let cs = null; try { const p = parseSpeech(prep(seg), known); cs = p && p.cs && !p.csUnknown && G.ac.some(a => a.cs === p.cs) ? p.cs : null; } catch (e) {}
+    if (cs) { const a = G.ac.find(x => x.cs === cs); prev = (a && (a.tel || (typeof telephony === 'function' && telephony(a.cs).text))) || cs; }
+    else if (prev) seg = prev + ', ' + seg;
+    rs.push((typeof txCompound === 'function' && txCompound(seg, src)) || handleTranscript0(seg, src) || { cmds: [] });
+  }
+  const cs = (rs.find(r => r && r.cs) || {}).cs || null, str = rs.map(r => r && r.str).filter(Boolean).join(' · break · ');
+  try { $('parsed').textContent = `Understood (break, ${segs.length} parts) → ${str}`; $('parsed').classList.remove('bad'); } catch (e) {}
+  return { cs, cmds: rs.flatMap(r => (r && r.cmds) || []), str, mar: (rs.find(r => r && r.mar) || {}).mar, brk: segs.length };
+}
 function handleTranscript(text, src) {
   TXC.depth++; let r;
-  try { r = (typeof txCompound === 'function' && txCompound(text, src)) || handleTranscript0(text, src); }
+  try { r = txBreak(text, src) || (typeof txCompound === 'function' && txCompound(text, src)) || handleTranscript0(text, src); }
   finally { TXC.depth--; if (!TXC.depth) { try { txFlush(); } catch (e) { console.error('txFlush', e); } } }
   return r;
 }
@@ -2883,8 +2906,9 @@ function appConflictScenario() {
 }
 window.__confScenario = k => appConflictScenario(k);
 /* ---------- launch schedule (G.sched): one entry per scheduled launch; the Instructor can add / delete / retime pending entries over stinger-link ---------- */
+const DEP_LAST_CI = 1740;   // v126: last departure wave launches by about 29:00
 function instLaunchPlan() {   // pre-rolled launch times (Instructor roster): 10 s, then every 4-6 min (16 launches)
-  if (!G.sched) { G.sched = []; G.schedN = 0; let at = 10; for (let i = 0; i < (DEP ? 40 : 16); i++) { G.sched.push({ id: 'L' + (++G.schedN), at, kind: 'launch' }); at += DEP ? rand(75, 150) : rand(240, 360); } }
+  if (!G.sched) { G.sched = []; G.schedN = 0; let at = 10; for (let i = 0; i < (DEP ? 40 : 16) && !(DEP && at > DEP_LAST_CI); i++) { G.sched.push({ id: 'L' + (++G.schedN), at, kind: 'launch' }); at += DEP ? rand(75, 150) : rand(240, 360); } }   // v126: Departure waves stop at about 29:00 (~30-min session)
   return G.sched;
 }
 const schedPending = () => instLaunchPlan().filter(e => !e.done).sort((x, y) => x.at - y.at);

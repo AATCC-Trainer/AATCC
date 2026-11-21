@@ -121,8 +121,23 @@ function letterSub(src, ctx) {
 }
 /* scope (keyboard) commands that never go out on the radio. GSP: global toggle, ground speed on every data block (a selector before/after it is accepted and ignored).
    'gsp' (selected aircraft) | 'A gsp' | 'gsp A' | 'lt21 gsp' | '21 gsp' | 'lightning 21 gsp'  ->  { cmd: 'gsp', tel | null } */
+/* v126 automated handoff (Marshal <-> Approach, linked): '<letter> HND <S|R|C|P|T>' (spaces optional: 'AHNDS'; full colour names work too),
+   '<letter> HND' alone cancels a pending one; receiver: '<letter> ACPT', 'ACPT' (oldest incoming) or just the incoming letter. -> { cmd: 'hnd'|'acpt', tel, ltr, freq } */
+const HND_FREQ = { s: 'silver', silver: 'silver', slvr: 'silver', r: 'red', red: 'red', c: 'copper', copper: 'copper', copr: 'copper', p: 'purple', purple: 'purple', prpl: 'purple', t: 'teal', teal: 'teal' };
+function hndCmd(input, ctx) {
+  const v = String(input || '').trim().toLowerCase();
+  let m = /^([a-z]{1,2}|[a-z]{2,10}\d{1,4}|\d{1,4})\s*,?\s*hnd\s*([a-z]*)$/.exec(v);
+  if (m) { const sel = m[1], f = m[2]; if (f && !HND_FREQ[f]) return { cmd: 'hnd', bad: f };
+    let tel = null; const L = ltrOf(sel, ctx); if (L) tel = L.tel; else if (/^\d+$/.test(sel)) { const b = byDigits(sel, ctx); tel = b !== sel ? b : null; } else tel = csToken(sel, ctx);
+    return { cmd: 'hnd', tel, sel: sel.toUpperCase(), freq: f ? HND_FREQ[f] : null }; }
+  m = /^(?:([a-z]{1,2})\s*,?\s*)?(?:acpt|accept)$/.exec(v) || /^(?:acpt|accept)\s+([a-z]{1,2})$/.exec(v);
+  if (m) return { cmd: 'acpt', ltr: m[1] ? m[1].toUpperCase() : null };
+  if (/^[a-z]{1,2}$/.test(v) && (ctx.incoming || []).includes(v.toUpperCase())) return { cmd: 'acpt', ltr: v.toUpperCase() };
+  return null;
+}
 function scopeCmd(input, ctx) {
-  ctx = ctx || {}; const toks = String(input || '').trim().toLowerCase().split(/[\s,;]+/).filter(Boolean);
+  ctx = ctx || {}; { const h = hndCmd(input, ctx); if (h) return h; }
+  const toks = String(input || '').trim().toLowerCase().split(/[\s,;]+/).filter(Boolean);
   const i = toks.indexOf('gsp'); if (i < 0) return null;
   const rest = toks.filter((_, k) => k !== i); if (rest.length > 2) return null;
   if (!rest.length) return { cmd: 'gsp', tel: null };
@@ -155,7 +170,15 @@ function byDigits(d, ctx) {   // bare '21' -> 'Lightning 21' when exactly one li
 }
 
 /* returns { shorthand: bool, text, codes: n } */
+/* v126: "break" splits a typed line into parts ("lt21 h270 break lt22 a5"); each part is expanded on its own and the page runs each part
+   (a part with no callsign goes to the aircraft of the part before it). "break off" is not a split. */
 function expand(input, ctx) {
+  const v = String(input || ''), RX = /\s*[,;]?\s*\b(?:break|brake)\b(?!\s+off\b)\s*[,;]?\s*/i;
+  if (RX.test(v)) { const segs = v.split(new RegExp(RX.source, 'gi')).map(x => x.trim()).filter(Boolean);
+    if (segs.length >= 2) { const rs = segs.map(x => expand1(x, ctx)); if (rs.some(r => r.shorthand || r.letter)) return { shorthand: rs.some(r => r.shorthand), letter: rs.some(r => r.letter), text: rs.map(r => r.text).join(', break, '), codes: rs.reduce((n, r) => n + (r.codes || 0), 0) }; } }
+  return expand1(v, ctx);
+}
+function expand1(input, ctx) {
   ctx = ctx || {}; const sc = SCOPES.includes(ctx.scope) ? ctx.scope : 'approach';
   let src = String(input || '').trim();
   if (!src) return { shorthand: false, text: src, codes: 0 };
@@ -228,7 +251,7 @@ function attach(opt) {
   const rows = tableFor(sc).map(c => `<tr><td>${esc(c[3])}</td><td>${esc(c[4])}</td></tr>`).join('');
   const ex = { marshal: 'ea16 030/2 a2 brc360 ob210 eat15', approach: 'lt21 l180 d1.2 du', final: 'lt21 r090 bd', departure: 'ea42 rc rvcoke pg045/12' }[sc];
   help.innerHTML = `<span class="x" title="Close">✕</span><h3>⌨ Shorthand: ${esc(sc[0].toUpperCase() + sc.slice(1))}</h3>
-<p>Start with a callsign (<b>lt21</b> = Lightning 21, <b>ea16</b>, <b>vn312</b> (helos have 3 digits), <b>nh341</b>, or just the digits <b>21</b>, or an accepted aircraft's letter: <b>A h270</b>); leave it off to talk to the selected aircraft. Chain codes with spaces, e.g. <b>${esc(ex)}</b>. The full phrase is shown under the box and goes into the log. Full sentences still work as before. Type <b>?</b> + Enter to open this.</p>${sc === 'final' ? '' : '<p><b>GSP</b>: type <b>gsp</b> once to show ground speed on ALL data blocks (later arrivals too); type it again to hide it. Scope only, not a radio call; resets to off on every new sim.</p>'}
+<p>Start with a callsign (<b>lt21</b> = Lightning 21, <b>ea16</b>, <b>vn312</b> (helos have 3 digits), <b>nh341</b>, or just the digits <b>21</b>, or an accepted aircraft's letter: <b>A h270</b>); leave it off to talk to the selected aircraft. Chain codes with spaces, e.g. <b>${esc(ex)}</b>. The full phrase is shown under the box and goes into the log. Full sentences still work as before. Type <b>?</b> + Enter to open this.</p>${sc === 'final' ? '' : '<p><b>GSP</b>: type <b>gsp</b> once to show ground speed on ALL data blocks (later arrivals too); type it again to hide it. Scope only, not a radio call; resets to off on every new sim.</p>' + (sc === 'marshal' || sc === 'approach' ? '<p><b>Handoff</b> (Marshal ↔ Approach, both linked): <b>A HND S</b> (or <b>AHNDS</b>) hands aircraft A to Silver; from Approach <b>A HND R</b> hands it to Red. Colour letters: <b>S</b> Silver, <b>R</b> Red, <b>C</b> Copper, <b>P</b> Purple, <b>T</b> Teal. The data block shows <b>HNDOFF</b> and flashes until the other scope accepts; <b>A HND</b> again (or Esc in an empty box) cancels. On the receiving scope the incoming target flashes with its letter: type the letter (or <b>X ACPT</b>, or <b>ACPT</b>) + Enter, or click it.</p>' : '')}
 <table>${rows}</table>`;
   document.body.appendChild(help);
   const btn = bar.querySelector('#shBtn'), prev = bar.querySelector('#shPrev');
@@ -237,7 +260,7 @@ function attach(opt) {
   help.querySelector('.x').addEventListener('click', () => toggle(false));
   help.addEventListener('keydown', e => e.stopPropagation());
   const upd = () => { const v = inp.value.trim(); if (!v) { prev.textContent = ''; return; } if (v === '?') { prev.textContent = '↵ show shorthand codes'; prev.classList.add('pass'); return; }
-    if (opt.onScope) { const q = scopeCmd(v, getCtx()); if (q) { prev.textContent = '→ GSP: ground speed on/off for ALL data blocks'; prev.classList.remove('pass'); return; } }
+    if (opt.onScope) { const q = scopeCmd(v, getCtx()); if (q) { prev.textContent = q.cmd === 'hnd' ? (q.freq ? `→ HANDOFF ${q.sel} to ${q.freq.toUpperCase()}` : `→ cancel handoff ${q.sel}`) : q.cmd === 'acpt' ? `→ ACCEPT handoff${q.ltr ? ' ' + q.ltr : ''}` : '→ GSP: ground speed on/off for ALL data blocks'; prev.classList.remove('pass'); return; } }
     const r = expand(v, getCtx()); prev.textContent = r.shorthand || r.letter ? '→ ' + r.text : ''; prev.classList.toggle('pass', !r.shorthand && !r.letter); };
   inp.addEventListener('input', upd);
   inp.addEventListener('keydown', e => { if (e.key === 'Escape') toggle(false); });

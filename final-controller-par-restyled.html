@@ -196,6 +196,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
       <button id="bPause" title="Pause (P)">❚❚ Pause</button>
       <button id="bS1" class="on" title="1x (key 1)">1x</button>
       <button id="bS2" title="3x sim speed (key 3)">3x</button>
+      <label id="shipTgl" title="Ship turns On/Off for Final (saved). Off: no automatic ship turns and linked turns are ignored." style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--dim, #9ab);white-space:nowrap;user-select:none"><input type="checkbox" id="liveShipTurns">Ship turns</label>
       <button id="bSet" title="Voice settings">⚙ Voice</button>
       <button id="bHelp" title="Help (?)">? Help</button>
       <button id="bEnd" title="End session">End</button>
@@ -801,7 +802,7 @@ function linkRecv(m) {
   if (m && m.cs && !m.callsign) m.callsign = m.cs; if (m && m.type === 'handoffAccept') m.type = 'handoff_accept';   // accept Approach's cs/handoffAccept variant
   if (m.type === 'hello') { LINK.peer = true; linkPost({ type: 'hello-ack', from: 'final' }); }
   else if (m.type === 'hello-ack') LINK.peer = true;
-  else if (m.type === 'brc') { LINK.peer = true; SHIP_PEER_RX = Date.now(); shipLinkBrc(m); }
+  else if (m.type === 'brc') { LINK.peer = true; SHIP_PEER_RX = Date.now(); if (typeof m.turns === 'boolean') SHIP_PEER_TURNS = m.turns; shipLinkBrc(m); }
   else if (m.type === 'handoff') { LINK.peer = true; if (String(m.from || 'APP').toUpperCase() !== 'APP') { /* not addressed to Final */ } else if (G && !G.over) linkHandoff(m); else LINK.pending.push(m); }
   else if (m.type === 'handoff_accept') { LINK.peer = true; if (G && String(m.by || '').toUpperCase() === 'APP') hoffAccepted(String(m.callsign || '').toUpperCase().replace(/\s+/g, '')); }
   linkStatus();
@@ -924,9 +925,23 @@ function hoffTyped(text) {   // "<callsign> hndoff" / "handoff" / "hand off": a 
 let SHIP_MV = 0, SHIP_BRCT = null;   // last magvar / true BRC from Approach (null = same as course)
 const SHIP_RATE = 1, SHIP_WARN = 5, SHIP_STEADY = 8, SHIP_GRACE = 10, SHIP_DEGS = [5, 10, 15, 20];
 const SHIP_DRIFT_K = 0.15, SHIP_DRIFT_MAX = 1950;   // v124: on-scope slide per degree of ship turn (fraction of the true geometric offset) and its limit in ft (azimuth display is +/-2200 ft)
+/* v126: ship turns On/Off switch (panel "Ship turns", saved in localStorage 'stinger_shipTurns_final'; default ON on Final).
+   Off = no automatic turns, Instructor "turn now" refused, linked BRC turns from Marshal / Approach ignored during a run. */
+let FIN_SHIP_TURNS = (() => { try { return localStorage.getItem('stinger_shipTurns_final') !== '0'; } catch (e) { return true; } })();
+function setShipTurns(on) {
+  FIN_SHIP_TURNS = !!on; try { localStorage.setItem('stinger_shipTurns_final', on ? '1' : '0'); } catch (e) {}
+  const el = document.getElementById('liveShipTurns'); if (el) el.checked = FIN_SHIP_TURNS;
+  if (G && !G.over && G.ship) {
+    if (!on && G.ship.phase === 'warn') { G.ship.phase = null; try { shipBannerSet(); } catch (e) {} }
+    if (on) G.ship.next = G.t + SHIPCFG.every;
+    log('sys', on ? `Ship turns ON: next automatic turn in about ${Math.round(SHIPCFG.every / 60)} min.` : 'Ship turns OFF on Final: no automatic turns, linked turns ignored.');
+  }
+}
 const SHIPCFG = { auto: true, every: 600 };   // v99: a ship turn every 10 min of sim time by default (Instructor: auto on/off, interval, turn now)
-let SHIP_PEER_RX = 0;   // last time a running, linked Marshal / Approach told us about the ship
-const finFollowing = () => !!(G && G.linked && Date.now() - SHIP_PEER_RX < 5000);   // linked behind a running Marshal / Approach: replay their turns ('brc' messages)
+let SHIP_PEER_RX = 0, SHIP_PEER_TURNS = true;   // v126: false = the linked Marshal / Approach has its ship turns held: Final runs its own turns   // last time a running, linked Marshal / Approach told us about the ship
+{ const st = document.getElementById('liveShipTurns'); if (st) { st.checked = FIN_SHIP_TURNS; st.addEventListener('change', () => { setShipTurns(st.checked); st.blur(); }); } }
+window.__shipTurns = { get on() { return FIN_SHIP_TURNS; }, set: v => setShipTurns(v) };   // test hook
+const finFollowing = () => !!(G && G.linked && SHIP_PEER_TURNS && Date.now() - SHIP_PEER_RX < 5000);   // linked behind a running Marshal / Approach: replay their turns ('brc' messages)
 const shipBrcT = () => SHIP_BRCT != null ? SHIP_BRCT : (Math.round(norm(BRC + SHIP_MV)) || 360);
 function shipNewState(opts) {
   const r = opts.seed != null ? mulberry32((opts.seed ^ 0x5A17E) >>> 0) : Math.random;   // own stream: the sim rng is untouched
@@ -980,7 +995,7 @@ function shipStep(dt) {
     log('warn', `Mother in ${S2.dir === 'L' ? 'port' : 'starboard'} turn (${S2.amt}°). Call "ninety-nine, mother is in ${S2.dir === 'L' ? 'port' : 'starboard'} turn, standby for new BRC".`);
     shipAnnounce('turn');
   } else if (S2.phase === 'steady' && G.t >= S2.until) S2.phase = null;
-  if (S2.on && SHIPCFG.auto && !finFollowing() && isShip() && !S2.phase && G.t >= S2.next) {
+  if (S2.on && FIN_SHIP_TURNS && SHIPCFG.auto && !finFollowing() && isShip() && !S2.phase && G.t >= S2.next) {
     S2.next = Math.max(S2.next, G.t) + SHIPCFG.every;
     S2.phase = 'warn'; S2.until = G.t + SHIP_WARN; S2.dir = S2.rng() < 0.5 ? 'L' : 'R'; S2.amt = SHIP_DEGS[Math.floor(S2.rng() * SHIP_DEGS.length)];
     S2.n++; S2.gotTurn = S2.gotSteady = false; S2.dirKnown = true; S2.endT = null;
@@ -998,7 +1013,7 @@ function shipSteady() {
 let SHIP_MAR_RX = 0, SHIP_LAST = null;
 function shipSyncRecv(m) {
   if (m.type !== 'ship-state' || !m.linked || m.tbrc == null) return;
-  if (m.running && (m.src === 'MARSHAL' || m.src === 'APPROACH')) SHIP_PEER_RX = Date.now();
+  if (m.running && (m.src === 'MARSHAL' || m.src === 'APPROACH')) { SHIP_PEER_RX = Date.now(); if (typeof m.turns === 'boolean') SHIP_PEER_TURNS = m.turns; }
   if (m.src === 'MARSHAL') SHIP_MAR_RX = Date.now(); else if (Date.now() - SHIP_MAR_RX < 4000) return;   // Marshal wins while it is open
   SHIP_LAST = Object.assign({ rx: Date.now() }, m);
   const ck = document.getElementById('linkChk'); if (!(LINK.on || (ck && ck.checked))) return;
@@ -1013,6 +1028,7 @@ function shipStateApply(m) {
 // Approach link: {type:'brc', brc, fb, dwh, mv, turning}
 function shipLinkBrc(m) {
   if (!isShip()) return;
+  if (G && !G.over && (!FIN_SHIP_TURNS || !SHIP_PEER_TURNS)) return;   // v126: Final's turns off, or the peer's turns held: ignore linked turns during a run
   const fc = linkFinalCourse(m); if (fc == null) return;
   const oldT = shipBrcT();
   if (m.mv != null && isFinite(+m.mv)) SHIP_MV = +m.mv;
@@ -1039,6 +1055,7 @@ function shipLinkBrc(m) {
 /* v95 Instructor ship controls (Final runs its own turns only when it is not following a linked Marshal / Approach) */
 function shipInstCmd(m) {
   if (!G || G.over) return { ok: false, text: 'not running' };
+  if (!FIN_SHIP_TURNS) return { ok: false, text: 'ship turns are off on final' };   // v126
   if (finFollowing()) return null;   // the linked master scope turns the ship; Final follows
   const S2 = G.ship; if (!S2 || !isShip()) return { ok: false, text: 'no ship (tower mode)' };
   if (S2.phase === 'warn' || S2.phase === 'turn') return { ok: false, text: 'ship is already turning' };
@@ -1057,7 +1074,7 @@ window.__shipInfo = () => Object.assign(shipInstInfo(), { brc: Math.round(BRC) }
 function shipInstInfo() {
   const S2 = G && G.ship; const st = S2 ? (S2.phase === 'turn' ? 'turning' : S2.phase) : null;
   return { tbrc: shipBrcT(), st, dir: S2 && S2.dir ? (S2.dir === 'L' ? 'port' : 'starboard') : null, deg: S2 ? S2.amt : null, left: S2 && S2.phase === 'warn' ? Math.max(0, Math.ceil(S2.until - G.t)) : null,
-    next: S2 && SHIPCFG.auto && !finFollowing() ? Math.max(0, Math.round(S2.next - G.t)) : null, auto: SHIPCFG.auto, every: SHIPCFG.every, follow: finFollowing() };
+    next: S2 && SHIPCFG.auto && !finFollowing() ? Math.max(0, Math.round(S2.next - G.t)) : null, auto: SHIPCFG.auto, every: SHIPCFG.every, follow: finFollowing(), held: !FIN_SHIP_TURNS };
 }
 // "ninety-nine, mother is in port turn, standby for new BRC" / "ninety-nine, mother is steady, new BRC is one seven three"
 function shipCall(raw) {
@@ -2308,10 +2325,30 @@ function txFlush() {
     for (const x of other) pilotSay0(...x);
   }
 }
+/* v126 "break": one transmission with several parts ("Lightning 21, turn left heading 270, break, Lightning 22, take angels 5"). Each part is run
+   as its own call (graded, read back); a part without a callsign goes to the aircraft named in the part before it. "break off" (wave-off) is not a split. */
+const BREAK_SPLIT = /[\s,.;:!?-]*\b(?:break|brake)s?\b(?!\s+off\b)[\s,.;:!?-]*/i;
+function txBreak(text, src) {
+  if (!G || G.over) return null;
+  const t = String(text || ''); if (!BREAK_SPLIT.test(t)) return null;
+  const segs = t.split(new RegExp(BREAK_SPLIT.source, 'gi')).map(x => x.trim()).filter(x => /[a-z0-9]/i.test(x));
+  if (segs.length < 2) return null;
+  const prep = x => { try { if (typeof PM === 'function') x = PM(x); if (typeof MC !== 'undefined' && MC && typeof mcFixSpeech === 'function') x = mcFixSpeech(x); return typeof fixSpeech === 'function' ? fixSpeech(x) : x; } catch (e) { return x; } };
+  const known = G.ac.filter(alive).map(a => a.cs); let prev = null; const rs = [];
+  for (let seg of segs) {
+    let cs = null; try { const p = parseSpeech(prep(seg), known); cs = p && p.cs && !p.csUnknown && G.ac.some(a => a.cs === p.cs) ? p.cs : null; } catch (e) {}
+    if (cs) { const a = G.ac.find(x => x.cs === cs); prev = (a && (a.tel || (typeof telephony === 'function' && telephony(a.cs).text))) || cs; }
+    else if (prev) seg = prev + ', ' + seg;
+    rs.push((typeof txCompound === 'function' && txCompound(seg, src)) || handleTranscript0(seg, src) || { cmds: [] });
+  }
+  const cs = (rs.find(r => r && r.cs) || {}).cs || null, str = rs.map(r => r && r.str).filter(Boolean).join(' · break · ');
+  try { $('parsed').textContent = `Understood (break, ${segs.length} parts) → ${str}`; $('parsed').classList.remove('bad'); } catch (e) {}
+  return { cs, cmds: rs.flatMap(r => (r && r.cmds) || []), str, mar: (rs.find(r => r && r.mar) || {}).mar, brk: segs.length };
+}
 function handleTranscript(text, src) {
   if (src === 'voice' && gamePausedNow()) { log('sys', 'Paused: radio call ignored. Press Resume (or P) to transmit.'); return null; }   // v111: no voice input while paused
   TXC.depth++; let r;
-  try { r = (typeof txCompound === 'function' && txCompound(text, src)) || handleTranscript0(text, src); }
+  try { r = txBreak(text, src) || (typeof txCompound === 'function' && txCompound(text, src)) || handleTranscript0(text, src); }
   finally { TXC.depth--; if (!TXC.depth) { try { txFlush(); } catch (e) { console.error('txFlush', e); } } }
   return r;
 }

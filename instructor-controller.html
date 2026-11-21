@@ -325,6 +325,16 @@ function drawLand(cx, cy, RX, RY, sc, B) {   // same coastline as the master sco
   }
   ctx.drawImage(landCv, cx - RX, cy - RY, 2 * RX, 2 * RY);
 }
+/* v126: rendezvous points never over land: same land test as drawLand (true-frame polygons minus the carved water areas) */
+const ipip = (x, y, p) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+if (window.RDV && RDV.setLand) RDV.setLand((e, n) => {
+  const m = shipMaster(); if (!m || !m.landOn || !m.polys || !m.polys.length || !m.polys.some(p => ipip(e, n, p))) return false;
+  const r = -(+m.mv || 0) * DEG, me = e * Math.cos(r) + n * Math.sin(r), mn = -e * Math.sin(r) + n * Math.cos(r);
+  if (Math.hypot(me, mn) < LAND_CLEAR_NM) return false;
+  const br = (brc() - 180) * DEG, le = me * Math.cos(br) - mn * Math.sin(br), ln = me * Math.sin(br) + mn * Math.cos(br); if (Math.abs(le) < 2.2 && Math.abs(ln) < 20) return false;
+  for (const b of [45, 135, 225, 315]) if (Math.hypot(me - Math.sin(b * DEG) * LAND_HOLD_NM, mn - Math.cos(b * DEG) * LAND_HOLD_NM) < 3.2) return false;
+  return true;
+}, () => { const m = shipMaster(); return m && m.landOn && m.polys && m.polys.length ? [m.src, m.landSeed, m.polys.length, +m.mv || 0, Math.round(brc())].join('|') : 'water'; });
 function brc() { for (const s of ['MARSHAL', 'APPROACH', 'FINAL', 'DEPARTURE']) if (live(s) && I.src[s].brc != null) return I.src[s].brc; const m = shipMaster(); if (m && m.fb != null) return +m.fb; return 360; }
 /* v93 cone of confusion: only aircraft overflying the ship (within 0.3 NM). The scope says which aircraft may be coned (coneOk: not a
    launch / departure / climb-out, not final / landing, has been outside 1.5 NM, above 500 ft); older scopes: same arm-at-1.5-NM rule here. */
@@ -477,11 +487,11 @@ function renderCi() { const run = CI_SRC.filter(ciRun), n = ciNext(), nm = s => 
   paint();
 })();
 function shipView() {   // the scope that owns the ship (not following another)
-  for (const x of ['MARSHAL', 'APPROACH', 'FINAL']) { const st = live(x) && links().includes(x) && I.src[x].running ? I.src[x] : null; if (st && st.ship && !st.ship.follow) return Object.assign({ src: x }, st.ship); }
+  for (const x of ['MARSHAL', 'APPROACH', 'FINAL']) { const st = live(x) && links().includes(x) && I.src[x].running ? I.src[x] : null; if (st && st.ship && !st.ship.follow && !st.ship.held) return Object.assign({ src: x }, st.ship); }   // v126: a scope with turns held doesn't own the ship
   return null;
 }
 function renderShip() {
-  const v = shipView(), el = $('shipNow'); if (!v) { el.textContent = 'Start a linked simulation to see the ship.'; $('shGo').disabled = true; return; }
+  const v = shipView(), el = $('shipNow'); if (!v) { const held = ['MARSHAL', 'APPROACH', 'FINAL'].filter(x => live(x) && I.src[x].running && I.src[x].ship && I.src[x].ship.held); el.textContent = held.length ? `Ship turns are OFF on ${held.map(x => x[0] + x.slice(1).toLowerCase()).join(', ')}${I.src[held[0]].ship.tbrc ? ` (BRC ${h3(I.src[held[0]].ship.tbrc)})` : ''}. Switch them on in that scope's panel (Ship turns).` : 'Start a linked simulation to see the ship.'; $('shGo').disabled = true; return; }
   $('shGo').disabled = v.st === 'warn' || v.st === 'turning';
   const nm = v.src[0] + v.src.slice(1).toLowerCase(), b = h3(v.tbrc);
   const st = v.st === 'warn' ? `turning <b>${v.dir}</b> ${v.deg}° in <span class="cd">${v.left}s</span>` : v.st === 'turning' ? `<span class="cd">turning ${v.dir} ${v.deg}°</span>` : v.st === 'steady' ? 'steady (new BRC)' : SHIPI.auto && v.next != null ? `next auto turn in <span class="cd">${mmss(v.next)}</span>` : 'auto turns off';

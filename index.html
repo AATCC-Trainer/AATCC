@@ -1,6 +1,5 @@
 <!doctype html><html><head>
 <script src="gate.js"></script>
-<script src="shorthand.js"></script>
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="approach-192.png">
 <meta name="apple-mobile-web-app-title" content="AATCC Training Simulation Prototype"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AATCC Training Simulation Prototype</title><meta name="theme-color" content="#0b0d0b"><style>body{background:#0b0d0b;color:rgb(120,255,140);font-family:monospace;text-align:center;padding:40px}a{display:block;margin:20px auto;max-width:320px;padding:18px;border:1px solid rgb(120,255,140);color:rgb(120,255,140);text-decoration:none;font-size:20px}a.intro{border-color:#ffbf3c;color:#ffd27a;background:#1a1606;margin-bottom:34px}a.intro small,a.pbk small{display:block;font-size:13px;opacity:.8;margin-top:4px}a.pbk{margin-top:34px;border-color:#7fe3ff;color:#a8efff;background:#06161a}
@@ -17,24 +16,9 @@
 .set{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid rgba(120,255,140,.15)}.set small{display:block;opacity:.7}
 .set input[type=checkbox]{width:22px;height:22px;accent-color:rgb(120,255,140)}#setMsg{min-height:1.4em;color:#ffd27a;margin-top:10px}
 details{margin:6px 0;border:1px solid rgba(120,255,140,.2);padding:6px 10px}summary{cursor:pointer;color:#eaffee}
-#shIdx{max-width:680px;margin:14px auto 0;text-align:left;border:1px solid #ffd27a88;background:#141206;padding:0}
-#shIdx>summary{padding:14px 16px;color:#ffd27a;font-size:18px;text-align:center;list-style-position:inside}#shIdx>summary small{display:block;font-size:13px;opacity:.8;margin-top:4px;color:#ffe2a8}
-#shIdx[open]>summary{border-bottom:1px solid #ffd27a44}
-#shQ{display:block;width:calc(100% - 24px);margin:10px 12px 4px;padding:9px 10px;font:15px monospace;background:#030503;color:#eaffee;border:1px solid rgb(120,255,140);outline:none;box-sizing:border-box}
-.shTip{margin:6px 12px;font-size:12.5px;color:rgba(190,255,200,.8);line-height:1.45}.shTip b{color:#eaffee}
-#shList{padding:2px 12px 6px}.shr{display:grid;grid-template-columns:84px 1fr;gap:2px 10px;padding:6px 0;border-bottom:1px solid rgba(120,255,140,.15);font-size:13.5px;line-height:1.4}
-.shr code{color:#ffd27a;font-weight:bold;word-break:break-all}.shr span{color:#eaffee}.shr small{grid-column:2;font-size:11px;color:rgba(160,255,175,.65)}
-.shNo{color:#ffd27a;padding:8px 0}
-#shIdx a.shAll{font-size:14px;padding:10px;margin:8px 12px 12px;max-width:none;text-align:center}
 </style></head><body><h1>AATCC Training Simulation Prototype</h1><a class="intro" href="intro.html" target="_blank" rel="opener">New here? Start the Intro<small>A guided first mission: the scope, the flow and phraseology</small></a><a href="instructor-controller.html" target="_blank" rel="opener">Instructor</a><a href="final-controller-par-restyled.html" target="_blank" rel="opener">Final</a><a href="departure-controller.html" target="_blank" rel="opener">Departure</a><a href="approach-controller.html" target="_blank" rel="opener">Approach</a><a href="marshal-controller.html" target="_blank" rel="opener">Marshal</a>
 <a class="pbk" href="playbook.html" target="_blank" rel="opener">Phraseology Playbook<small>The right calls for each position, with examples</small></a>
 <a class="pbk" href="logsheet.html" target="_blank" rel="opener">Log Sheet<small>Training time and grades per controller, saved on this computer only</small></a>
-<details id="shIdx"><summary>Shorthand Commands<small>Every typed code and what it expands to</small></summary>
-<input id="shQ" type="search" placeholder="Search codes, e.g. heading, angels, lh2" autocomplete="off" aria-label="Search shorthand codes">
-<p class="shTip">Typed in a scope's command box only. Start with a callsign (<b>lt21</b>, <b>ea48</b>, helos <b>vn312</b>, digits <b>21</b>, or an accept letter <b>A</b>), then chain codes with spaces: <b>lt21 l180 ta1.2 du</b>. Type <b>?</b> on a scope to see the list there.</p>
-<div id="shList"></div>
-<a class="shAll" href="playbook.html#shorthand" target="_blank" rel="opener">Open the list in the Playbook</a>
-</details>
 <button id="bHelp" type="button">⚙ Settings / Help</button>
 <div id="hov" role="dialog" aria-modal="true" aria-label="Settings and help"><div id="hp">
 <button id="hx" type="button" title="Close (Esc)">✕</button>
@@ -64,7 +48,7 @@ details{margin:6px 0;border:1px solid rgba(120,255,140,.2);padding:6px 10px}summ
 <li>Press <b>C</b> over a line's aircraft or end to clear that line, anywhere else on the scope to clear all. Keys work only with the mouse on the scope and the command box empty.</li>
 </ul>
 <h3>Shorthand typing</h3>
-<p>In a scope's command box, type <code>?</code> and press Enter to see the shorthand cheat sheet for that position.</p>
+<p>In a scope's command box, type <code>?</code> and press Enter to see the shorthand cheat sheet for that position. The full list of typed codes is on the <b>Shorthand</b> tab of the Phraseology Playbook.</p>
 <h3>Data blocks (Marshal &amp; Approach)</h3>
 <p>Accepted aircraft get a letter in the order you accept them, shown with a short callsign (<code>A LT21</code>). Type the letter first to talk to it: <code>A h270</code>. Ground speed is hidden at the start of each sim; type <code>gsp</code> once and it shows on every data block, including aircraft that arrive later. Type <code>gsp</code> again to hide it. One arrival per sim shows up as a primary target only: click it, then <code>sqn</code> (squawk normal) or <code>sq4521</code> brings its data block back.</p>
 <h3>New to ATC?</h3>
@@ -119,22 +103,6 @@ details{margin:6px 0;border:1px solid rgba(120,255,140,.2);padding:6px 10px}summ
   };
   if (location.hash === '#help' || location.hash === '#settings') open(location.hash === '#settings' ? 'set' : 'help');
   window.__help = { open: open, close: close };
-})();
-</script>
-<script>
-(function () {   // v101: shorthand list, generated from shorthand.js so it stays in sync
-  var $ = function (id) { return document.getElementById(id); };
-  var P = { marshal: 'Marshal', approach: 'Approach', final: 'Final' };
-  var rows = []; try { rows = window.Shorthand && Shorthand.rows ? Shorthand.rows() : []; } catch (e) {}
-  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-  function draw() {
-    var q = ($('shQ').value || '').trim().toLowerCase(), w = q.split(/\s+/).filter(Boolean);
-    var hit = rows.filter(function (r) { var t = (r.code + ' ' + r.meaning + ' ' + (r.expands || '') + ' ' + r.scopes.join(' ')).toLowerCase(); return w.every(function (x) { return t.indexOf(x) >= 0; }); });
-    $('shList').innerHTML = hit.length ? hit.map(function (r) { return '<div class="shr"><code>' + esc(r.code) + '</code><span>' + esc(r.meaning) + '</span><small>' + r.scopes.map(function (s) { return P[s]; }).join(' · ') + '</small></div>'; }).join('')
-      : '<div class="shNo">' + (rows.length ? 'No codes match.' : 'Shorthand list unavailable.') + '</div>';
-  }
-  $('shQ').addEventListener('input', draw); draw();
-  window.__shIdx = { count: function () { return rows.length; } };
 })();
 </script>
 </body></html>

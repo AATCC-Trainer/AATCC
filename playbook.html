@@ -64,10 +64,12 @@ mark{background:#3a3a10;color:#fff3a0}
   mark{background:none;color:#000}
   main{padding:0}
 }
+.homeBtn{display:inline-block;margin:8px 0 6px;padding:12px 22px;min-height:44px;box-sizing:border-box;font:bold 17px monospace;color:rgb(160,255,175);background:#0f1a10;border:1px solid rgba(120,255,140,.7);border-radius:6px;text-decoration:none;cursor:pointer}.homeBtn:hover{background:#123a18;color:#eaffee}   /* v126: bigger Home button */
 </style></head><body>
 <header><div class="wrap">
+<a class="homeBtn" href="index.html">← Home</a>
 <h1>Phraseology Playbook <span style="font-size:12px;color:#ffd27a;letter-spacing:0">PROTOTYPE</span></h1>
-<div class="sub">The radio calls each trainer position understands, when to use them, and what the sim pilot says back. Spoken calls, plus a <a href="#shorthand" id="lShort">Shorthand</a> tab with every typed code. Trainer guidance, not an official publication. <a href="index.html">← Home</a></div>
+<div class="sub">The radio calls each trainer position understands, when to use them, and what the sim pilot says back. Spoken calls, plus a <a href="#shorthand" id="lShort">Shorthand</a> tab with every typed code. Trainer guidance, not an official publication. </div>
 <div class="bar"><input id="q" type="search" placeholder="Search calls, e.g. glidepath, go purple, commencing…" autocomplete="off" aria-label="Search phraseology"><button class="btn" id="bClear" type="button">Clear</button><button class="btn" id="bPrint" type="button">🖨 Print</button></div>
 <div class="tabs" role="tablist">
 <button type="button" data-s="all" class="on">All</button><button type="button" data-s="general">General</button><button type="button" data-s="departure"><span class="tel">Departure</span></button><button type="button" data-s="marshal"><span class="red">Marshal</span></button><button type="button" data-s="approach"><span class="slv">Approach</span></button><button type="button" data-s="final"><span class="prp">Final</span>/<span class="cop">PAR</span></button><button type="button" data-s="shorthand">Shorthand</button>
@@ -208,6 +210,9 @@ var KEYS = [
  { code: 'T', meaning: 'SPLAT-T: point at an aircraft and press T to start a range/bearing line, T again to hold it (end fixed, still anchored to the aircraft). Marshal, Approach, Instructor scopes.', scopes: ['keys'] },
  { code: 'C', meaning: 'SPLAT-T: clear the line under the pointer (its aircraft or its end), otherwise clear all lines.', scopes: ['keys'] },
  { code: 'gsp', meaning: 'Scope command (not a radio call): ground speed on every data block, on/off.', scopes: ['keys'] },
+ { code: 'A HND S', meaning: 'Automated handoff, Marshal ↔ Approach linked (scope command, not a radio call): aircraft A to Silver (from Approach: A HND R to Red). Spaces optional (AHNDS). Colour letters S Silver, R Red, C Copper, P Purple, T Teal. HNDOFF flashes until the other scope accepts; A HND again or Esc cancels.', scopes: ['keys'] },
+ { code: 'A ACPT', meaning: 'Accept an incoming handoff on the receiving scope (or type just its letter, or ACPT for the oldest, or click the flashing target).', scopes: ['keys'] },
+ { code: 'break', meaning: 'Split one transmission into parts, typed or spoken: lt21 h270 break lt22 a5 (or "Lightning 21, turn left heading 270, break, Lightning 22, take angels 5"). Each part is executed and read back on its own; a part with no callsign goes to the aircraft named before it. "break off" is not a split. Marshal, Approach, Departure, Final.', scopes: ['keys'] },
  { code: '?', meaning: 'Typed alone + Enter in the command box: opens this code list on the scope.', scopes: ['keys'] }
 ];
 function shMatch(r) { if (!q) return true; var t = (r.code + ' ' + r.meaning + ' ' + (r.expands || '') + ' ' + r.scopes.join(' ')).toLowerCase(); return q.toLowerCase().split(/\s+/).filter(Boolean).every(function (w) { return t.indexOf(w) >= 0; }); }
