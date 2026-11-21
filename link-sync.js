@@ -24,7 +24,7 @@
     const g = linked() ? group() : [];
     let n = document.getElementById('lsNote'); const b = document.getElementById('bStart');
     if (b && !n) { n = document.createElement('div'); n.id = 'lsNote'; n.style.cssText = 'font-size:12px;color:#8fd8ff;margin:4px 0 0;text-align:center'; b.insertAdjacentElement('afterend', n); }
-    if (n) n.textContent = g.length ? `🔗 Linked: START also starts ${g.map(nm).join(' + ')}; Pause pauses all.` : '';
+    if (n) n.textContent = g.length ? `🔗 Linked: Start also starts ${g.map(nm).join(' + ')}; Pause pauses all.` : '';
     const p = document.getElementById('bPause'); if (p) { const gg = G(); const base = gg && gg.paused ? '▶ Resume' : '❚❚ Pause'; p.textContent = base + (g.length && run() ? ' (all)' : ''); p.title = g.length ? 'Pause / resume ALL linked scopes (P)' : 'Pause (P)'; }
   }
   function started(diff, opts) {   // page hook: end of startGame

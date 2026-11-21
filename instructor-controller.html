@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head>
-<script src="gate.js"></script><script src="splat-t.js"></script><script src="rendezvous.js"></script><script src="freq-box.js"></script><script src="traininglog.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="gate.js"></script><script src="report.js"></script><script src="splat-t.js"></script><script src="rendezvous.js"></script><script src="freq-box.js"></script><script src="traininglog.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Instructor · AATCC Trainer</title><meta name="theme-color" content="#0b0d0b"><link rel="icon" type="image/png" sizes="192x192" href="approach-192.png">
 <style>
 :root{--g:#c8f5cd;--gd:#4f8a5a;--gdd:#1f3524;--bg:#0b0d0b;--amber:#ffbf3c;--red:#ff5a6e;--cyan:#2ee6e6;--dim:#7d9a80;--panel2:#121a14;--hov:#1a281d;--silver:#c9ced6;--purple:#b48cff;--copper:#e0915a;--green:#6dff8c}
@@ -16,7 +16,7 @@ input[type=range]{accent-color:var(--cyan);width:120px;padding:0}
 #main{flex:1;display:flex;min-height:0}
 #scopeBox{flex:1;position:relative;min-width:0}
 canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-#panel{width:440px;display:flex;flex-direction:column;border-left:1px solid #1f3524;padding:8px;gap:7px;overflow-y:auto;font-size:13px}
+#panel{width:460px;display:flex;flex-direction:column;border-left:1px solid #1f3524;padding:8px;gap:7px;overflow:hidden;font-size:13px}
 h3{margin:2px 0;font-size:12px;color:var(--dim);font-weight:normal;letter-spacing:1px}
 #selBox{border:1px solid var(--gdd);border-radius:4px;padding:7px;background:var(--panel2)}
 #selBox.has{border-color:var(--cyan)}
@@ -38,7 +38,7 @@ td{padding:3px 4px;border-top:1px solid #142418;vertical-align:top}tr.act{cursor
 .ft{font-size:10px;padding:0 4px;border-radius:2px;border:1px solid}
 .f-red{color:var(--red);border-color:var(--red)}.f-teal{color:#3fd6c8;border-color:#3fd6c8}.f-silver{color:var(--silver);border-color:var(--silver)}.f-purple{color:var(--purple);border-color:var(--purple)}.f-copper{color:var(--copper);border-color:var(--copper)}
 .st-on{color:var(--green)}.st-in{color:var(--amber)}.st-done{color:var(--dim)}
-#log{border:1px solid #1f3524;border-radius:4px;height:150px;overflow-y:auto;font-size:12px;padding:4px;line-height:1.35}
+#log{border:1px solid #1f3524;border-radius:4px;overflow-y:auto;font-size:12px;padding:4px;line-height:1.35}
 #log .i{color:var(--amber)}#log .p{color:var(--cyan)}#log .s{color:var(--dim)}#log .b{color:var(--red)}
 #ov{position:absolute;inset:0;background:rgba(4,10,5,.92);display:flex;align-items:center;justify-content:center;z-index:5}
 #ov.hidden{display:none}
@@ -61,66 +61,110 @@ td{padding:3px 4px;border-top:1px solid #142418;vertical-align:top}tr.act{cursor
   #scopeBox{flex:none;height:min(100vw,60vh)}
   #scopeBox canvas{touch-action:none}
   #panel{width:100%;border-left:none;border-top:1px solid #1f3524;overflow:visible}
+  #tabBody{overflow:visible}
   #ov{position:fixed;align-items:flex-start;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px}
   #ovIn{max-width:100%}
   input[type=range]{width:90px}
 }
+/* v131 session strip, tabs, live traffic, events, summary */
+#sess{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:6px 8px;border-bottom:1px solid #1f3524;background:#0a120c;font-size:13px}
+#sess .sLbl{color:var(--dim);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+#sess .clk{font-size:20px;font-weight:bold;color:var(--at-strong,#e2fbe5);min-width:5.2em;letter-spacing:.04em}
+#sess .clk.paused{color:var(--amber)}
+#sess .seg{display:inline-flex}#sess .seg button{border-radius:0}#sess .seg button:first-child{border-radius:3px 0 0 3px}#sess .seg button:last-child{border-radius:0 3px 3px 0}
+#sess .sep{width:1px;align-self:stretch;background:#1f3524;margin:0 2px}
+#bRestartSims{font-weight:bold;color:#e2fbe5;border-color:var(--at-accent,#78ff8c);background:#123f1a}
+#sessLvl{color:var(--dim);font-size:12px}
+#tabs{display:flex;gap:0;border-bottom:1px solid #1f3524}
+#tabs button{border:none;border-bottom:2px solid transparent;background:none;border-radius:0;color:var(--dim);padding:6px 12px;min-height:32px}
+#tabs button:hover{color:var(--g);background:none}#tabs button.on{color:var(--at-strong,#e2fbe5);border-bottom-color:var(--at-accent,#78ff8c);background:none}
+.tab{display:none;flex-direction:column;gap:7px}.tab.on{display:flex}
+#tabBody{flex:1;min-height:120px;overflow-y:auto;display:flex;flex-direction:column}
+#tfcBox{border:1px solid #1f3524;border-radius:4px;max-height:300px;overflow-y:auto}
+#tfc td .sub{color:var(--dim)}#tfc tr.hnd td:last-child{color:var(--amber)}
+#sumBox table td,#sumBox table th{text-align:center}#sumBox table td:first-child,#sumBox table th:first-child{text-align:left}
+#sumBox tr.tot td{border-top:1px solid var(--gd);color:var(--at-strong,#e2fbe5)}
+.gr{display:inline-block;min-width:1.3em;padding:0 2px;margin:0 1px;border-radius:2px;font-weight:bold}.gr.A,.gr.B{color:var(--green)}.gr.C{color:var(--amber)}.gr.D,.gr.F{color:var(--red)}
+#evHd{display:flex;align-items:center;gap:6px;flex-wrap:wrap}#evHd h3{flex:1}
+#evF{display:inline-flex}#evF button{font-size:11px;padding:2px 7px;min-height:24px;border-radius:0}#evF button:first-child{border-radius:3px 0 0 3px}#evF button:last-child{border-radius:0 3px 3px 0}
+#log{height:190px;flex:none}
+#log .src{display:inline-block;min-width:2.6em;font-size:10px;padding:0 3px;margin-right:4px;border:1px solid;border-radius:2px;text-align:center}
+#log .ev-good{color:var(--green)}#log .ev-bad{color:#ff8a9a}#log .ev-warn{color:var(--amber)}#log .ev-sys{color:var(--g)}
+#log.f-hnd>div:not(.k-hnd),#log.f-land>div:not(.k-land),#log.f-err>div:not(.k-err),#log.f-ins>div:not(.k-ins){display:none}
 </style><link rel="stylesheet" href="aatcc-theme.css">
 <style>#top .at-brand .at-mark{width:16px;height:16px;border-width:1.5px}#top .at-name{font-size:13px}#top .at-ipos{color:var(--cyan);font-weight:bold;font-size:13px}#top .at-ilinks{display:inline-flex;gap:4px}#top .at-ilinks a{color:var(--dim);text-decoration:none;border:1px solid var(--gdd);border-radius:3px;padding:4px 7px;font-size:12px}#top .at-ilinks a:hover{color:var(--at-accent);border-color:var(--gd)}@media (min-width:951px){#top{padding-right:160px}}</style>
 </head><body>
 <div id="wrap">
  <div id="top">
   <a class="at-brand" href="index.html" target="_blank" rel="opener" title="Home page (new tab)"><span class="at-mark"></span><span class="at-name">AATCC Trainer</span></a><span class="at-ipos">Instructor</span><span class="at-ilinks"><a href="index.html" target="_blank" rel="opener" title="Home page (new tab)">⌂ Home</a><a href="help.html" target="_blank" rel="opener" title="Help and About (new tab)">? Help</a></span>
-  <div class="grp"><span class="lbl">Link:</span>
+  <div class="grp"><span class="lbl">Link</span>
    <button data-l="MARSHAL" class="lk">Marshal</button><button data-l="APPROACH" class="lk">Approach</button><button data-l="BOTH" class="lk">Marshal + Approach</button></div>
-  <span id="stM" class="badge off">RED · MARSHAL</span><span id="stA" class="badge off">SLVR · APPROACH</span><span id="stD" class="badge wait">TEAL · DEPARTURE · READY</span><span id="stF" class="badge wait" title="Final Control is always linked automatically">FINAL: AUTO-LINKED · READY</span>
-  <div class="grp"><span class="lbl">Scope</span><button id="zOut" title="Zoom out">−</button><input type="range" id="zSl" min="5" max="80" step="1"><button id="zIn" title="Zoom in">+</button><input type="number" id="zVal" min="5" max="80" step="1" value="30" inputmode="numeric" title="Type a range (5–80 NM) and press Enter" style="width:4.4em;color:var(--cyan);background:rgba(0,0,0,0.35);border:1px solid rgba(46,230,230,0.45);border-radius:4px;text-align:right;font:inherit;padding:1px 3px"><span style="color:var(--dim)">NM</span></div>
+  <div class="grp"><span class="lbl">Range</span><button id="zOut" title="Zoom out">−</button><input type="range" id="zSl" min="5" max="80" step="1"><button id="zIn" title="Zoom in">+</button><input type="number" id="zVal" min="5" max="80" step="1" value="30" inputmode="numeric" title="Type a range (5–80 NM) and press Enter" style="width:4.4em;color:var(--cyan);background:rgba(0,0,0,0.35);border:1px solid rgba(46,230,230,0.45);border-radius:4px;text-align:right;font:inherit;padding:1px 3px"><span style="color:var(--dim)">NM</span></div>
   <div class="grp"><span class="lbl">Rings</span><select id="rgSel"><option value="1">1 NM</option><option value="2">2 NM</option><option value="5">5 NM</option><option value="10">10 NM</option><option value="0">Off</option></select></div>
   <div class="grp"><label class="lbl" title="Show the rendezvous points (yellow)" style="display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="rdvChk" checked>RDV</label></div>
-  <button id="bPause" title="Pause / resume all linked simulations">⏸ Pause</button><button id="bRestartSims" title="Start the linked simulations, or restart them as a new sim (same level and settings; Marshal rolls a new BRC + land and the linked scopes follow)">▶ Start sims</button><span id="clock" class="badge">T+0:00</span>
+ </div>
+ <div id="sess" aria-label="Session controls"><span class="sLbl">Session</span><span id="clock" class="clk" title="Session time of the linked scopes">T+--:--</span>
+  <button id="bRestartSims" title="Start the linked scopes together, or restart them as a new session (same level and settings)">▶ Start</button><button id="bPause" title="Pause or resume every linked scope">❚❚ Pause</button>
+  <span class="seg" title="Session speed for every linked scope"><button id="sp1" class="on">1x</button><button id="sp3">3x</button></span><span id="sessLvl"></span>
+  <span class="sep"></span><span class="sLbl">Scopes</span>
+  <span id="stM" class="badge off">Marshal</span><span id="stA" class="badge off">Approach</span><span id="stF" class="badge wait" title="Final is always linked">Final</span><span id="stD" class="badge wait" title="Departure is always linked">Departure</span>
  </div>
  <div id="main">
   <div id="scopeBox"><canvas id="cv"></canvas>
    <div id="ov"><div id="ovIn">
-    <h2>Instructor Screen (prototype)</h2>
-    <div>Pick which radar position to link with. <b style="color:var(--purple)">Final Control</b> is always linked automatically.</div>
+    <h2>Instructor</h2>
+    <div>Choose which scopes to watch and control. <b style="color:var(--purple)">Final</b> and Departure are always linked.</div>
     <div class="row"><button data-l="MARSHAL" class="lk">Marshal</button><button data-l="APPROACH" class="lk">Approach</button><button data-l="BOTH" class="lk">Marshal + Approach</button></div>
-    <div style="color:var(--dim);font-size:12px">The Instructor screen does not run a simulation. Start Marshal / Approach / Final in their own tabs (each has its own ▶ START button); this screen connects automatically and lets you command their aircraft.</div>
-    <div class="row"><button id="ovClose" class="on">Open Instructor scope →</button></div>
-    <div style="color:var(--dim);font-size:12px">Click an aircraft (scope or list) → <b>Text</b> (or press T / Enter) to type an instruction. On final: <b>Climb / Descend</b> (or PgUp / PgDn) for a silent glidepath offset. Arrow keys move the selected data block. Mouse wheel zooms. <b>SPLAT-T</b>: point at a target and press <b>T</b> for a range/bearing line, <b>T</b> again to hold it, <b>C</b> to clear (over a line: that one, else all). T over empty scope still opens Text. <b>Next aircraft check-in</b>: Auto (timed) or Manual, then <b>N</b> checks the next one in. Instructor actions never get a pilot readback.</div>
+    <div style="color:var(--dim);font-size:12px">The Instructor does not run its own session. Open Marshal, Approach and Final in their own tabs; this page connects to them on its own. Then use <b>Start</b>, <b>Pause</b> and the speed buttons in the session bar to run all linked scopes together.</div>
+    <div class="row"><button id="ovClose" class="on">Open Instructor →</button></div>
+    <div style="color:var(--dim);font-size:12px">Click an aircraft (on the scope or in Traffic), then <b>Text</b> (or T / Enter) to type an instruction. On final: <b>Climb / Descend</b> (or PgUp / PgDn) for a silent glidepath offset. Arrow keys move the selected data block. Mouse wheel zooms. <b>SPLAT-T</b>: point at a target and press <b>T</b> for a range/bearing line, <b>T</b> again to hold it, <b>C</b> to clear (over a line: that one, else all). T over empty scope still opens Text. <b>Schedule</b> tab: next check-in Auto (timed) or Manual, then <b>N</b> checks the next one in. Instructor actions never get a pilot readback.</div>
    </div></div>
   </div>
   <div id="panel">
-   <div id="selBox"><h3>SELECTED AIRCRAFT</h3><div id="selName">— click an aircraft —</div><div id="selInfo"></div>
+   <div id="selBox"><h3>SELECTED AIRCRAFT</h3><div id="selName">Click an aircraft</div><div id="selInfo"></div>
     <div class="row"><button id="bText">⌨ Text</button><button id="bPO" class="tog" title="Student sees only the moving target (data block hidden)">Primary Only</button><button id="bSO" class="tog" title="Student sees only the data block (target hidden)">Secondary Only</button><button id="bNR" class="tog on" title="Target + data block">Normal Radar</button><button id="bBus" class="tog">Buster (500 kt)</button></div>
-    <div id="altBump"><span class="lbl">ON FINAL · glidepath offset (silent · PgUp / PgDn)</span>
+    <div id="altBump"><span class="lbl">On final: glidepath offset (silent, PgUp / PgDn)</span>
      <select id="altStep" title="Altitude step"><option value="100">100 ft</option><option value="200" selected>200 ft</option><option value="500">500 ft</option></select>
      <button id="bDesc" title="Push below glidepath / lower (hold to repeat)">▼ Descend</button>
      <button id="bAsc" title="Push above glidepath / raise (hold to repeat)">▲ Climb</button></div>
     <div id="txBar"><div id="txTo"></div><form id="txForm" class="row" style="flex-wrap:nowrap"><input id="txIn" autocomplete="off" placeholder="turn left heading 180, angels 3"><button id="txSend" class="on">Send</button></form>
      <div class="chips" id="chips"></div></div>
    </div>
-   <div id="ciBox"><h3>NEXT AIRCRAFT CHECK-IN</h3>
-    <div class="row" style="align-items:center"><span class="seg"><button id="ciAuto" class="on" title="Aircraft check in on the simulation's timer">Auto (timed)</button><button id="ciMan" title="Aircraft wait until you check them in">Manual</button></span></div>
-    <div id="ciNext">—</div>
-    <div class="row" id="ciBtns"><button id="ciGo" class="ciGo" title="Check the next scheduled aircraft in now (N)">▶ Check in next aircraft (N)</button><button id="ciGoM" class="ciGo" style="display:none" title="Next Marshal arrival now">→ Marshal</button><button id="ciGoA" class="ciGo" style="display:none" title="Next Approach launch now">→ Approach</button></div>
+   <div id="tabs" role="tablist"><button data-t="traffic" class="on">Traffic</button><button data-t="sched">Schedule</button><button data-t="ship">Ship</button></div>
+   <div id="tabBody">
+   <div class="tab on" data-t="traffic">
+    <h3>LIVE TRAFFIC · ALL LINKED SCOPES</h3>
+    <div id="tfcBox"><table id="tfc"><thead><tr><th>Callsign</th><th>Type</th><th>Scope</th><th>Altitude</th><th>State</th></tr></thead><tbody id="tBody"></tbody></table></div>
+    <h3>SUMMARY BY SCOPE</h3>
+    <div id="sumBox"><table><thead><tr><th>Scope</th><th title="Aircraft worked this session">Worked</th><th>Landed</th><th title="Wave-offs and missed approaches">Wave-offs</th><th>Score</th><th title="Good / inaccurate calls">Calls</th><th>Grades</th></tr></thead><tbody id="sBody"></tbody></table></div>
    </div>
-   <div id="shipBox"><h3>SHIP TURNS · BRC (all linked scopes)</h3>
+   <div class="tab" data-t="sched">
+   <div id="ciBox"><h3>NEXT AIRCRAFT CHECK-IN</h3>
+    <div class="row" style="align-items:center"><span class="seg"><button id="ciAuto" class="on" title="Aircraft check in on the session's timer">Auto (timed)</button><button id="ciMan" title="Aircraft wait until you check them in">Manual</button></span></div>
+    <div id="ciNext">—</div>
+    <div class="row" id="ciBtns"><button id="ciGo" class="ciGo" title="Check the next scheduled aircraft in now (N)">▶ Check in next (N)</button><button id="ciGoM" class="ciGo" style="display:none" title="Next Marshal arrival now">→ Marshal</button><button id="ciGoA" class="ciGo" style="display:none" title="Next Approach launch now">→ Approach</button></div>
+   </div>
+   <h3>SCHEDULE · WHEN AIRCRAFT CHECK IN</h3>
+   <div id="roster"><table><thead><tr><th>Callsign / type</th><th>Scope</th><th>Checks in</th><th>Status</th></tr></thead><tbody id="rBody"></tbody></table></div>
+   <div id="addBox"><div class="row"><b style="color:var(--cyan)">+ Add aircraft</b>
+    <select id="adSrc" title="Scope it checks in on"><option value="MARSHAL">Marshal</option><option value="APPROACH">Approach</option></select>
+    <select id="adCs" title="Callsign (from the session's callsign list)"><option value="">Auto callsign</option></select><input id="adNum" placeholder="No. (auto)" inputmode="numeric" title="Callsign number (blank = auto)">
+    <select id="adType" title="Aircraft type"><option value="">Auto type</option></select>
+    <input id="adAt" value="in 1 min" title="Check-in time: mm:ss of session time, or 'in 2 min'"><button id="adGo">Add</button></div>
+    <div id="addMsg">Click a pending time (✎) to change it: <b>mm:ss</b> of session time or <b>in 2 min</b>. ✕ removes it before it checks in. The list stays in time order.</div></div>
+   </div>
+   <div class="tab" data-t="ship">
+   <div id="shipBox"><h3>SHIP TURNS · BRC (ALL LINKED SCOPES)</h3>
     <div id="shipNow">—</div>
     <div class="row" style="align-items:center"><span class="seg"><button id="shAuto" class="on" title="The ship turns on its own at the interval">Auto turns</button><button id="shOff" title="No automatic turns; only when you turn it">Off</button></span>
      <span class="lbl">every</span><select id="shEvery" title="Time between automatic ship turns (sim time)"><option value="120">2 min</option><option value="180">3 min</option><option value="240">4 min</option><option value="300">5 min</option><option value="360">6 min</option><option value="480">8 min</option><option value="600">10 min</option><option value="720">12 min</option><option value="900">15 min</option><option value="1200">20 min</option></select></div>
     <div class="row" style="align-items:center;margin-top:5px"><select id="shDir" title="Direction"><option value="port">Port (left)</option><option value="starboard">Starboard (right)</option></select>
      <select id="shDeg" title="How much"></select><button id="shGo" class="ciGo" title="Turn the ship now (5 s warning on the scopes; silent)">↻ Turn ship now</button></div>
    </div>
-   <h3>SIMULATION AIRCRAFT · WHEN THEY APPEAR ON THE SCOPE</h3>
-   <div id="roster"><table><thead><tr><th>Callsign / type</th><th>Pos</th><th>Appears</th><th>Status</th></tr></thead><tbody id="rBody"></tbody></table></div>
-   <div id="addBox"><div class="row"><b style="color:var(--cyan)">+ ADD AIRCRAFT</b>
-    <select id="adSrc" title="Scope it checks in on"><option value="MARSHAL">Marshal</option><option value="APPROACH">Approach</option></select>
-    <select id="adCs" title="Callsign (from the sim's callsign table)"><option value="">Auto callsign</option></select><input id="adNum" placeholder="no. (auto)" inputmode="numeric" title="Callsign number (blank = auto)">
-    <select id="adType" title="Aircraft type"><option value="">Auto type</option></select>
-    <input id="adAt" value="in 1 min" title="Start time: mm:ss of sim time, or 'in 2 min'"><button id="adGo">Add</button></div>
-    <div id="addMsg">Click a pending start time (✎) to change it: <b>mm:ss</b> of sim time or <b>in 2 min</b>. ✕ removes it before it checks in. The list re-orders by time.</div></div>
-   <h3>INSTRUCTOR LOG</h3><div id="log"></div>
+   </div>
+   </div>
+   <div id="evHd"><h3>EVENTS</h3><span id="evF" title="Show only some events"><button data-f="" class="on">All</button><button data-f="hnd" title="Check-ins and handoffs">Handoffs</button><button data-f="land" title="Landings and wave-offs">Landings</button><button data-f="err">Errors</button><button data-f="ins">Instructor</button></span></div>
+   <div id="log" aria-live="off"></div>
   </div>
  </div>
 </div>
@@ -140,13 +184,14 @@ const live = s => I.src[s] && Date.now() - I.src[s].rx < 3000;
 const mmss = t => { t = Math.max(0, Math.round(t)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
 const h3 = h => String(Math.round(((h % 360) + 360) % 360) || 360).padStart(3, '0');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-function log(cls, s) { const d = document.createElement('div'); d.className = cls; const t = curT(); d.textContent = `[${t != null ? mmss(t) : '--'}] ${s}`; $('log').appendChild(d); $('log').scrollTop = 1e9; }
+function log(cls, s) { const d = document.createElement('div'); d.className = cls + ' k-ins'; logCap(); const t = curT(); d.textContent = `[${t != null ? mmss(t) : '--'}] ${s}`; $('log').appendChild(d); $('log').scrollTop = 1e9; }
 function curT() { for (const s of links()) if (live(s) && I.src[s].t != null && s !== 'FINAL') return I.src[s].t; return live('FINAL') ? I.src.FINAL.t : null; }
 function hello() { try { ch.postMessage({ type: 'inst-hello', links: links(), ciMode: I.ci, ship: { auto: SHIPI.auto, every: SHIPI.every } }); } catch (e) {} }
 ch.onmessage = e => {
   const m = e.data || {};
-  if (m.type === 'inst-state' && m.src) { if (!links().includes(m.src)) return; m.rx = Date.now(); I.src[m.src] = m; if (m.hello) hello(); }
+  if (m.type === 'inst-state' && m.src) { if (!links().includes(m.src)) return; m.rx = Date.now(); I.src[m.src] = m; if (m.ev) ingestEv(m); if (m.hello) hello(); }
   else if (m.type === 'ship-state' && (m.src === 'MARSHAL' || m.src === 'APPROACH')) { m.rx = Date.now(); I.ship[m.src] = m; }
+  else if (m.type === 'ls-hello' && m.src) { (I.lsPeer || (I.lsPeer = {}))[m.src] = { on: !!m.on, t: Date.now() }; }   // v131: which scopes are in the linked group (link-sync)
   else if (m.type === 'inst-ack') { log(m.ok ? 'p' : 'b', `${m.src}${m.cs ? ' · ' + m.cs : ''}: ${m.ok ? '✓ ' : '✗ '}${m.text || ''}`); }
 };
 setInterval(hello, 1500); hello();
@@ -194,7 +239,7 @@ paintChips(); setInterval(() => { try { paintChips(); } catch (e) {} }, 1000);
 $('chips').onclick = e => { if (e.target.tagName === 'SPAN') { $('txIn').value = e.target.textContent; $('txIn').focus(); } };
 function renderSel() {
   const a = selAc(); $('selBox').classList.toggle('has', !!a);
-  if (!a) { $('selName').textContent = '— click an aircraft —'; $('selInfo').textContent = ''; $('txTo').textContent = ''; $('altBump').classList.remove('open'); return; }
+  if (!a) { $('selName').textContent = 'Click an aircraft'; $('selInfo').textContent = ''; $('txTo').textContent = ''; $('altBump').classList.remove('open'); return; }
   const f = freqOf(a);
   $('selName').innerHTML = `${esc(a.tel || a.cs)} <span style="color:var(--dim);font-size:12px">${esc(a.cs)} · ${esc(a.type)}</span> <span class="ft f-${f}">${FREQ_TAG[f]}</span>${{ PO: ' <span class="ft f-red">PRI ONLY</span>', SO: ' <span class="ft f-red">SEC ONLY</span>', OFF: ' <span class="ft f-red">RADAR OFF</span>', NR: '' }[radarMode(a)]}`;
   const rng = Math.hypot(a.e, a.n), brg = h3(Math.atan2(a.e, a.n) / DEG);
@@ -210,7 +255,7 @@ let cmdId = 0;
 function sendCmd(a, text, op, extra) {
   if (!a) return; const m = Object.assign({ type: 'inst-cmd', to: a.src, uid: a.uid, cs: a.cs, text, op, id: ++cmdId }, extra || {});
   try { ch.postMessage(m); } catch (e) {}
-  log('i', `INSTRUCTOR → ${a.cs} (${a.src}): "${text || (op === 'altBump' ? ((extra && extra.ft > 0 ? 'climb ' : 'descend ') + Math.abs(extra && extra.ft || 0) + ' ft') : op)}"`);
+  log('i', `Instructor → ${a.cs} (${a.src}): "${text || (op === 'altBump' ? ((extra && extra.ft > 0 ? 'climb ' : 'descend ') + Math.abs(extra && extra.ft || 0) + ' ft') : op)}"`);
 }
 function onFinal(a) {
   if (!a) return false;
@@ -235,6 +280,59 @@ $('bSO').onclick = () => { const a = selAc(); if (a) sendCmd(a, radarMode(a) ===
 $('bNR').onclick = () => { const a = selAc(); if (a) sendCmd(a, 'normal radar'); };
 $('bBus').onclick = () => { const a = selAc(); if (a) sendCmd(a, 'signal buster'); };
 holdBtn($('bDesc'), -1); holdBtn($('bAsc'), +1);
+/* ---------- v131 session events (scopes send their recent check-in / handoff / landing / wave-off / error lines with inst-state) ---------- */
+const SRC_TAG = { MARSHAL: 'MAR', APPROACH: 'APP', FINAL: 'FIN', DEPARTURE: 'DEP' };
+const EV_HND = /check(?:ing|ed)? in|hand(?:ed)? ?off|handoff|switch(?:ing|ed)|accepted/i, EV_LAND = /landed|on deck|recovered|wave|waving|waved|missed approach|low approach|crash/i;
+const evSeen = new Set();
+function logCap() { const L = $('log'); while (L.children.length > 400) L.removeChild(L.firstChild); }
+function ingestEv(m) {
+  const L = $('log'); let add = false; const atEnd = L.scrollTop + L.clientHeight >= L.scrollHeight - 8;
+  for (const e of m.ev) { const k = m.src + '|' + (m.evs || '') + '|' + e.k; if (evSeen.has(k)) continue; evSeen.add(k);
+    const d = document.createElement('div'), f = SRC_FREQ[m.src] || 'silver';
+    d.className = 'ev-' + (e.c || 'sys') + (EV_HND.test(e.x) ? ' k-hnd' : '') + (EV_LAND.test(e.x) ? ' k-land' : '') + (e.c === 'bad' || e.c === 'warn' ? ' k-err' : '');
+    d.innerHTML = `[${mmss(e.t)}] <span class="src f-${f}">${SRC_TAG[m.src] || m.src}</span>${esc(e.x)}`; L.appendChild(d); add = true; }
+  if (add) { logCap(); if (atEnd) L.scrollTop = 1e9; }
+}
+document.querySelectorAll('#evF button').forEach(b => b.onclick = () => { document.querySelectorAll('#evF button').forEach(x => x.classList.toggle('on', x === b)); $('log').className = b.dataset.f ? 'f-' + b.dataset.f : ''; $('log').scrollTop = 1e9; });
+/* ---------- v131 panel tabs ---------- */
+function setTab(t) { if (!document.querySelector(`#tabs button[data-t="${t}"]`)) t = 'traffic'; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.dataset.t === t)); lsSet('instTab', t); }
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => setTab(b.dataset.t)); setTab(ls('instTab', 'traffic'));
+/* ---------- v131 live traffic (every aircraft on the linked scopes) ---------- */
+const POS_ORDER = { MARSHAL: 0, APPROACH: 1, FINAL: 2, DEPARTURE: 3 };
+function stateOf(a) {
+  if (a.maPend) return 'Handoff to Approach';
+  if (a.src === 'FINAL') return ({ queue: 'Waiting for handoff', linkin: 'Handoff to Final', final: 'On final', descent: 'On glidepath', visual: 'Visual', climbout: 'Climbing out', missed: 'Waved off', steady: 'On final', turn: 'Turning to final', warn: 'On final' })[a.phase] || a.phase;
+  if (a.phase === 'withFinal') return 'With Final';
+  if (a.phase === 'withApp') return 'With Approach';
+  if (a.phase === 'climbout') return 'Climbing out';
+  if (a.phase === 'missed') return 'Missed approach';
+  if (a.phase === 'final' || a.phase === 'descent') return 'On final';
+  if (a.phase === 'visual') return 'Visual';
+  const st = { dep: 'Departing', purple: 'Switching to Final', final: 'Final approach', mfinal: 'Final approach', lowout: 'Low approach', marWait: 'Checking in', hold: 'Holding', turning: 'Turning', steady: 'Steady' }[a.st];
+  if (st) return st;
+  if (a.mar) return 'Marshal ' + (a.mar === 'yes' ? 'assigned' : a.mar.replace(/\/$/, '') + (/\//.test(a.mar) && !/\/$/.test(a.mar) ? ' NM' : ''));
+  return a.onScope ? 'Under control' : 'Checking in';
+}
+function renderTraffic() {
+  const acs = allAc().sort((p, q) => (POS_ORDER[p.src] - POS_ORDER[q.src]) || String(p.cs).localeCompare(String(q.cs)));
+  const fa = n => n == null ? '—' : Number(n).toLocaleString('en-US');
+  const h = acs.length ? acs.map(a => { const f = freqOf(a), st = stateOf(a);
+    return `<tr class="act${a.key === I.sel ? ' sel' : ''}${/handoff/i.test(st) ? ' hnd' : ''}" data-k="${esc(a.key)}"><td>${esc(a.cs)}${a.lead ? ' <span class="sub">wing</span>' : a.flight ? ' <span class="sub">lead</span>' : ''}${a.tel && a.tel !== a.cs ? `<br><span class="sub">${esc(a.tel)}</span>` : ''}</td><td>${esc(a.type || '')}</td><td><span class="ft f-${f}">${SRC_TAG[a.src] || a.src}</span></td><td>${fa(a.alt)}${a.tgtAlt != null && Math.abs(a.tgtAlt - a.alt) > 50 ? `<br><span class="sub">→ ${fa(a.tgtAlt)}</span>` : ''}</td><td>${esc(st)}</td></tr>`; }).join('')
+    : `<tr><td colspan="5" style="color:var(--dim);padding:10px">${anyRunning() ? 'No aircraft on the linked scopes yet.' : 'No session running. Open the scopes, then press Start.'}</td></tr>`;
+  if ($('tBody').innerHTML !== h) $('tBody').innerHTML = h;
+}
+$('tBody').onclick = e => { const tr = e.target.closest('tr[data-k]'); if (tr) select(tr.dataset.k); };
+/* ---------- v131 summary by scope (from each scope's own counters) ---------- */
+function renderSum() {
+  const rows = [], tot = { handled: 0, landed: 0, practice: 0, missed: 0, score: 0, good: 0, bad: 0 };
+  for (const x of ['MARSHAL', 'APPROACH', 'FINAL', 'DEPARTURE']) { if (!links().includes(x) || !live(x) || !I.src[x].running) continue; const m = I.src[x].sum; if (!m) continue;
+    for (const k in tot) tot[k] += +m[k] || 0;
+    const gr = (m.grades || []).slice(-6).map(g => `<span class="gr ${esc(g.g)}" title="${esc(g.cs)}${g.landed ? ' landed' : g.practice ? ' practice' : ''}">${esc(g.g)}</span>`).join('') || '<span style="color:var(--dim)">—</span>';
+    rows.push(`<tr><td><span class="ft f-${SRC_FREQ[x]}">${SRC_TAG[x]}</span> ${x[0] + x.slice(1).toLowerCase()}</td><td>${m.handled}</td><td>${m.landed}${m.practice ? ` <span style="color:var(--dim)">+${m.practice}P</span>` : ''}</td><td>${m.missed}</td><td>${m.score}</td><td>${m.good}/${m.bad}</td><td>${gr}</td></tr>`); }
+  const h = rows.length ? rows.join('') + (rows.length > 1 ? `<tr class="tot"><td>Total</td><td>${tot.handled}</td><td>${tot.landed}${tot.practice ? ` +${tot.practice}P` : ''}</td><td>${tot.missed}</td><td>${tot.score}</td><td>${tot.good}/${tot.bad}</td><td></td></tr>` : '')
+    : '<tr><td colspan="7" style="color:var(--dim);padding:10px;text-align:left">Shows each running scope\'s counts and grades.</td></tr>';
+  if ($('sBody').innerHTML !== h) $('sBody').innerHTML = h;
+}
 /* ---------- roster ---------- */
 function renderRoster() {
   if (I.editing) return;   // a start-time field is open: don't redraw under it
@@ -254,7 +352,7 @@ function renderRoster() {
   $('rBody').innerHTML = rows.length ? rows.map(r => { const cl = r.status.startsWith('ON') ? 'st-on' : r.status.startsWith('IN') ? 'st-in' : r.status === 'HELD' ? 'st-held' : 'st-done';
     const sp = '';
     return `<tr class="${r.key ? 'act' : ''}${r.key && r.key === I.sel ? ' sel' : ''}" ${r.key ? `data-k="${esc(r.key)}"` : ''}><td>${esc(r.cs)}${r.tag ? ` <span style="color:var(--dim)">${r.tag}</span>` : ''}<br><span style="color:var(--dim)">${esc(r.type)}${r.label ? ' · ' + esc(r.label) : ''}</span></td><td><span class="ft f-${r.f}">${FREQ_TAG[r.f]}</span></td><td>${r.edit ? `<span class="tEd" data-src="${r.src}" data-sid="${esc(r.sid)}" data-at="${r.at}" title="Change start time">@ ${mmss(r.at)} ✎</span><button class="rDel" data-src="${r.src}" data-sid="${esc(r.sid)}" title="Remove from the schedule">✕</button>${r.status === 'HELD' ? '<br><span style="color:var(--amber)">held (manual)</span>' : ''}` : r.status === 'HELD' ? 'manual' : r.at != null ? '@ ' + mmss(r.at) : '—'}<br><span style="color:var(--dim)">${esc(r.loc || '')}</span></td><td class="${cl}">${r.status}${sp}</td></tr>`; }).join('')
-    : `<tr><td colspan="4" style="color:var(--dim);padding:10px">Waiting for the ${esc(links().filter(x => x !== 'FINAL').map(x => x[0] + x.slice(1).toLowerCase()).join(' / '))} / Final simulation to start in its tab… (press ▶ START there)</td></tr>`;
+    : `<tr><td colspan="4" style="color:var(--dim);padding:10px">No session running. Open ${esc(links().filter(x => x !== 'FINAL' && x !== 'DEPARTURE').map(x => x[0] + x.slice(1).toLowerCase()).join(' and '))} and Final in their tabs, then press Start.</td></tr>`;
 }
 $('rBody').onclick = e => {
   const ed = e.target.closest('.tEd'), del = e.target.closest('.rDel');
@@ -274,7 +372,7 @@ function parseAt(str, t) {   // 'mm:ss' sim time | 'in 2 min' | '+2' | 'in 90 s'
 function schedSend(src, body, what) {
   if (!live(src) || !I.src[src].running) { log('s', `${src[0] + src.slice(1).toLowerCase()} is not running: start it in its tab first.`); return false; }
   try { ch.postMessage(Object.assign({ type: 'inst-cmd', to: src, op: 'sched', id: ++cmdId }, body)); } catch (e) {}
-  log('i', `INSTRUCTOR → ${src[0] + src.slice(1).toLowerCase()}: ${what}`); return true;
+  log('i', `Instructor → ${src[0] + src.slice(1).toLowerCase()}: ${what}`); return true;
 }
 function editAt(el) {
   const src = el.dataset.src, sid = el.dataset.sid, t0 = (I.src[src] && I.src[src].t) || 0;
@@ -402,7 +500,7 @@ function draw() {
     const ex = cx + s1 * k, ey = cy - c1 * k, side = kx < ky, nx = side ? Math.sign(s1) : 0, ny = side ? 0 : -Math.sign(c1);
     ctx.strokeStyle = ppi(dg % 10 ? 0.4 : 0.7); ctx.beginPath(); ctx.moveTo(ex - s1 * l, ey + c1 * l); ctx.lineTo(ex, ey); ctx.stroke();   // v105: slanted along heading dg
     if (dg % 30 === 0) { ctx.fillStyle = ppi(0.8); ctx.fillText(String(dg === 0 ? 360 : dg).padStart(3, '0'), Math.max(cx - RX + 22, Math.min(cx + RX - 22, ex - nx * 24)), Math.max(cy - RY + 22, Math.min(cy + RY - 14, ey - ny * 20 + 4))); } }
-  if (!links().some(x => live(x) && I.src[x].running)) { ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,191,60,0.9)'; ctx.font = FONT(15); ctx.fillText('Waiting for ' + links().filter(x => x !== 'FINAL').map(x => x[0] + x.slice(1).toLowerCase()).join(' / ') + ' / Final simulation to start in its tab…', cx, cy - 40); }
+  if (!links().some(x => live(x) && I.src[x].running)) { ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,191,60,0.9)'; ctx.font = FONT(15); ctx.fillText(simTargets().length ? 'Scopes connected. Press Start to begin the session.' : 'Open ' + links().filter(x => x !== 'FINAL' && x !== 'DEPARTURE').map(x => x[0] + x.slice(1).toLowerCase()).join(' and ') + ' and Final in their tabs, then press Start.', cx, cy - 40); }
   { const st = ['MARSHAL', 'APPROACH', 'FINAL', 'DEPARTURE'].map(x => live(x) ? I.src[x] : null).find(Boolean);   // BRC / DWH / weather block (matches Marshal & Approach)
     const sm = shipMaster(), tb = st ? (st.tbrc != null ? st.tbrc : st.brc) : sm ? sm.tbrc : null, dwh = st && st.dwh != null ? st.dwh : sm && !st ? sm.dwh : tb != null ? tb + 180 : null, w = st && st.wind;
     const landTxt = sm ? (sm.land || (sm.landOn ? 'land' : 'open water')) : '---';
@@ -432,7 +530,7 @@ addEventListener('keydown', e => {
 function anyPaused() { return links().some(x => live(x) && I.src[x].running && I.src[x].paused); }
 $('bPause').onclick = () => { const op = anyPaused() ? 'resume' : 'pause'; let n = 0;
   for (const x of links()) if (live(x) && I.src[x].running) { try { ch.postMessage({ type: 'inst-cmd', to: x, op, id: ++cmdId }); n++; } catch (e) {} }
-  log('i', n ? `INSTRUCTOR: ${op} all linked simulations` : 'No running simulation to ' + op + '.'); };
+  log('i', n ? `Instructor: ${op} all linked scopes` : 'No running session to ' + op + '.'); };
 /* ---------- v92 Start / Restart (works while the scope tabs are in the background) ----------
    Marshal first (it rolls the new BRC + land), then, once its new ship state has arrived and been relayed, Approach and Final. */
 function simTargets() { return [...new Set(links())].filter(x => live(x)); }
@@ -441,17 +539,27 @@ let restarting = false;
 async function restartSims() {
   const tg = simTargets(); if (!tg.length) { log('s', 'No linked simulation is open. Open Marshal / Approach / Final in another tab first.'); return; }
   const running = anyRunning(), op = running ? 'restart' : 'start';
-  if (running && !confirm('Restart the linked simulations as a new sim? The current run is discarded (same level and settings).')) return;
+  if (running && !confirm('Restart the linked scopes as a new session? The current session is discarded (same level and settings).')) return;
   restarting = true; $('bRestartSims').disabled = true; try { window.SplatT && SplatT.clear(); } catch (e) {}
   const post = to => { try { ch.postMessage({ type: 'inst-cmd', to, op, id: ++cmdId }); } catch (e) {} };
-  log('i', `INSTRUCTOR: ${op} ${tg.map(x => x[0] + x.slice(1).toLowerCase()).join(' + ')}`);
-  if (tg.includes('MARSHAL')) {
+  log('i', `Instructor: ${op} ${tg.map(x => x[0] + x.slice(1).toLowerCase()).join(' + ')}`);
+  /* v131: scopes in a linked group start each other (link-sync). Starting Marshal here would roll a new BRC that the others, already started by
+     the group, never pick up; so a fresh start goes to Approach (or Final) first: it starts on Marshal's current ship, and the group starts Marshal on the same BRC. */
+  const lsOn = x => !!(I.lsPeer && I.lsPeer[x] && I.lsPeer[x].on && Date.now() - I.lsPeer[x].t < 4000), isRun = x => !!(I.src[x] && I.src[x].running);
+  const first = !running && tg.includes('MARSHAL') && lsOn('MARSHAL') ? ['APPROACH', 'FINAL'].find(x => tg.includes(x) && lsOn(x)) : null;
+  if (first) {
+    post(first);
+    for (let i = 0; i < 40 && !isRun('MARSHAL'); i++) await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 400));
+    if (isRun('MARSHAL')) { for (const x of tg) if (x !== first && !isRun(x)) post(x); setTimeout(() => { restarting = false; }, 1500); return; }
+  }
+  if (tg.includes('MARSHAL') && (op === 'restart' || !isRun('MARSHAL'))) {
     const prev = I.ship.MARSHAL ? I.ship.MARSHAL.landSeed + '|' + I.ship.MARSHAL.tbrc : '';
     post('MARSHAL');
     for (let i = 0; i < 40; i++) { await new Promise(r => setTimeout(r, 100)); const m = I.ship.MARSHAL; if (m && m.landSeed + '|' + m.tbrc !== prev) break; }
     relayShip(); await new Promise(r => setTimeout(r, 250));
   }
-  for (const x of tg) if (x !== 'MARSHAL') post(x);
+  for (const x of tg) if (x !== 'MARSHAL' && !(first && isRun(x))) post(x);
   setTimeout(() => { restarting = false; }, 1500);
 }
 $('bRestartSims').onclick = () => { restartSims(); };
@@ -462,11 +570,11 @@ function ciPending(s) { const st = I.src[s]; if (!st || !st.roster) return null;
   for (const r of st.roster) if (!r.spawned && r.at != null && (!best || r.at < best.at)) best = r; return best ? { src: s, at: best.at, label: best.label || '', left: best.at - (st.t || 0) } : null; }
 function ciNext() { const c = CI_SRC.filter(ciRun).map(s => ciPending(s) || { src: s, at: null, left: 1e9, label: '' }); c.sort((p, q) => p.left - q.left); return c[0] || null; }
 function setCi(mode, quiet) { I.ci = mode === 'manual' ? 'manual' : 'auto'; $('ciAuto').classList.toggle('on', I.ci === 'auto'); $('ciMan').classList.toggle('on', I.ci === 'manual'); $('ciBox').classList.toggle('man', I.ci === 'manual'); hello();
-  if (!quiet) log('i', I.ci === 'manual' ? 'INSTRUCTOR: next aircraft check-in set to MANUAL (press N or ▶ Check in next aircraft).' : 'INSTRUCTOR: aircraft check in automatically on the timer.'); renderCi(); }
+  if (!quiet) log('i', I.ci === 'manual' ? 'Instructor: check-ins set to manual (press N or ▶ Check in next).' : 'Instructor: aircraft check in automatically on the timer.'); renderCi(); }
 $('ciAuto').onclick = () => setCi('auto'); $('ciMan').onclick = () => setCi('manual');
 function checkInNext(to) { const n = to ? { src: to } : ciNext(); if (!n || !ciRun(n.src)) { log('s', 'No running Marshal / Approach simulation to check an aircraft in to (press ▶ START there).'); return; }
   try { ch.postMessage({ type: 'inst-cmd', to: n.src, op: 'checkin', id: ++cmdId }); } catch (e) {}
-  log('i', `INSTRUCTOR → ${n.src[0] + n.src.slice(1).toLowerCase()}: check in the next aircraft now`); }
+  log('i', `Instructor → ${n.src[0] + n.src.slice(1).toLowerCase()}: check in the next aircraft now`); }
 $('ciGo').onclick = () => checkInNext(); $('ciGoM').onclick = () => checkInNext('MARSHAL'); $('ciGoA').onclick = () => checkInNext('APPROACH');
 function renderCi() { const run = CI_SRC.filter(ciRun), n = ciNext(), nm = s => s[0] + s.slice(1).toLowerCase();
   $('ciGo').disabled = !run.length; const both = run.length > 1; $('ciGoM').style.display = both ? '' : 'none'; $('ciGoA').style.display = both ? '' : 'none';
@@ -479,13 +587,13 @@ function renderCi() { const run = CI_SRC.filter(ciRun), n = ciNext(), nm = s => 
   const d = $('shDeg'); d.innerHTML = [5, 10, 15, 20, 25, 30, 35, 40, 45, 60, 90].map(v => `<option value="${v}"${v === 10 ? ' selected' : ''}>${v}°</option>`).join('');
   $('shEvery').value = String(SHIPI.every); if (!$('shEvery').value) $('shEvery').value = '600';
   const paint = () => { $('shAuto').classList.toggle('on', SHIPI.auto); $('shOff').classList.toggle('on', !SHIPI.auto); $('shEvery').disabled = !SHIPI.auto; };
-  const setAuto = on => { SHIPI.auto = on; lsSet('instShipAuto', on ? '1' : '0'); paint(); hello(); log('i', on ? `INSTRUCTOR: ship turns automatic every ${SHIPI.every / 60} min` : 'INSTRUCTOR: automatic ship turns OFF (turn it yourself)'); };
+  const setAuto = on => { SHIPI.auto = on; lsSet('instShipAuto', on ? '1' : '0'); paint(); hello(); log('i', on ? `Instructor: ship turns automatic every ${SHIPI.every / 60} min` : 'Instructor: automatic ship turns off (turn it yourself)'); };
   $('shAuto').onclick = () => setAuto(true); $('shOff').onclick = () => setAuto(false);
-  $('shEvery').onchange = () => { SHIPI.every = +$('shEvery').value || 600; lsSet('instShipEvery', SHIPI.every); lsSet('instShipEvery99', '1'); hello(); log('i', `INSTRUCTOR: ship turns every ${SHIPI.every / 60} min`); };
+  $('shEvery').onchange = () => { SHIPI.every = +$('shEvery').value || 600; lsSet('instShipEvery', SHIPI.every); lsSet('instShipEvery99', '1'); hello(); log('i', `Instructor: ship turns every ${SHIPI.every / 60} min`); };
   $('shGo').onclick = () => { const run = links().filter(x => live(x) && I.src[x].running); if (!run.length) { log('s', 'No running simulation: start Marshal / Approach / Final first.'); return; }
     const dir = $('shDir').value, deg = +$('shDeg').value;
     try { ch.postMessage({ type: 'ship-cmd', src: 'INSTRUCTOR', id: ++cmdId, dir, deg }); } catch (e) {}
-    log('i', `INSTRUCTOR: turn the ship ${dir} ${deg}° now`); };
+    log('i', `Instructor: turn the ship ${dir} ${deg}° now`); };
   paint();
 })();
 function shipView() {   // the scope that owns the ship (not following another)
@@ -502,17 +610,23 @@ function renderShip() {
 /* ---------- status badges + loop ---------- */
 function badges() {
   const m = links().includes('MARSHAL'), a = links().includes('APPROACH');
-  const b = (el, on, name, isLive, st) => { el.className = 'badge ' + (!on ? 'off' : isLive ? 'live' : 'wait'); el.textContent = name + (!on ? ' · NOT LINKED' : isLive ? (st && st.running ? ' · LIVE' : ' · OPEN') : ' · WAITING'); };
-  b($('stM'), m, 'RED · MARSHAL', live('MARSHAL'), I.src.MARSHAL); b($('stA'), a, 'SLVR · APPROACH', live('APPROACH'), I.src.APPROACH);
-  { const d = live('DEPARTURE'); $('stD').className = 'badge ' + (d ? 'live' : 'wait'); $('stD').textContent = 'TEAL · DEPARTURE · ' + (d ? (I.src.DEPARTURE.running ? 'LIVE' : 'OPEN') : 'READY'); }
-  const f = live('FINAL'); $('stF').className = 'badge ' + (f ? 'live' : 'wait'); $('stF').textContent = 'FINAL: AUTO-LINKED · ' + (f ? 'LIVE' : 'READY / AUTO');
-  { const p = anyPaused(), any = links().some(x => live(x) && I.src[x].running); $('bPause').textContent = p ? '▶ Resume (PAUSED)' : '⏸ Pause'; $('bPause').classList.toggle('on', p); $('bPause').disabled = !any;
-    const open = simTargets().length, run = anyRunning(); $('bRestartSims').textContent = run ? '⟲ Restart sims' : '▶ Start sims'; $('bRestartSims').disabled = !open || restarting; }
+  const b = (el, on, name, x) => { const isLive = live(x), st = I.src[x]; el.className = 'badge ' + (!on ? 'off' : isLive ? 'live' : 'wait'); el.textContent = name + (!on ? ' · not linked' : isLive ? (st && st.running ? (st.paused ? ' · paused' : ' · running') : ' · open') : ' · not open'); };
+  b($('stM'), m, 'Marshal', 'MARSHAL'); b($('stA'), a, 'Approach', 'APPROACH'); b($('stF'), true, 'Final', 'FINAL'); b($('stD'), true, 'Departure', 'DEPARTURE');
+  { const p = anyPaused(), any = links().some(x => live(x) && I.src[x].running); $('bPause').textContent = p ? '▶ Resume' : '❚❚ Pause'; $('bPause').classList.toggle('on', p); $('bPause').disabled = !any;
+    const open = simTargets().length, run = anyRunning(); $('bRestartSims').textContent = run ? '⟲ Restart' : '▶ Start'; $('bRestartSims').disabled = !open || restarting;
+    const rs = links().map(x => live(x) && I.src[x].running ? I.src[x] : null).filter(Boolean), sc = rs.length ? (rs[0].scale || 1) : null;
+    $('sp1').classList.toggle('on', sc === 1); $('sp3').classList.toggle('on', sc === 3); $('sp1').disabled = $('sp3').disabled = !rs.length;
+    const lv = rs.find(x => x.diff && x.src !== 'FINAL') || rs.find(x => x.diff); $('sessLvl').textContent = lv ? 'Level: ' + lv.diff : '';
+    $('clock').classList.toggle('paused', p); }
   const t = curT(); $('clock').textContent = 'T+' + (t != null ? mmss(t) : '--:--');
 }
+/* v131 session speed: 1x / 3x on every running linked scope (they also keep each other in step through link-sync) */
+function setSpeed(sv) { let n = 0; for (const x of links()) if (live(x) && I.src[x].running) { try { ch.postMessage({ type: 'inst-cmd', to: x, op: 'scale', s: sv, id: ++cmdId }); n++; } catch (e) {} }
+  log('i', n ? `Instructor: speed ${sv}x on all linked scopes` : 'No running session to change speed.'); }
+$('sp1').onclick = () => setSpeed(1); $('sp3').onclick = () => setSpeed(3);
 let lastUi = 0;
 function frame(now) { const r = cv.getBoundingClientRect(); if (Math.abs(r.width - W) > .5 || Math.abs(r.height - H) > .5) resize(); draw(); if (window.SplatT) try { ctx.setTransform(DPR, 0, 0, DPR, 0, 0); SplatT.draw(); } catch (e) { console.error('splat-t', e); }
-  if (now - lastUi > 400) { lastUi = now; badges(); renderRoster(); renderSel(); renderCi(); try { renderShip(); } catch (e) {} } requestAnimationFrame(frame); }
+  if (now - lastUi > 400) { lastUi = now; badges(); renderRoster(); renderSel(); renderCi(); try { renderShip(); } catch (e) {} try { renderTraffic(); renderSum(); } catch (e) { console.error('instructor panel', e); } } requestAnimationFrame(frame); }
 /* SPLAT-T (splat-t.js): hover a target + T = range/bearing line, T again = hold, C = clear. T over empty scope (or off the scope) keeps the old T = Text shortcut. */
 if (window.SplatT) SplatT.attach({
   canvas: cv, ctx: () => ctx,
@@ -522,7 +636,7 @@ if (window.SplatT) SplatT.attach({
   simKey: () => { const t = curT(); return t == null ? -1 : t; },
 });
 setScope(I.scope); $('rgSel').value = String(I.ring); setLink(I.link); setCi('auto', true);
-log('s', 'Instructor screen ready. Final Control is auto-linked; choose Marshal, Approach or both.');
+log('s', 'Instructor ready. Final and Departure are always linked; choose Marshal, Approach or both.');
 requestAnimationFrame(frame);
 </script><script>window.RDV && RDV.bindToggle(document.getElementById('rdvChk'));</script>
 </body></html>

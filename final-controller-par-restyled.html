@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" class="at-scope">
 <head>
-<script src="gate.js"></script>
+<script src="gate.js"></script><script src="report.js"></script>
 <script src="phrase-match.js"></script>
 <script src="warm-mic.js"></script>
 <script src="bg-clock.js"></script>
@@ -12,7 +12,7 @@
 <script src="traininglog.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Final / PAR · AATCC Trainer</title>
+<title>Final (PAR) · AATCC Trainer</title>
 <style>
 .card .row:has(#bStart){position:sticky;bottom:-20px;z-index:3;background:inherit;padding:8px 0 10px;box-shadow:0 -10px 14px rgba(0,0,0,.45)}   /* START always visible on short screens */
 
@@ -190,7 +190,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
 <link rel="stylesheet" href="aatcc-theme.css">
 </head>
 <body>
-<div id="atBrand" aria-label="AATCC Trainer"><span class="at-mark"></span><b>AATCC Trainer</b><span>·</span><span class="at-pos">Final / PAR</span><a href="index.html" target="_blank" rel="opener" title="Open the home page in a new tab (this scope keeps running)">⌂ Home</a><a href="help.html" target="_blank" rel="opener" title="Help and About (new tab)">? Help</a></div>
+<div id="atBrand" aria-label="AATCC Trainer"><span class="at-mark"></span><b>AATCC Trainer</b><span>·</span><span class="at-pos">Final (PAR)</span><a href="index.html" target="_blank" rel="opener" title="Open the home page in a new tab (this scope keeps running)">⌂ Home</a><a href="help.html" target="_blank" rel="opener" title="Help and About (new tab)">? Help</a></div>
 
 <div id="layBar" role="group" aria-label="Layout"><button type="button" data-lay="normal" title="Normal layout">▦ Normal</button><button type="button" data-lay="expand" title="Expand the scopes (hide side panel)">⤢ Scope</button><button type="button" data-lay="trans" title="Scopes + narrow transcript log">☰ Log</button></div>
 <div id="app">
@@ -198,8 +198,8 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
   <div id="panel">
     <div class="row">
       <button id="bPause" title="Pause (P)">❚❚ Pause</button>
-      <button id="bS1" class="on" title="1x (key 1)">1x</button>
-      <button id="bS2" title="3x sim speed (key 3)">3x</button>
+      <button id="bS1" class="on" title="Normal speed (key 1)">1x</button>
+      <button id="bS2" title="3x speed (key 3)">3x</button>
       <label id="shipTgl" title="Ship turns On/Off for Final (saved). Off: no automatic ship turns and linked turns are ignored." style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--dim, #9ab);white-space:nowrap;user-select:none"><input type="checkbox" id="liveShipTurns">Ship turns</label>
       <button id="bSet" title="Voice settings">⚙ Voice</button>
       <button id="bHelp" title="Help (?)">? Help</button>
@@ -211,7 +211,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
     <div id="linkRow" style="font-size:11px;color:var(--dim);display:none">Approach Control link <span id="linkSt"></span></div>
     <div class="banner" id="voiceBanner"></div>
     <div class="box" id="micBox">
-      <button id="ptt">🎙 HOLD TO TALK <span style="font-size:12px;font-weight:normal">(Space)</span></button>
+      <button id="ptt">🎙 Hold to talk <span style="font-size:12px;font-weight:normal">(Space)</span></button>
       <div id="micRow"><span id="micDot"></span><span id="micText">Mic: starting…</span></div>
       <div id="transcript"><span style="color:var(--dim)">Live transcript appears here while you talk.</span></div>
       <div id="parsed"></div>
@@ -230,7 +230,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
 
 <div class="overlay" id="startOv">
   <div class="card">
-    <h1>FINAL CONTROLLER · PAR</h1>
+    <h1>Final controller (PAR)</h1>
     <div style="color:var(--dim)" id="subTitle">Precision Approach Radar talk-down simulator · Runway 18</div>
     <p id="introP">You're the <b>final controller</b>. Each aircraft appears on your scope 7 to 9 miles out. Using your <b>voice</b>, talk it down: heading corrections, course and glidepath calls, range calls, the gear check and the landing clearance, all the way to <b id="introDH">decision height</b>. Pilots answer each call with their callsign until you say "do not acknowledge further transmissions"; after that they stay quiet, so keep talking!</p>
     <div class="modes" id="modeCards">
@@ -243,17 +243,17 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
       <div class="diff" data-d="normal"><b>Normal</b><span>5 arrivals, firmer pilots. No hints.</span></div>
       <div class="diff" data-d="gusty"><b>Rush</b><span>7 arrivals, livelier pilots. No hints.</span></div>
     </div>
-    <label class="row" style="margin:4px 0 2px;gap:8px;cursor:pointer;color:var(--dim)"><input type="checkbox" id="linkChk"> Link to Marshal / Approach (aircraft come from the Marshal and Approach Controller sims, both at once)</label>
+    <label class="row" style="margin:4px 0 2px;gap:8px;cursor:pointer;color:var(--dim)"><input type="checkbox" id="linkChk"> Link to Marshal and Approach (aircraft come from their sessions)</label>
     <div class="row" style="margin:4px 0 2px;gap:8px"><label for="sPhr2" style="color:var(--dim)">Phraseology</label><select id="sPhr2"><option value="ship">Ship: amphibious assault ship (LHA/LHD)</option><option value="tower">Tower: shore runway PAR</option></select></div>
     <div class="banner" id="startBanner"></div>
     <div id="iosHint">📱 Voice works best in a Safari tab, not the home-screen app.</div>
     <div class="row" style="margin-top:8px">
-      <button id="bStart" class="wide on" style="font-size:16px;min-height:46px">▶ START</button>
+      <button id="bStart" class="wide on" style="font-size:16px;min-height:46px">▶ Start</button>
       <button id="bSet2" style="min-height:46px">⚙ Voice</button>
     </div>
     </div>
-    <div style="margin-top:6px"><button id="bTut" class="linkbtn" type="button">Reference: how PAR works</button></div>
-    <div class="note">Frequencies: Marshal = Red · Approach = Silver · Final = Purple / Copper. For practice and fun only, not real ATC training.</div>
+    <div style="margin-top:6px"><button id="bTut" class="linkbtn" type="button">How PAR works</button></div>
+    <div class="note">Frequencies: Marshal = Red · Approach = Silver · Final = Purple / Copper. A training aid, not for operational use.</div>
   </div>
 </div>
 
@@ -267,7 +267,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
       <button id="tutNext">Next ▶</button>
       <button id="tutClose" class="on">Close</button>
     </div>
-    <div class="note">For practice and fun only, not real ATC training.</div>
+    <div class="note">A training aid, not for operational use.</div>
   </div>
 </div>
 
@@ -298,12 +298,12 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
     <div id="endList"></div>
     <div class="row" style="margin-top:8px">
       <button id="bAgain" class="wide on" style="min-height:42px">Play again (same level)</button>
-      <button id="bMenu" class="wide" style="min-height:42px">Restart / change level</button>
+      <button id="bMenu" class="wide" style="min-height:42px">Change level</button>
     </div>
-    <div class="note">For practice and fun only, not real ATC training.</div>
+    <div class="note">A training aid, not for operational use.</div>
   </div>
 </div>
-<button id="pttBig" type="button">🎙 HOLD TO TALK</button>
+<button id="pttBig" type="button">🎙 Hold to talk</button>
 <div id="vStatus"></div>
 <script>
 (() => {
@@ -312,7 +312,7 @@ body.lay-trans.touchdev #panel{padding-bottom:62px}
 const DEG = Math.PI / 180;
 const FREQ_TAG = { purple: 'PRPL', copper: 'COPR', red: 'RED', silver: 'SLVR', blue: 'SLVR' };
 const freqTag = f => FREQ_TAG[String(f || '').toLowerCase()] || String(f || 'PRPL').toUpperCase().slice(0, 4);
-const FREQ_HELP = '<p><b>Permanent frequencies:</b> Marshal = <b>Red</b> · Approach = <b>Silver</b> · Final Control = <b>Purple</b> / <b>Copper</b>.</p><p><b>Linking:</b> tick <b>Link to Marshal / Approach</b> and Final takes handoffs (go purple / copper) from the Marshal and Approach pages at the same time, on Marshal\'s final bearing, and reports each landing or wave-off back to the page that sent it.</p>';
+const FREQ_HELP = '<p><b>Permanent frequencies:</b> Marshal = <b>Red</b> · Approach = <b>Silver</b> · Final = <b>Purple</b> / <b>Copper</b>.</p><p><b>Linking:</b> tick <b>Link to Marshal / Approach</b> and Final takes handoffs (go purple / copper) from the Marshal and Approach pages at the same time, on Marshal\'s final bearing, and reports each landing or wave-off back to the page that sent it.</p>';
 
 const norm = h => ((h % 360) + 360) % 360;
 const angDiff = (a, b) => { let d = norm(a - b); return d > 180 ? d - 360 : d; };
@@ -2179,6 +2179,7 @@ const startOv = $('startOv'), helpOv = $('helpOv'), setOv = $('setOv'), endOv = 
 let uiPaused = false;
 function log(cls, text) {
   if (!G) return;
+  try { if (window.__instEv) window.__instEv(cls, text); } catch (e) {}   // v131: session events for the Instructor (no effect on this scope)
   try { if (window.FinalIntro && FinalIntro.onLog) FinalIntro.onLog(cls, text); } catch (e) {}
   if (window.__INST_SILENT && (cls === 'plt' || cls === 'ctl')) return;
   const d = document.createElement('div'); d.className = cls;
@@ -2636,7 +2637,7 @@ const TUT = [
    <li><b>Stable at DH</b> (both within "slightly") +10. Unstable or uncleared at DH means the pilot goes around.</li>
    <li><b>Go-arounds cost no points</b> (yours or the pilot's): the approach simply ends, keeping what it earned so far but without the +40 for landing.</li>
    <li><b>Penalties</b>: too steep or too shallow, inaccurate calls. Too low (below the red <b>lower limit</b> line) it crashes and the session fails, so call the go-around early if it gets that low.</li></ul>`],
-  ['6. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>HOLD TO TALK</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
+  ['6. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>Hold to talk</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
    <ul><li><b>Best in Chrome or Edge on a computer.</b> Firefox has no speech recognition; Safari and iOS vary. You can always <b>type</b> the same words in the box.</li>
    <li>Chrome's speech recognition <b>needs an internet connection</b>, because the audio goes to Google's speech service.</li>
    <li>If the mic is blocked on a <b>file://</b> page, serve the folder locally: open a terminal in the folder with this file and run<br><code>python -m http.server</code><br>then open <code>http://localhost:8000/final-controller-par.html</code></li>
@@ -3085,6 +3086,16 @@ window.__FIN = {
   const g = () => (typeof G !== 'undefined' ? G : null);
   const alv = a => !['landed', 'crashed', 'gone'].includes(a.phase);
   const nrm = x => ((x % 360) + 360) % 360;
+  /* v131 (additive): session events + per-position summary for the Instructor's event log and summary. Read-only; nothing here changes the sim. */
+  const EVRX = /check(?:ing|ed)? in|hand(?:ed)? ?off|handoff|switch(?:ing|ed)|wave|waving|waved|missed|landed|on deck|recovered|accepted|crash/i, EVNO = /^No aircraft|not accepted|already|only after|still with the feeder|can't be undone|not found/i;
+  let evSeq = 0, evSess = '', evG = null, evBuf = [], seen = new Set();
+  const evReset = G => { if (G === evG) return; evG = G; evBuf = []; seen = new Set(); evSess = Math.random().toString(36).slice(2, 8); };
+  window.__instEv = (cls, text) => { const G = g(); if (!G || G.intro) return; evReset(G); text = String(text || '');
+    if (!(cls === 'good' || cls === 'bad' || cls === 'warn' || (cls === 'sys' && EVRX.test(text))) || EVNO.test(text)) return;
+    evBuf.push({ k: ++evSeq, t: Math.round(G.t || 0), c: cls, x: text.slice(0, 180) }); if (evBuf.length > 40) evBuf.shift(); };
+  function sumOut(G) { evReset(G); for (const a of G.ac || []) if (a.cs && a.phase !== 'queue') seen.add(a.cs);
+    return { score: G.score || 0, landed: G.landed || 0, practice: G.practice || 0, missed: G.missed || 0, crashes: G.crashes || 0, good: G.callsGood || 0, bad: G.callsBad || 0, handled: seen.size,
+      grades: (G.results || []).slice(-12).map(r => ({ cs: r.cs, g: r.grade, landed: !!r.landed, practice: !!r.practice })) }; }
   function acOut(a) {
     const o = { uid: a.uid, cs: a.cs, tel: a.tel, type: a.type, helo: !!(a.T && a.T.helo), phase: a.phase, st: a.st || null,
       hdg: Math.round(a.hdg || 0), tgtHdg: a.tgtHdg != null ? Math.round(a.tgtHdg) : null, ias: Math.round(a.ias || 0), tgtSpd: a.tgtSpd != null ? Math.round(a.tgtSpd) : null,
@@ -3136,7 +3147,7 @@ window.__FIN = {
     if (G) {
       track(G);
       Object.assign(m, { t: Math.round(G.t * 10) / 10, scale: G.scale || 1, brc: typeof BRC !== 'undefined' ? BRC : null, tbrc: typeof TBRC !== 'undefined' ? TBRC : null, dwh: typeof DWH === 'function' ? DWH() : null, wind: G.wind ? { dir: G.wind.dir, spd: G.wind.spd } : null, diff: G.d && G.d.name, ship: typeof shipInstInfo === 'function' ? shipInstInfo() : null,
-        ac: G.ac.filter(alv).map(acOut), roster: roster(G), sched: !FIN, airlines: typeof AIRLINES !== 'undefined' ? AIRLINES.map(x => ({ icao: x.icao, tel: x.tel, types: x.types })) : [] });
+        ac: G.ac.filter(alv).map(acOut), roster: roster(G), sum: G.intro ? null : sumOut(G), ev: G.intro ? [] : evBuf.slice(-25), evs: evSess, sched: !FIN, airlines: typeof AIRLINES !== 'undefined' ? AIRLINES.map(x => ({ icao: x.icao, tel: x.tel, types: x.types })) : [] });
     }
     try { ch.postMessage(m); } catch (e) {}
   }
@@ -3151,6 +3162,7 @@ window.__FIN = {
     }
     const G = g(); if (!G || G.over) return ack(m, false, PAGE + ' not running');
     if (m.op === 'pause' || m.op === 'resume') { try { setPaused(m.op === 'pause'); } catch (e) { G.paused = m.op === 'pause'; } sysLog(m.op === 'pause' ? 'paused by instructor' : 'resumed by instructor'); send(); return ack(m, true, m.op === 'pause' ? 'PAUSED' : 'RESUMED'); }
+    if (m.op === 'scale') { const sv = m.s === 3 ? 3 : 1; try { setScale(sv); } catch (e) {} send(); return ack(m, true, sv + 'x'); }   // v131 Instructor speed (1x / 3x)
     if (m.op === 'altBump') {
       const a = find(G, m); if (!a) return ack(m, false, (m.cs || '?') + ' not on ' + PAGE);
       const d = Math.round(+m.ft || 0); if (!d) return ack(m, false, 'no altitude step');

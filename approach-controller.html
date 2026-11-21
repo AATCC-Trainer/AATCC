@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" class="at-scope">
 <head>
-<script src="gate.js"></script>
+<script src="gate.js"></script><script src="report.js"></script>
 <script src="phrase-match.js"></script>
 <script src="warm-mic.js"></script>
 <script src="bg-clock.js"></script>
@@ -184,8 +184,8 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
   <div id="panel">
     <div class="row">
       <button id="bPause" title="Pause (P)">❚❚ Pause</button>
-      <button id="bS1" class="on" title="1x (key 1)">1x</button>
-      <button id="bS2" title="3x sim speed (key 3)">3x</button>
+      <button id="bS1" class="on" title="Normal speed (key 1)">1x</button>
+      <button id="bS2" title="3x speed (key 3)">3x</button>
       <label class="liveCtl" title="Scope range (zoom): how far the radar shows">Scope <input type="range" id="liveScope" min="5" max="80" step="1" value="50"><input type="number" id="liveScopeVal" class="scopeNum" min="5" max="80" step="1" value="50" inputmode="numeric" title="Type a range (5–80 NM) and press Enter">NM</label>
       <label class="liveCtl" title="Range ring spacing">Rings <select id="liveRing"><option value="1">1</option><option value="2" selected>2</option><option value="5">5</option><option value="10">10</option></select>NM</label>
       <label class="liveCtl" title="Show the rendezvous points (yellow)"><input type="checkbox" id="liveRdv" checked>RDV</label>
@@ -197,7 +197,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div id="scopeStatus" style="font-size:11px;color:var(--dim);line-height:1.3">PAR · scope idle</div>
     <div class="banner" id="voiceBanner"></div>
     <div class="box">
-      <button id="ptt">🎙 HOLD TO TALK <span style="font-size:12px;font-weight:normal">(Space)</span></button>
+      <button id="ptt">🎙 Hold to talk <span style="font-size:12px;font-weight:normal">(Space)</span></button>
       <div id="micRow"><span id="micDot"></span><span id="micText">Mic: starting…</span></div>
       <div id="transcript"><span style="color:var(--dim)">Live transcript appears here while you talk.</span></div>
       <div id="parsed"></div>
@@ -207,7 +207,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div id="hint"></div>
     <div class="box" id="readout">Waiting for traffic…</div>
     <div id="linkBox" style="font-size:11.5px;color:#8fd8ff;margin:4px 0"><span id="linkStat"></span></div>
-    <details id="gradeSec" open><summary>Grading (tap to collapse / expand)</summary><div id="gradeBox" style="font-size:11.5px;line-height:1.4;color:#8fd8ff;white-space:pre-wrap;overflow-wrap:anywhere"></div></details>
+    <details id="gradeSec" open><summary>Grading</summary><div id="gradeBox" style="font-size:11.5px;line-height:1.4;color:#8fd8ff;white-space:pre-wrap;overflow-wrap:anywhere"></div></details>
     <div class="box">
       <div style="font-size:11px;color:var(--dim);margin-bottom:4px">TRAFFIC</div>
       <canvas id="inset" style="display:none"></canvas>
@@ -219,7 +219,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 
 <div class="overlay" id="startOv">
   <div class="card">
-    <h1>APPROACH CONTROLLER</h1>
+    <h1>Approach controller</h1>
     <div style="color:var(--dim)" id="subTitle">Approach control radar simulator · USS Wasp (LHD)</div>
     <p id="introP">You're <b>Gator Approach</b> (Silver) aboard an amphibious assault ship. Aircraft <b>launch from the ship</b> and return for practice PARs. Using your <b>voice</b> (or typed commands), take radar contact, vector with headings / angels / speed, use sectors and traffic calls, give climbout instructions, and hand each aircraft to <b>Final</b> on Purple or Copper.</p>
     <div class="diffs">
@@ -228,17 +228,17 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
       <div class="diff" data-d="gusty"><b>Rush</b><span>About 30 min: 8 launches (last about 29:00), 4–6 traffic conflicts, livelier pilots. No hints.</span></div>
     </div>
     <div class="row" style="margin:4px 0 2px;gap:8px"><label for="sPhr2" style="color:var(--dim)">Phraseology</label><select id="sPhr2"><option value="ship">Ship: amphibious assault ship (LHA/LHD)</option><option value="tower">Tower: shore runway PAR</option></select></div>
-    <div class="row" style="margin:6px 0 2px;gap:8px;align-items:center"><span style="color:var(--dim)">Link to Final Control</span>
+    <div class="row" style="margin:6px 0 2px;gap:8px;align-items:center"><span style="color:var(--dim)">Link to Final</span>
       <button id="bLinkOff" style="min-height:34px">OFF (solo)</button><button id="bLinkOn" style="min-height:34px">ON (hand off)</button></div>
     <div class="row" style="margin:4px 0 2px;gap:8px;align-items:center" title="Marshal hands aircraft to Approach on Silver (go silver / contact approach); both pages share Marshal's BRC"><span style="color:var(--dim)">Link Marshal ↔ Approach</span>
       <button id="bMAOff" style="min-height:34px">OFF</button><button id="bMAOn" style="min-height:34px">ON (Silver handoffs)</button><span id="maStat" style="font-size:11.5px;color:#8fd8ff"></span></div>
     <div class="banner" id="startBanner"></div>
     <div class="row" style="margin-top:8px">
-      <button id="bStart" class="wide on" style="font-size:16px;min-height:46px">▶ START</button>
-      <button id="bTut" class="wide" style="min-height:46px">How Approach works (tutorial)</button>
+      <button id="bStart" class="wide on" style="font-size:16px;min-height:46px">▶ Start</button>
+      <button id="bTut" class="wide" style="min-height:46px">Approach tutorial</button>
       <button id="bSet2" style="min-height:46px">⚙ Voice</button>
     </div>
-    <div class="note">Frequencies: Marshal = Red · Approach = Silver · Final = Purple / Copper. For practice and fun only, not real ATC training.</div>
+    <div class="note">Frequencies: Marshal = Red · Approach = Silver · Final = Purple / Copper. A training aid, not for operational use.</div>
   </div>
 </div>
 
@@ -252,7 +252,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
       <button id="tutNext">Next ▶</button>
       <button id="tutClose" class="on">Close</button>
     </div>
-    <div class="note">For practice and fun only, not real ATC training.</div>
+    <div class="note">A training aid, not for operational use.</div>
   </div>
 </div>
 
@@ -281,9 +281,9 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div id="endList"></div>
     <div class="row" style="margin-top:8px">
       <button id="bAgain" class="wide on" style="min-height:42px">Play again (same level)</button>
-      <button id="bMenu" class="wide" style="min-height:42px">Restart / change level</button>
+      <button id="bMenu" class="wide" style="min-height:42px">Change level</button>
     </div>
-    <div class="note">For practice and fun only, not real ATC training.</div>
+    <div class="note">A training aid, not for operational use.</div>
   </div>
 </div>
 <script>
@@ -293,7 +293,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 const DEG = Math.PI / 180;
 const FREQ_TAG = { purple: 'PRPL', copper: 'COPR', red: 'RED', silver: 'SLVR', blue: 'SLVR' };
 const freqTag = f => FREQ_TAG[String(f || '').toLowerCase()] || String(f || 'PRPL').toUpperCase().slice(0, 4);
-const FREQ_HELP = '<p><b>Permanent frequencies:</b> Marshal = <b>Red</b> · Approach = <b>Silver</b> · Final Control = <b>Purple</b> / <b>Copper</b>.</p><p><b>Linking:</b> open the other positions in tabs of the same browser. <b>Link Marshal ↔ Approach</b> ON (on both start screens): aircraft Marshal sends to Silver appear here and check in with position, angels and state, alongside your own launches; this page uses Marshal\'s BRC and land. <b>Link to Final Control</b> ON: "go purple / copper" hands them to the Final page.</p>';
+const FREQ_HELP = '<p><b>Permanent frequencies:</b> Marshal = <b>Red</b> · Approach = <b>Silver</b> · Final = <b>Purple</b> / <b>Copper</b>.</p><p><b>Linking:</b> open the other positions in tabs of the same browser. <b>Link Marshal ↔ Approach</b> ON (on both start screens): aircraft Marshal sends to Silver appear here and check in with position, angels and state, alongside your own launches; this page uses Marshal\'s BRC and land. <b>Link to Final Control</b> ON: "go purple / copper" hands them to the Final page.</p>';
 
 const norm = h => ((h % 360) + 360) % 360;
 const angDiff = (a, b) => { let d = norm(a - b); return d > 180 ? d - 360 : d; };
@@ -1751,6 +1751,7 @@ const startOv = $('startOv'), helpOv = $('helpOv'), setOv = $('setOv'), endOv = 
 let uiPaused = false;
 function log(cls, text) {
   if (!G) return;
+  try { if (window.__instEv) window.__instEv(cls, text); } catch (e) {}   // v131: session events for the Instructor (no effect on this scope)
   if (window.__INST_SILENT && (cls === 'plt' || cls === 'ctl')) return;
   const d = document.createElement('div'); d.className = cls;
   d.innerHTML = `<span class="t">${mmss(G.t)}</span> ${esc(text)}`;
@@ -2364,7 +2365,7 @@ const TUT = [
    <li><b>Separation losses</b> between aircraft cost heavily — slow the follower or vector them apart.</li>
    <li>Handing to Final inside the window (lined up, low enough) scores; aircraft then fly up to 3 practice PARs and recover full stop on the last.</li>
    </ul>`],
-  ['6. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>HOLD TO TALK</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
+  ['6. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>Hold to talk</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
    <ul><li><b>Best in Chrome or Edge on a computer.</b> Firefox has no speech recognition; Safari and iOS vary. You can always <b>type</b> the same words in the box.</li>
    <li>Chrome's speech recognition <b>needs an internet connection</b>, because the audio goes to Google's speech service.</li>
    <li>If the mic is blocked on a <b>file://</b> page, serve the folder locally: open a terminal in the folder with this file and run<br><code>python -m http.server</code><br>then open <code>http://localhost:8000/approach-controller.html</code></li>
@@ -2382,7 +2383,7 @@ const TUT = [
    <li>go purple · go copper · go silver · go red · execute missed approach · 99 … Mother is in a … turn / Mother steady, BRC …</li>
    </ul>`],
   ['8. Keys', `<p><span class="kbd">Space</span> hold to talk · <span class="kbd">P</span> pause · <span class="kbd">1</span>/<span class="kbd">2</span> = 1x/2x speed · <span class="kbd">Tab</span> select next aircraft · <span class="kbd">Enter</span> type a command · <span class="kbd">?</span> this help · <span class="kbd">L</span> cycle layout · <span class="kbd">Esc</span> close.</p><p><b>SPLAT-T</b> (range/bearing line): point at a target and press <span class="kbd">T</span>: a dashed line follows the mouse with the bearing from the aircraft and the range (e.g. <code>LT21 045/12.3 NM</code>). Press <span class="kbd">T</span> again to hold it: the far end stays fixed on that spot and the line stays on the aircraft, so the numbers update as it flies. <span class="kbd">C</span> over a line's aircraft or end clears that line; <span class="kbd">C</span> anywhere else on the scope clears them all. The keys only work with the mouse on the scope and the command box empty, so typing a command is never affected. Lines clear on a new sim.</p>
-   <p>Tip: start on <b>Training</b>. The amber hint box shows a good next call; just read it out loud. Turn <b>Link to Final Control</b> ON when you want real handoffs to the Final page.</p>`],
+   <p>Tip: start on <b>Training</b>. The amber hint box shows a good next call; just read it out loud. Turn <b>Link to Final</b> on when you want real handoffs to the Final page.</p>`],
 ];
 const TUT_SHIP = {};
 const tutPage = i => (isShip() && TUT_SHIP[i]) || TUT[i];
@@ -3783,6 +3784,16 @@ function shipReq() { try { const c = new BroadcastChannel('stinger-link'); c.pos
   const g = () => (typeof G !== 'undefined' ? G : null);
   const alv = a => !['landed', 'crashed', 'gone'].includes(a.phase);
   const nrm = x => ((x % 360) + 360) % 360;
+  /* v131 (additive): session events + per-position summary for the Instructor's event log and summary. Read-only; nothing here changes the sim. */
+  const EVRX = /check(?:ing|ed)? in|hand(?:ed)? ?off|handoff|switch(?:ing|ed)|wave|waving|waved|missed|landed|on deck|recovered|accepted|crash/i, EVNO = /^No aircraft|not accepted|already|only after|still with the feeder|can't be undone|not found/i;
+  let evSeq = 0, evSess = '', evG = null, evBuf = [], seen = new Set();
+  const evReset = G => { if (G === evG) return; evG = G; evBuf = []; seen = new Set(); evSess = Math.random().toString(36).slice(2, 8); };
+  window.__instEv = (cls, text) => { const G = g(); if (!G || G.intro) return; evReset(G); text = String(text || '');
+    if (!(cls === 'good' || cls === 'bad' || cls === 'warn' || (cls === 'sys' && EVRX.test(text))) || EVNO.test(text)) return;
+    evBuf.push({ k: ++evSeq, t: Math.round(G.t || 0), c: cls, x: text.slice(0, 180) }); if (evBuf.length > 40) evBuf.shift(); };
+  function sumOut(G) { evReset(G); for (const a of G.ac || []) if (a.cs && a.phase !== 'queue') seen.add(a.cs);
+    return { score: G.score || 0, landed: G.landed || 0, practice: G.practice || 0, missed: G.missed || 0, crashes: G.crashes || 0, good: G.callsGood || 0, bad: G.callsBad || 0, handled: seen.size,
+      grades: (G.results || []).slice(-12).map(r => ({ cs: r.cs, g: r.grade, landed: !!r.landed, practice: !!r.practice })) }; }
   function acOut(a) {
     const o = { uid: a.uid, cs: a.cs, tel: a.tel, type: a.type, helo: !!(a.T && a.T.helo), phase: a.phase, st: a.st || null,
       hdg: Math.round(a.hdg || 0), tgtHdg: a.tgtHdg != null ? Math.round(a.tgtHdg) : null, ias: Math.round(a.ias || 0), tgtSpd: a.tgtSpd != null ? Math.round(a.tgtSpd) : null,
@@ -3834,7 +3845,7 @@ function shipReq() { try { const c = new BroadcastChannel('stinger-link'); c.pos
     if (G) {
       track(G);
       Object.assign(m, { t: Math.round(G.t * 10) / 10, scale: G.scale || 1, brc: typeof BRC !== 'undefined' ? BRC : null, tbrc: typeof TBRC !== 'undefined' ? TBRC : null, dwh: typeof DWH === 'function' ? DWH() : null, wind: G.wind ? { dir: G.wind.dir, spd: G.wind.spd } : null, diff: G.d && G.d.name, ship: typeof shipInstInfo === 'function' ? shipInstInfo() : null,
-        ac: G.ac.filter(alv).map(acOut), roster: roster(G), sched: !FIN, airlines: typeof AIRLINES !== 'undefined' ? AIRLINES.map(x => ({ icao: x.icao, tel: x.tel, types: x.types })) : [] });
+        ac: G.ac.filter(alv).map(acOut), roster: roster(G), sum: G.intro ? null : sumOut(G), ev: G.intro ? [] : evBuf.slice(-25), evs: evSess, sched: !FIN, airlines: typeof AIRLINES !== 'undefined' ? AIRLINES.map(x => ({ icao: x.icao, tel: x.tel, types: x.types })) : [] });
     }
     try { ch.postMessage(m); } catch (e) {}
   }
@@ -3849,6 +3860,7 @@ function shipReq() { try { const c = new BroadcastChannel('stinger-link'); c.pos
     }
     const G = g(); if (!G || G.over) return ack(m, false, PAGE + ' not running');
     if (m.op === 'pause' || m.op === 'resume') { try { setPaused(m.op === 'pause'); } catch (e) { G.paused = m.op === 'pause'; } sysLog(m.op === 'pause' ? 'paused by instructor' : 'resumed by instructor'); send(); return ack(m, true, m.op === 'pause' ? 'PAUSED' : 'RESUMED'); }
+    if (m.op === 'scale') { const sv = m.s === 3 ? 3 : 1; try { setScale(sv); } catch (e) {} send(); return ack(m, true, sv + 'x'); }   // v131 Instructor speed (1x / 3x)
     if (m.op === 'altBump') {
       const a = find(G, m); if (!a) return ack(m, false, (m.cs || '?') + ' not on ' + PAGE);
       const d = Math.round(+m.ft || 0); if (!d) return ack(m, false, 'no altitude step');

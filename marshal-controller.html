@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" class="at-scope">
 <head>
-<script src="gate.js"></script>
+<script src="gate.js"></script><script src="report.js"></script>
 <script src="phrase-match.js"></script>
 <script src="warm-mic.js"></script>
 <script src="bg-clock.js"></script>
@@ -191,13 +191,13 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 
 <div id="layBar" title="Layout (L cycles)"><button type="button" data-l="normal">▣ Normal</button><button type="button" data-l="expand">⤢ Expand scope</button><button type="button" data-l="transcript">☰ Scope + log</button></div>
 <div id="app">
-  <div id="scopeWrap"><canvas id="scope"></canvas><div id="infoBlk" class="ib"></div><div id="tbBlk" class="ib"></div><div id="starBlk"><span class="sm"></span><span class="st">*</span><input id="starIn" spellcheck="false" autocomplete="off" autocapitalize="characters"></div><div id="eatPrompt" class="hidden"><h3>Enter Start / Recovery Minute</h3><div class="sub">Type a minute (00–59) and press Enter — 1st Expected Approach Time is 6 min prior.</div><form id="eatForm" autocomplete="off"><input id="eatIn" inputmode="numeric" maxlength="4" placeholder="e.g. 18" spellcheck="false"><button id="eatBtn" type="submit">Enter</button><button id="eatSkip" type="button" title="Start without setting a recovery minute (Esc)">Skip</button></form><div id="eatPreview"></div></div><div id="shipBanner"></div></div>
+  <div id="scopeWrap"><canvas id="scope"></canvas><div id="infoBlk" class="ib"></div><div id="tbBlk" class="ib"></div><div id="starBlk"><span class="sm"></span><span class="st">*</span><input id="starIn" spellcheck="false" autocomplete="off" autocapitalize="characters"></div><div id="eatPrompt" class="hidden"><h3>Enter the start / recovery minute</h3><div class="sub">Type a minute (00–59) and press Enter — 1st Expected Approach Time is 6 min prior.</div><form id="eatForm" autocomplete="off"><input id="eatIn" inputmode="numeric" maxlength="4" placeholder="e.g. 18" spellcheck="false"><button id="eatBtn" type="submit">Enter</button><button id="eatSkip" type="button" title="Start without setting a recovery minute (Esc)">Skip</button></form><div id="eatPreview"></div></div><div id="shipBanner"></div></div>
   <button id="mptt" type="button">HOLD<br>TO<br>TALK</button><div id="mStat"></div>
   <div id="panel">
     <div class="row">
       <button id="bPause" title="Pause (P)">❚❚ Pause</button>
-      <button id="bS1" class="on" title="1x (key 1)">1x</button>
-      <button id="bS2" title="3x (key 3): whole sim runs 3x faster">3x</button>
+      <button id="bS1" class="on" title="Normal speed (key 1)">1x</button>
+      <button id="bS2" title="3x speed (key 3)">3x</button>
       <label class="liveCtl" title="Scope range (zoom): how far the radar shows">Scope <input type="range" id="liveScope" min="5" max="40" step="1" value="30"><input type="number" id="liveScopeVal" class="scopeNum" min="5" max="40" step="1" value="30" inputmode="numeric" title="Type a range (5–40 NM) and press Enter">NM</label>
       <label class="liveCtl" title="Range ring spacing">Rings <select id="liveRing"><option value="1">1</option><option value="2">2</option><option value="5">5</option><option value="10">10</option></select>NM</label>
       <label class="liveCtl" title="Show the rendezvous points (yellow)"><input type="checkbox" id="liveRdv" checked>RDV</label>
@@ -209,7 +209,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div id="scopeStatus" style="font-size:11px;color:var(--dim);line-height:1.3">PAR · scope idle</div>
     <div class="banner" id="voiceBanner"></div>
     <div class="box">
-      <button id="ptt">🎙 HOLD TO TALK <span style="font-size:12px;font-weight:normal">(Space)</span></button>
+      <button id="ptt">🎙 Hold to talk <span style="font-size:12px;font-weight:normal">(Space)</span></button>
       <div id="micRow"><span id="micDot"></span><span id="micText">Mic: starting…</span></div>
       <div id="transcript"><span style="color:var(--dim)">Live transcript appears here while you talk.</span></div>
       <div id="parsed"></div>
@@ -219,7 +219,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div id="hint"></div>
     <div class="box" id="readout">Waiting for traffic…</div>
     <div id="linkBox" style="font-size:11.5px;color:#8fd8ff;margin:4px 0"><span id="linkStat"></span></div>
-    <details id="gradeSec" open><summary>Grading (tap to collapse / expand)</summary><div id="gradeBox" style="font-size:11.5px;line-height:1.4;color:#8fd8ff;white-space:pre-wrap;overflow-wrap:anywhere"></div></details>
+    <details id="gradeSec" open><summary>Grading</summary><div id="gradeBox" style="font-size:11.5px;line-height:1.4;color:#8fd8ff;white-space:pre-wrap;overflow-wrap:anywhere"></div></details>
     <div class="box">
       <div style="font-size:11px;color:var(--dim);margin-bottom:4px">TRAFFIC</div>
       <canvas id="inset" style="display:none"></canvas>
@@ -231,7 +231,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 
 <div class="overlay" id="startOv">
   <div class="card">
-    <h1>MARSHAL CONTROLLER</h1>
+    <h1>Marshal controller</h1>
     <div style="color:var(--dim)" id="subTitle">Marshal control · holding and LH-1 to LH-5 approaches · USS Wasp (LHD)</div>
     <p id="introP">You're <b>Gator Marshal</b> (Red). Arriving aircraft check in for Case III recovery. Assign each one a <b>marshal</b> (radial, distance, angels, BRC, outbound bearing, expected approach time) and an <b>LH approach</b>, keep the altitudes apart, clear them to <b>commence</b>, then hand them to <b>Approach</b> (Silver) or <b>Final</b> (Purple / Copper). Patterns are drawn on the scope.</p>
     <div class="diffs">
@@ -240,18 +240,18 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
       <div class="diff" data-d="gusty"><b>Rush</b><span>Up to 6 arrivals, faster pace. No hints.</span></div>
     </div>
     <div class="row" style="margin:4px 0 2px;gap:8px"><label for="sPhr2" style="color:var(--dim)">Phraseology</label><select id="sPhr2"><option value="ship">Ship: amphibious assault ship (LHA/LHD)</option><option value="tower">Tower: shore runway PAR</option></select></div>
-    <div class="row" style="margin:6px 0 2px;gap:8px;align-items:center"><span style="color:var(--dim)">Link to Final Control</span>
+    <div class="row" style="margin:6px 0 2px;gap:8px;align-items:center"><span style="color:var(--dim)">Link to Final</span>
       <button id="bLinkOff" style="min-height:34px">OFF (solo)</button><button id="bLinkOn" style="min-height:34px">ON (hand off)</button></div>
     <div class="row" style="margin:4px 0 2px;gap:8px;align-items:center" title="Marshal hands aircraft to Approach on Silver (go silver / contact approach); both pages share Marshal's BRC"><span style="color:var(--dim)">Link Marshal ↔ Approach</span>
       <button id="bMAOff" style="min-height:34px">OFF</button><button id="bMAOn" style="min-height:34px">ON (Silver handoffs)</button><span id="maStat" style="font-size:11.5px;color:#8fd8ff"></span></div>
     <div class="row" style="margin:6px 0 2px;gap:8px;align-items:center"><span id="shipInfo" style="font-size:13px"></span><button id="bReroll" title="Pick a new random BRC and land" style="min-height:30px">🎲 Re-roll</button></div>
     <div class="banner" id="startBanner"></div>
     <div class="row" style="margin-top:8px">
-      <button id="bStart" class="wide on" style="font-size:16px;min-height:46px">▶ START</button>
-      <button id="bTut" class="wide" style="min-height:46px">How Marshal works (tutorial)</button>
+      <button id="bStart" class="wide on" style="font-size:16px;min-height:46px">▶ Start</button>
+      <button id="bTut" class="wide" style="min-height:46px">Marshal tutorial</button>
       <button id="bSet2" style="min-height:46px">⚙ Voice</button>
     </div>
-    <div class="note">Frequencies: Marshal = Red · Approach = Silver · Final = Purple / Copper. For practice and fun only, not real ATC training.</div>
+    <div class="note">Frequencies: Marshal = Red · Approach = Silver · Final = Purple / Copper. A training aid, not for operational use.</div>
   </div>
 </div>
 
@@ -265,7 +265,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
       <button id="tutNext">Next ▶</button>
       <button id="tutClose" class="on">Close</button>
     </div>
-    <div class="note">For practice and fun only, not real ATC training.</div>
+    <div class="note">A training aid, not for operational use.</div>
   </div>
 </div>
 
@@ -296,9 +296,9 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
     <div id="endList"></div>
     <div class="row" style="margin-top:8px">
       <button id="bAgain" class="wide on" style="min-height:42px">Play again (same level)</button>
-      <button id="bMenu" class="wide" style="min-height:42px">Restart / change level</button>
+      <button id="bMenu" class="wide" style="min-height:42px">Change level</button>
     </div>
-    <div class="note">For practice and fun only, not real ATC training.</div>
+    <div class="note">A training aid, not for operational use.</div>
   </div>
 </div>
 <script>
@@ -308,7 +308,7 @@ body.lay-transcript #hint{font-size:10.5px!important;line-height:1.25!important;
 const DEG = Math.PI / 180;
 const FREQ_TAG = { purple: 'PRPL', copper: 'COPR', red: 'RED', silver: 'SLVR', blue: 'SLVR' };
 const freqTag = f => FREQ_TAG[String(f || '').toLowerCase()] || String(f || 'PRPL').toUpperCase().slice(0, 4);
-const FREQ_HELP = '<p><b>Permanent frequencies:</b> Marshal = <b>Red</b> · Approach = <b>Silver</b> · Final Control = <b>Purple</b> / <b>Copper</b>.</p><p><b>Linking:</b> open the other positions in tabs of the same browser. <b>Link Marshal ↔ Approach</b> ON (on both start screens): "go silver" / "contact approach" hands the aircraft to the Approach page, where it checks in on Silver; both use Marshal\'s BRC and land. <b>Link to Final Control</b> ON: "go purple / copper" hands it to the Final page. If the Approach page is not open or not linked, the aircraft just leaves Marshal frequency.</p>';
+const FREQ_HELP = '<p><b>Permanent frequencies:</b> Marshal = <b>Red</b> · Approach = <b>Silver</b> · Final = <b>Purple</b> / <b>Copper</b>.</p><p><b>Linking:</b> open the other positions in tabs of the same browser. <b>Link Marshal ↔ Approach</b> ON (on both start screens): "go silver" / "contact approach" hands the aircraft to the Approach page, where it checks in on Silver; both use Marshal\'s BRC and land. <b>Link to Final Control</b> ON: "go purple / copper" hands it to the Final page. If the Approach page is not open or not linked, the aircraft just leaves Marshal frequency.</p>';
 
 const MC = true;
 const MC_MORE_ARRIVALS = false;   // false: only the start flight (leader + wingman) checks in; true: further arrivals every 4-5 min   // Wasp Marshal: marshal-only build (no launches, radar ID, sectors, handoff or vectors to final)
@@ -1801,6 +1801,7 @@ const startOv = $('startOv'), helpOv = $('helpOv'), setOv = $('setOv'), endOv = 
 let uiPaused = false;
 function log(cls, text) {
   if (!G) return;
+  try { if (window.__instEv) window.__instEv(cls, text); } catch (e) {}   // v131: session events for the Instructor (no effect on this scope)
   if (window.__INST_SILENT && (cls === 'plt' || cls === 'ctl')) return;
   const d = document.createElement('div'); d.className = cls;
   d.innerHTML = `<span class="t">${mmss(G.t)}</span> ${esc(text)}`;
@@ -2621,7 +2622,7 @@ const TUT = [
    <li><b>Geopoints</b>: double-click (double-tap) the scope to drop a geopoint (GPn with radial/DME from the ship); double-click it again to delete; ⚙ Settings → Clear geopoints.</li>
 </ul>`],
   ['2. Arrivals & CCA pattern', `<p>A session runs about 30 minutes. Arrivals check in on Marshal: a <b>flight of two jets at 10 NM</b> for marshal (0:10), then a <b>single arrival (jet or helo) 6 NM from the right</b> requesting a <b>CCA approach</b> (~3:00), then <b>flights of two jets at 10 NM</b> at ~5:40 and <b>8:00</b>, another single CCA arrival at ~14:00, and flights of two at ~20:00 and ~27:00. Click (tap) a target to accept it.</p><p><b>CCA arrival (Approach phraseology)</b>: work the 6 NM arrival in the CCA pattern just like Approach — "radar contact (6 miles east of mother), turn left heading 180, take angels 1.2 (angels 1 for helos), vectors for CCA approach, expect final button purple/copper", pattern position calls (upwind, crosswind, downwind, abeam, dogleg, base), "dirty up" (jets) / "perform landing checks" (helos), climbout instructions (stored until climbout; pilot responds with callsign only), "go red" (Marshal frequency), and handoff with "go purple" / "go copper" (Final) or "go silver" (Approach).</p><p><b>Also understood</b> on Marshal: "<b>take angels ___</b>" (climb or descend), "<b>take speed ___</b>", "<b>take approach speed ___</b>" (now, "in __ miles …" or "in __ seconds …"), "<b>off mothers ___ at __, radar contact</b>" (pilot: "&lt;callsign&gt;, radar contact"), "<b>say type</b>", "<b>report level angels ___</b>" (pilot reports level). Callsigns: jets 2 digits ("Lightning two one"), helos 3 ("Ridge three one one"); say "niner" for 9. The ship turns about every 4 minutes (sim time); call it with the 99 calls.</p>`],
-  ['3. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>HOLD TO TALK</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
+  ['3. Push-to-talk & voice setup', `<p>Hold <span class="kbd">SPACE</span> (or press and hold the big <b>Hold to talk</b> button on a tablet), speak, then release. The live transcript shows what was heard, and "Understood →" shows how it was parsed. Pilots answer out loud (change voices and volume under ⚙ Voice).</p>
    <ul><li><b>Best in Chrome or Edge on a computer.</b> Firefox has no speech recognition; Safari and iOS vary. You can always <b>type</b> the same words in the box.</li>
    <li>Chrome's speech recognition <b>needs an internet connection</b>, because the audio goes to Google's speech service.</li>
    <li>If the mic is blocked on a <b>file://</b> page, serve the folder locally: open a terminal in the folder with this file and run<br><code>python -m http.server</code><br>then open <code>http://localhost:8000/marshal-controller.html</code></li>
@@ -4671,6 +4672,16 @@ function shipInfoUI() { const el = document.getElementById('shipInfo'); if (!el)
   const g = () => (typeof G !== 'undefined' ? G : null);
   const alv = a => !['landed', 'crashed', 'gone'].includes(a.phase);
   const nrm = x => ((x % 360) + 360) % 360;
+  /* v131 (additive): session events + per-position summary for the Instructor's event log and summary. Read-only; nothing here changes the sim. */
+  const EVRX = /check(?:ing|ed)? in|hand(?:ed)? ?off|handoff|switch(?:ing|ed)|wave|waving|waved|missed|landed|on deck|recovered|accepted|crash/i, EVNO = /^No aircraft|not accepted|already|only after|still with the feeder|can't be undone|not found/i;
+  let evSeq = 0, evSess = '', evG = null, evBuf = [], seen = new Set();
+  const evReset = G => { if (G === evG) return; evG = G; evBuf = []; seen = new Set(); evSess = Math.random().toString(36).slice(2, 8); };
+  window.__instEv = (cls, text) => { const G = g(); if (!G || G.intro) return; evReset(G); text = String(text || '');
+    if (!(cls === 'good' || cls === 'bad' || cls === 'warn' || (cls === 'sys' && EVRX.test(text))) || EVNO.test(text)) return;
+    evBuf.push({ k: ++evSeq, t: Math.round(G.t || 0), c: cls, x: text.slice(0, 180) }); if (evBuf.length > 40) evBuf.shift(); };
+  function sumOut(G) { evReset(G); for (const a of G.ac || []) if (a.cs && a.phase !== 'queue') seen.add(a.cs);
+    return { score: G.score || 0, landed: G.landed || 0, practice: G.practice || 0, missed: G.missed || 0, crashes: G.crashes || 0, good: G.callsGood || 0, bad: G.callsBad || 0, handled: seen.size,
+      grades: (G.results || []).slice(-12).map(r => ({ cs: r.cs, g: r.grade, landed: !!r.landed, practice: !!r.practice })) }; }
   function acOut(a) {
     const o = { uid: a.uid, cs: a.cs, tel: a.tel, type: a.type, helo: !!(a.T && a.T.helo), phase: a.phase, st: a.st || null,
       hdg: Math.round(a.hdg || 0), tgtHdg: a.tgtHdg != null ? Math.round(a.tgtHdg) : null, ias: Math.round(a.ias || 0), tgtSpd: a.tgtSpd != null ? Math.round(a.tgtSpd) : null,
@@ -4722,7 +4733,7 @@ function shipInfoUI() { const el = document.getElementById('shipInfo'); if (!el)
     if (G) {
       track(G);
       Object.assign(m, { t: Math.round(G.t * 10) / 10, scale: G.scale || 1, brc: typeof BRC !== 'undefined' ? BRC : null, tbrc: typeof TBRC !== 'undefined' ? TBRC : null, dwh: typeof DWH === 'function' ? DWH() : null, wind: G.wind ? { dir: G.wind.dir, spd: G.wind.spd } : null, diff: G.d && G.d.name, ship: typeof shipInstInfo === 'function' ? shipInstInfo() : null,
-        ac: G.ac.filter(alv).map(acOut), roster: roster(G), sched: !FIN, airlines: typeof AIRLINES !== 'undefined' ? AIRLINES.map(x => ({ icao: x.icao, tel: x.tel, types: x.types })) : [] });
+        ac: G.ac.filter(alv).map(acOut), roster: roster(G), sum: G.intro ? null : sumOut(G), ev: G.intro ? [] : evBuf.slice(-25), evs: evSess, sched: !FIN, airlines: typeof AIRLINES !== 'undefined' ? AIRLINES.map(x => ({ icao: x.icao, tel: x.tel, types: x.types })) : [] });
     }
     try { ch.postMessage(m); } catch (e) {}
   }
@@ -4737,6 +4748,7 @@ function shipInfoUI() { const el = document.getElementById('shipInfo'); if (!el)
     }
     const G = g(); if (!G || G.over) return ack(m, false, PAGE + ' not running');
     if (m.op === 'pause' || m.op === 'resume') { try { setPaused(m.op === 'pause'); } catch (e) { G.paused = m.op === 'pause'; } sysLog(m.op === 'pause' ? 'paused by instructor' : 'resumed by instructor'); send(); return ack(m, true, m.op === 'pause' ? 'PAUSED' : 'RESUMED'); }
+    if (m.op === 'scale') { const sv = m.s === 3 ? 3 : 1; try { setScale(sv); } catch (e) {} send(); return ack(m, true, sv + 'x'); }   // v131 Instructor speed (1x / 3x)
     if (m.op === 'altBump') {
       const a = find(G, m); if (!a) return ack(m, false, (m.cs || '?') + ' not on ' + PAGE);
       const d = Math.round(+m.ft || 0); if (!d) return ack(m, false, 'no altitude step');

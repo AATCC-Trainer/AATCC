@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head>
-<script src="gate.js"></script>
+<script src="gate.js"></script><script src="report.js"></script>
 <script src="traininglog.js"></script>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="approach-192.png">
@@ -40,14 +40,14 @@ td.gr{white-space:normal;min-width:140px;max-width:220px}
 <style>header{padding-top:0}header .at-inhdr{margin:0 -16px 12px;position:static}</style>
 </head><body class="at-doc">
 <header>
-<div class="at-bar at-inhdr"><a class="at-brand" href="index.html" title="Home"><span class="at-mark"></span><span class="at-name">AATCC Trainer</span></a><span class="at-page">Log Sheet</span><span class="at-sp"></span><nav class="at-nav"><a class="at-btn" href="help.html">? Help</a><a class="at-btn at-home" href="index.html">← Home</a></nav></div>
+<div class="at-bar at-inhdr"><a class="at-brand" href="index.html" title="Home"><span class="at-mark"></span><span class="at-name">AATCC Trainer</span></a><span class="at-page">Log Sheet</span><span class="at-sp"></span><nav class="at-nav"><a class="at-btn" href="help.html">? Help</a><a class="at-btn at-home" href="index.html">⌂ Home</a></nav></div>
 <div class="wrap">
 <h1>Log Sheet</h1>
 <div class="sub">Training sessions logged by the scopes, per controller. Pick the controller with the <b>Controller ▾</b> box on any scope.</div>
 <div class="note">This log is saved in this browser on this computer only. It is not uploaded anywhere; export a CSV to keep or share it.</div>
 <div class="bar">
 <label class="f">Controller<select id="fUser"></select></label>
-<label class="f">Sim<select id="fSim"><option value="">All sims</option><option>Marshal</option><option>Approach</option><option>Final</option><option>Final Intro</option><option>Departure</option><option>Instructor</option></select></label>
+<label class="f">Position<select id="fSim"><option value="">All positions</option><option>Marshal</option><option>Approach</option><option>Final</option><option>Final Intro</option><option>Departure</option><option>Instructor</option></select></label>
 <label class="f">From<input type="date" id="fFrom"></label>
 <label class="f">To<input type="date" id="fTo"></label>
 <button class="btn" id="bReset" type="button">Clear filters</button>
@@ -58,7 +58,7 @@ td.gr{white-space:normal;min-width:140px;max-width:220px}
 <h2>Summary by controller <small id="sumNote" style="font-size:12px;color:var(--dim)"></small></h2>
 <div id="cards"></div>
 <h2>Sessions <small id="cnt" style="font-size:12px;color:var(--dim)"></small></h2>
-<div class="tw"><table><thead><tr><th>Date</th><th>Controller</th><th>Sim</th><th>Start</th><th>End</th><th>Training time</th><th>Wall time</th><th>Paused</th><th>Grade</th><th>Score</th><th>Worked</th><th>Landed</th><th>Ended</th><th></th></tr></thead><tbody id="tb"></tbody></table><div id="empty" hidden>No sessions match. Run a scope (Marshal, Approach, Final, Departure, Instructor) and they show up here.</div></div>
+<div class="tw"><table><thead><tr><th>Date</th><th>Controller</th><th>Position</th><th>Start</th><th>End</th><th>Training time</th><th>Wall time</th><th>Paused</th><th>Grade</th><th>Score</th><th>Worked</th><th>Landed</th><th>Ended</th><th></th></tr></thead><tbody id="tb"></tbody></table><div id="empty" hidden>No sessions match. Run a scope (Marshal, Approach, Final, Departure, Instructor) and they show up here.</div></div>
 </div></main>
 <script>
 (() => {
